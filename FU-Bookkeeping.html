@@ -92,17 +92,17 @@
 <main>
   <div class="wrap">
     <div class="layout">
-      <aside class="sidebar" aria-label="Navigation">
-        <button type="button" class="tab active" data-tab="vouchers">Verifikationer</button>
-        <button type="button" class="tab" data-tab="accounts">Kontoplan</button>
-        <button type="button" class="tab" data-tab="reports">Rapporter</button>
-        <button type="button" class="tab" data-tab="export">Import/Export</button>
-        <button type="button" class="tab" data-tab="settings">Inställningar</button>
+      <aside class="sidebar" aria-label="Navigation" role="tablist">
+        <button type="button" id="tabbtn-vouchers" class="tab active" data-tab="vouchers" role="tab" aria-controls="tab-vouchers" aria-selected="true">Verifikationer</button>
+        <button type="button" id="tabbtn-accounts" class="tab" data-tab="accounts" role="tab" aria-controls="tab-accounts" aria-selected="false">Kontoplan</button>
+        <button type="button" id="tabbtn-reports" class="tab" data-tab="reports" role="tab" aria-controls="tab-reports" aria-selected="false">Rapporter</button>
+        <button type="button" id="tabbtn-export" class="tab" data-tab="export" role="tab" aria-controls="tab-export" aria-selected="false">Import/Export</button>
+        <button type="button" id="tabbtn-settings" class="tab" data-tab="settings" role="tab" aria-controls="tab-settings" aria-selected="false">Inställningar</button>
       </aside>
       <div class="content">
 
     <!-- VERIFIKATIONER -->
-    <section id="tab-vouchers">
+    <section id="tab-vouchers" role="tabpanel" aria-labelledby="tabbtn-vouchers">
       <div class="grid two">
         <div class="card">
           <div class="row" style="justify-content:space-between; margin-bottom:10px;">
@@ -116,23 +116,23 @@
           <div class="grid" style="gap:10px;">
             <div class="row" style="gap:10px;">
               <div class="field" style="min-width:140px;">
-                <label>Datum</label>
+                <label for="vDate">Datum</label>
                 <input id="vDate" type="date" />
               </div>
               <div class="field" style="min-width:90px;">
-                <label>Serie</label>
+                <label for="vSeries">Serie</label>
                 <input id="vSeries" type="text" value="A" maxlength="10" />
               </div>
               <div class="field" style="min-width:110px;">
-                <label>Vernr</label>
+                <label for="vNo">Vernr</label>
                 <input id="vNo" type="text" placeholder="Auto" />
               </div>
               <div class="field" style="min-width:160px; flex:1;">
-                <label>Text</label>
+                <label for="vText">Text</label>
                 <input id="vText" type="text" placeholder="t.ex. Lagerjustering" />
               </div>
               <div class="field" style="min-width:140px;">
-                <label>Sign</label>
+                <label for="vSign">Sign</label>
                 <input id="vSign" type="text" placeholder="t.ex. MA" />
               </div>
             </div>
@@ -141,7 +141,7 @@
               <div class="row" style="justify-content:space-between; margin-bottom:8px;">
                 <div class="muted small">Rader</div>
                 <div class="row">
-                  <span id="balanceBadge" class="status bad">Inte i balans</span>
+                  <span id="balanceBadge" class="status bad" role="status" aria-live="polite">Inte i balans</span>
                   <button class="btn secondary" id="btnAddLine">+ Rad</button>
                 </div>
               </div>
@@ -180,7 +180,7 @@
           <div class="row" style="justify-content:space-between; margin-bottom:10px;">
             <h2>Verifikationer i året</h2>
             <div class="row">
-              <select id="yearSelect"></select>
+              <select id="yearSelect" aria-label="Räkenskapsår"></select>
               <button class="btn secondary" id="btnRefresh">Uppdatera</button>
             </div>
           </div>
@@ -191,21 +191,21 @@
     </section>
 
     <!-- KONTOPLAN -->
-    <section id="tab-accounts" hidden>
+    <section id="tab-accounts" hidden role="tabpanel" aria-labelledby="tabbtn-accounts">
       <div class="grid two">
         <div class="card">
           <h2>Lägg till konto</h2>
           <div class="row" style="gap:10px;">
             <div class="field" style="min-width:140px;">
-              <label>Konto</label>
+              <label for="aNo">Konto</label>
               <input id="aNo" placeholder="t.ex. 1930" />
             </div>
             <div class="field" style="flex:1; min-width:220px;">
-              <label>Namn</label>
+              <label for="aName">Namn</label>
               <input id="aName" placeholder="t.ex. Företagskonto" />
             </div>
             <div class="field" style="min-width:180px;">
-              <label>Typ (för rapporter)</label>
+              <label for="aType">Typ (för rapporter)</label>
               <select id="aType">
                 <option value="asset">Tillgång (klass 1)</option>
                 <option value="liability">Eget kapital/skuld (klass 2)</option>
@@ -223,7 +223,7 @@
           <div class="row" style="justify-content:space-between; margin-bottom:10px;">
             <h2>Kontoplan</h2>
             <div class="row">
-              <input id="accountSearch" placeholder="Sök (konto eller namn)" />
+              <input id="accountSearch" placeholder="Sök (konto eller namn)" aria-label="Sök i kontoplan" />
               <button class="btn danger" id="btnResetDemo">Återställ demo-kontoplan</button>
             </div>
           </div>
@@ -245,12 +245,12 @@
     </section>
 
     <!-- RAPPORTER -->
-    <section id="tab-reports" hidden>
+    <section id="tab-reports" hidden role="tabpanel" aria-labelledby="tabbtn-reports">
       <div class="grid two">
         <div class="card">
           <div class="row" style="justify-content:space-between;">
             <h2>Balans & Resultat (översikt)</h2>
-            <select id="reportsYearSelect"></select>
+            <select id="reportsYearSelect" aria-label="Räkenskapsår för rapporter"></select>
           </div>
           <div class="grid" style="gap:10px; margin-top:12px;">
             <div class="row" style="justify-content:space-between;">
@@ -274,7 +274,7 @@
         <div class="card">
           <h2>Huvudbok / Saldolista</h2>
           <div class="row" style="gap:10px; margin-bottom:10px;">
-            <select id="trialYearSelect"></select>
+            <select id="trialYearSelect" aria-label="Räkenskapsår för huvudbok/saldolista"></select>
             <button class="btn secondary" id="btnExportTrialCsv">Exportera CSV</button>
           </div>
           <div style="overflow:auto; max-height:520px;">
@@ -294,7 +294,7 @@
     </section>
 
     <!-- EXPORT -->
-    <section id="tab-export" hidden>
+    <section id="tab-export" hidden role="tabpanel" aria-labelledby="tabbtn-export">
       <div class="grid two">
         <div class="card">
           <h2>Backup (JSON)</h2>
@@ -302,7 +302,7 @@
             <button class="btn" id="btnExportJson">Ladda ner backup.json</button>
             <label class="btn secondary" style="display:inline-flex; align-items:center; gap:8px; cursor:pointer;">
               Importera JSON
-              <input id="jsonImport" type="file" accept="application/json" hidden />
+              <input id="jsonImport" type="file" accept="application/json" hidden aria-label="Välj JSON-backup att importera" />
             </label>
             <button class="btn danger" id="btnWipe">Rensa ALL data</button>
           </div>
@@ -325,7 +325,7 @@
             <label class="muted small" style="display:flex; align-items:center; gap:8px;">
               <input id="fsRequireFile" type="checkbox" /> Kräv datafil (ingen bokföring utan fil)
             </label>
-            <span id="fsStatus" class="status bad">Inte ansluten</span>
+            <span id="fsStatus" class="status bad" role="status" aria-live="polite">Inte ansluten</span>
           </div>
           <p class="muted small" style="margin-top:10px;">
             Detta använder File System Access API (Chrome/Edge) och fungerar i <b>secure context</b> (HTTPS eller localhost). Välj en fil i en Google Drive-synkad mapp så syncas den av Drive for desktop.
@@ -335,7 +335,7 @@
         <div class="card">
           <h2>SIE-export (Typ 4)</h2>
           <div class="row" style="gap:10px;">
-            <select id="sieYearSelect"></select>
+            <select id="sieYearSelect" aria-label="Räkenskapsår för SIE-export"></select>
             <button class="btn" id="btnExportSie4">Ladda ner SIE4</button>
           </div>
           <p class="muted small" style="margin-top:10px;">
@@ -346,14 +346,14 @@
 
           <h2>SIE-import</h2>
           <div class="row" style="gap:10px; flex-wrap:wrap;">
-            <select id="sieImportEncoding" title="Teckenkodning">
+            <select id="sieImportEncoding" title="Teckenkodning" aria-label="Teckenkodning för SIE-import">
               <option value="utf-8">UTF-8</option>
               <option value="windows-1252">Windows-1252</option>
               <option value="ibm437">IBM437 (PC8/CP437)</option>
             </select>
             <label class="btn secondary" style="display:inline-flex; align-items:center; gap:8px; cursor:pointer;">
               Välj SIE-fil
-              <input id="sieImportFile" type="file" accept=".se,.sie,.txt,text/plain" hidden />
+              <input id="sieImportFile" type="file" accept=".se,.sie,.txt,text/plain" hidden aria-label="Välj SIE-fil att importera" />
             </label>
             <button class="btn" id="btnImportSie">Importera</button>
             <label class="muted small" style="display:flex; align-items:center; gap:8px;">
@@ -368,22 +368,22 @@
     </section>
 
     <!-- SETTINGS -->
-    <section id="tab-settings" hidden>
+    <section id="tab-settings" hidden role="tabpanel" aria-labelledby="tabbtn-settings">
       <div class="grid two">
         <div class="card">
           <h2>Företagsuppgifter</h2>
           <div class="grid" style="gap:10px;">
             <div class="field">
-              <label>Företagsnamn</label>
+              <label for="sCompany">Företagsnamn</label>
               <input id="sCompany" placeholder="t.ex. Innovatio Brutalis AB" />
             </div>
             <div class="row" style="gap:10px;">
               <div class="field" style="flex:1; min-width:220px;">
-                <label>Org.nr (för SIE)</label>
+                <label for="sOrgnr">Org.nr (för SIE)</label>
                 <input id="sOrgnr" placeholder="t.ex. 559999-9999" />
               </div>
               <div class="field" style="min-width:170px;">
-                <label>Valuta</label>
+                <label for="sCurrency">Valuta</label>
                 <select id="sCurrency">
                   <option>SEK</option>
                   <option>NOK</option>
@@ -393,7 +393,7 @@
                 </select>
               </div>
               <div class="field" style="min-width:140px;">
-                <label>Sign (default)</label>
+                <label for="sSign">Sign (default)</label>
                 <input id="sSign" placeholder="t.ex. MA" />
               </div>
             </div>
@@ -407,18 +407,18 @@
           <h2>Räkenskapsår</h2>
           <div class="row" style="gap:10px; margin-bottom:10px;">
             <div class="field" style="min-width:160px;">
-              <label>Start</label>
+              <label for="fyStart">Start</label>
               <input id="fyStart" type="date" />
             </div>
             <div class="field" style="min-width:160px;">
-              <label>Slut</label>
+              <label for="fyEnd">Slut</label>
               <input id="fyEnd" type="date" />
             </div>
             <button class="btn" id="btnAddYear">Lägg till år</button>
           </div>
           <div class="row" style="gap:10px; margin-bottom:10px;">
-            <select id="carryFrom"></select>
-            <select id="carryTo"></select>
+            <select id="carryFrom" aria-label="För över IB: från-år"></select>
+            <select id="carryTo" aria-label="För över IB: till-år"></select>
             <button class="btn secondary" id="btnCarry">För över IB (balanskonto)</button>
           </div>
           <div class="muted small">För över IB skapar en verifikation på första dagen i ”Till”-året med text “Ingående balans”.</div>
@@ -454,13 +454,18 @@
   };
   const parseMoney = (s) => {
     if (s == null) return 0;
-    const t = String(s).trim().replace(/\s+/g, "").replace(",", ".");
+    const t = String(s).trim().replace(/\s+/g, "").replace(/,/g, ".");
     if (t === "") return 0;
     const v = Number(t);
     return Number.isFinite(v) ? v : 0;
   };
   const ymd = (d) => d.replaceAll("-", "");
-  const todayISO = () => new Date().toISOString().slice(0,10);
+  const todayISO = () => {
+    // Use local date (accounting-friendly). toISOString() uses UTC and can be off by one day.
+    const now = new Date();
+    const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+    return local.toISOString().slice(0, 10);
+  };
   const clampText = (s, max=120) => String(s ?? "").slice(0,max);
 
   // --- IndexedDB (för att lagra fil-handle mellan sessioner) ---
@@ -517,7 +522,9 @@
     const y = now.getFullYear();
     return {
       company: { name: "Mini-bokföring", orgnr: "", currency: "SEK", defaultSign: "" },
-      fileSync: { autosave: true, requireFile: true },
+      // File sync is optional. Default to localStorage-only so the app works on file://,
+      // non-HTTPS contexts, and browsers without File System Access API.
+      fileSync: { autosave: true, requireFile: false },
       fiscalYears: [
         { id: String(y-1), start: `${y-1}-01-01`, end: `${y-1}-12-31` },
         { id: String(y), start: `${y}-01-01`, end: `${y}-12-31` },
@@ -548,8 +555,8 @@
       const d = JSON.parse(raw);
       // very light migration defaults
       if (!d.company) d.company = defaultData().company;
-      if (!d.fileSync) d.fileSync = { autosave: true, requireFile: true };
-      if (typeof d.fileSync.requireFile !== "boolean") d.fileSync.requireFile = true;
+      if (!d.fileSync) d.fileSync = { autosave: true, requireFile: false };
+      if (typeof d.fileSync.requireFile !== "boolean") d.fileSync.requireFile = false;
       if (!d.fiscalYears) d.fiscalYears = defaultData().fiscalYears;
       if (!d.accounts) d.accounts = demoAccounts();
       if (!d.vouchers) d.vouchers = [];
@@ -560,7 +567,16 @@
     }
   }
   function save(){
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      storageWriteFailed = false;
+    } catch (e){
+      // Quota exceeded / private mode can throw. Keep the UI functional but warn once.
+      if (!storageWriteFailed){
+        storageWriteFailed = true;
+        alert("Kunde inte spara i localStorage (troligen fullt eller blockerat). Exportera JSON-backup för att inte tappa data.");
+      }
+    }
     renderAll();
     scheduleFileAutosave();
   }
@@ -617,28 +633,21 @@
     }
 
     const connected = !!fsHandle;
-    if (!fsStatus) return;
-
-    // Autosave checkbox
-    if (fsAutosave){
-      fsAutosave.checked = !!(state.fileSync && state.fileSync.autosave);
-      fsAutosave.disabled = !fsApiSupported();
-    }
-
-    if (fsRequireFile){
-      fsRequireFile.checked = !!(state.fileSync && state.fileSync.requireFile);
-      fsRequireFile.disabled = !fsApiSupported();
-    }
-
-    const connected = !!fsHandle;
     if (btnLoadFromFile) btnLoadFromFile.disabled = !connected;
     if (btnSaveToFile) btnSaveToFile.disabled = !connected;
     if (btnDisconnectFile) btnDisconnectFile.disabled = !connected;
 
     if (!fsApiSupported()){
       const requireFile = !!(state.fileSync && state.fileSync.requireFile);
-      setFsStatus("bad", requireFile ? "Kräver HTTPS/localhost + Chrome/Edge (fil krävs)" : "Kräver HTTPS/localhost + Chrome/Edge");
-      setEditingLocked(requireFile);
+      setFsStatus(
+        "bad",
+        requireFile
+          ? "Fil-synk kräver HTTPS/localhost + Chrome/Edge (kör localStorage istället)"
+          : "Fil-synk kräver HTTPS/localhost + Chrome/Edge"
+      );
+      // Even if the user previously enabled “require file”, fall back to localStorage when
+      // the browser/context can’t support file handles; don’t dead-lock the whole app.
+      setEditingLocked(false);
       return;
     }
 
@@ -796,68 +805,6 @@
     if (fsAutosaveTimer) clearTimeout(fsAutosaveTimer);
     fsAutosaveTimer = setTimeout(async ()=>{
       try {
-        // Don't prompt during autosave.
-        const ok = await fsEnsurePermission(false);
-        if (!ok) return;
-        await fsWriteState();
-      } catch (e){
-        fsLastError = e;
-        updateFsUI();
-      }
-    }, 600);
-  }
-
-  // Keep the old signature for forward refs
-  async function fsCreateNew_UNUSED(){}
-
-    } catch (e){
-      // user cancelled is fine
-      if (e && (e.name === "AbortError")) return;
-      fsLastError = e;
-      updateFsUI();
-      alert("Kunde inte välja fil. Är du på HTTPS/localhost och i Chrome/Edge?");
-    }
-  }
-
-  async function fsCreateNew(){
-    if (!fsApiSupported()) return alert("Fil-synk kräver Chrome/Edge och secure context (HTTPS eller localhost)." );
-    try {
-      const handle = await window.showSaveFilePicker({
-        suggestedName: "bokforing.json",
-        types: [{ description: "Bokföringsdata (JSON)", accept: { "application/json": [".json"] } }]
-      });
-      if (!handle) return;
-      fsHandle = handle;
-      await idbSet("dataFileHandle", fsHandle);
-      fsLastError = null;
-      fsLastSavedAt = null;
-      updateFsUI();
-      // write initial
-      const ok = await fsEnsurePermission(true);
-      if (ok){
-        const writable = await fsHandle.createWritable();
-        await writable.write(JSON.stringify(state, null, 2));
-        await writable.close();
-        const now = new Date();
-        fsLastSavedAt = now.toLocaleString("sv-SE", { hour12:false });
-        updateFsUI();
-      }
-    } catch (e){
-      if (e && (e.name === "AbortError")) return;
-      fsLastError = e;
-      updateFsUI();
-      alert("Kunde inte skapa fil. Är du på HTTPS/localhost och i Chrome/Edge?");
-    }
-  }
-
-  function scheduleFileAutosave(){
-    if (!fsApiSupported()) return;
-    if (!fsHandle) return;
-    if (!state.fileSync || !state.fileSync.autosave) return;
-
-    if (fsAutosaveTimer) clearTimeout(fsAutosaveTimer);
-    fsAutosaveTimer = setTimeout(async ()=>{
-      try {
         // Only autosave if permission is already granted (no prompts without klick)
         const ok = await fsEnsurePermission(false);
         if (!ok) return;
@@ -873,6 +820,7 @@
   // --- State ---
   let state = load();
   let editingVoucherId = null;
+  let storageWriteFailed = false;
 
   // File sync handle (stored in IndexedDB, not in state)
   let fsHandle = null;
@@ -953,8 +901,12 @@
     const t = btn.dataset ? btn.dataset.tab : null;
     if (!t) return;
 
-    tabs.forEach(b => b.classList.remove("active"));
+    tabs.forEach(b => {
+      b.classList.remove("active");
+      b.setAttribute("aria-selected", "false");
+    });
     btn.classList.add("active");
+    btn.setAttribute("aria-selected", "true");
 
     Object.entries(sections).forEach(([k, el]) => {
       if (el) el.hidden = (k !== t);
@@ -1055,6 +1007,7 @@
       const tdAcc = document.createElement("td");
       const sel = document.createElement("select");
       sel.style.width = "100%";
+      sel.setAttribute("aria-label", `Konto (rad ${idx+1})`);
       accList.forEach(no => {
         const opt = document.createElement("option");
         opt.value = no;
@@ -1077,6 +1030,7 @@
       const inpText = document.createElement("input");
       inpText.value = ln.text;
       inpText.placeholder = "valfritt";
+      inpText.setAttribute("aria-label", `Radtext (rad ${idx+1})`);
       inpText.addEventListener("input", () => ln.text = inpText.value);
       tdText.appendChild(inpText);
 
@@ -1086,6 +1040,7 @@
       inpD.inputMode = "decimal";
       inpD.placeholder = "0";
       inpD.value = ln.debit;
+      inpD.setAttribute("aria-label", `Debet (rad ${idx+1})`);
       inpD.addEventListener("input", () => {
         ln.debit = inpD.value;
         if (parseMoney(ln.debit) !== 0) ln.credit = "";
@@ -1100,6 +1055,7 @@
       inpC.inputMode = "decimal";
       inpC.placeholder = "0";
       inpC.value = ln.credit;
+      inpC.setAttribute("aria-label", `Kredit (rad ${idx+1})`);
       inpC.addEventListener("input", () => {
         ln.credit = inpC.value;
         if (parseMoney(ln.credit) !== 0) ln.debit = "";
@@ -1114,6 +1070,7 @@
       bx.className = "btn secondary";
       bx.textContent = "✕";
       bx.title = "Ta bort rad";
+      bx.setAttribute("aria-label", `Ta bort rad ${idx+1}`);
       bx.addEventListener("click", () => {
         currentLines.splice(idx, 1);
         if (currentLines.length === 0) currentLines.push(makeLine());
@@ -1307,7 +1264,7 @@
     rows.forEach(r => {
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td>${r.acc}</td>
+        <td>${escapeHtml(r.acc)}</td>
         <td>${escapeHtml(r.name)}</td>
         <td class="right">${fmtSEK(r.amt)}</td>
       `;
@@ -1927,8 +1884,17 @@
     const txt = await file.text();
     try {
       const d = JSON.parse(txt);
+      // Minimal validation + migration defaults (same intent as fsLoadState)
+      if (!d || typeof d !== "object" || !Array.isArray(d.fiscalYears) || !d.accounts || !Array.isArray(d.vouchers)){
+        throw new Error("Invalid backup shape");
+      }
       state = d;
+      if (!state.company) state.company = defaultData().company;
+      if (!state.fileSync) state.fileSync = { autosave: true, requireFile: false };
+      if (typeof state.fileSync.requireFile !== "boolean") state.fileSync.requireFile = false;
+      if (!state.activeYearId) state.activeYearId = state.fiscalYears[0]?.id ?? String(new Date().getFullYear());
       save();
+      updateFsUI();
       alert("Import klar.");
     } catch {
       alert("Kunde inte läsa JSON.");
@@ -1978,13 +1944,13 @@
   });
 
   if (fsAutosave) fsAutosave.addEventListener("change", ()=>{
-    if (!state.fileSync) state.fileSync = { autosave: true, requireFile: true };
+    if (!state.fileSync) state.fileSync = { autosave: true, requireFile: false };
     state.fileSync.autosave = !!fsAutosave.checked;
     save();
   });
 
   if (fsRequireFile) fsRequireFile.addEventListener("change", ()=>{
-    if (!state.fileSync) state.fileSync = { autosave: true, requireFile: true };
+    if (!state.fileSync) state.fileSync = { autosave: true, requireFile: false };
     state.fileSync.requireFile = !!fsRequireFile.checked;
     save();
     updateFsUI();
@@ -2004,12 +1970,9 @@
         const parsed = parseSIE(txt);
         const stats = mergeParsedSIE(parsed, wipe);
         alert(
-          "Import klar.
-" +
-          `År: ${stats.before.years} → ${stats.after.years}
-` +
-          `Konton: ${stats.before.accounts} → ${stats.after.accounts}
-` +
+          `Import klar.\n` +
+          `År: ${stats.before.years} → ${stats.after.years}\n` +
+          `Konton: ${stats.before.accounts} → ${stats.after.accounts}\n` +
           `Verifikationer: ${stats.before.vouchers} → ${stats.after.vouchers}`
         );
       } catch (e){

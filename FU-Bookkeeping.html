@@ -586,6 +586,13 @@
  
 
   const APP_VERSION = "1.1"; // bump when adding new data fields
+  const STORAGE_KEY = "FU_BOOKKEEPING_STATE";
+
+  const bootPill = document.getElementById("bootPill");
+  const setBoot = (text) => { if (bootPill) bootPill.textContent = text; };
+  setBoot("JS: OK");
+  window.addEventListener("error", () => setBoot("JS: fel (konsol)"));
+  window.addEventListener("unhandledrejection", () => setBoot("JS: fel (konsol)"));
 
 
   // --- Utilities ---

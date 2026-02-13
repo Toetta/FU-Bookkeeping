@@ -73,8 +73,7 @@ function updateDisplay() {
         return new Date(b.date) - new Date(a.date);
     });
 
-    transactionsList.innerHTML = sortedTransactions.map((transaction, index) => {
-        const actualIndex = transactions.findIndex(t => t.id === transaction.id);
+    transactionsList.innerHTML = sortedTransactions.map((transaction) => {
         return `
             <div class="transaction-item ${transaction.type}-item">
                 <div class="transaction-info">
@@ -82,7 +81,7 @@ function updateDisplay() {
                     <div class="transaction-date">${formatDate(transaction.date)}</div>
                 </div>
                 <span class="transaction-amount">${transaction.type === 'income' ? '+' : '-'}${formatCurrency(transaction.amount)}</span>
-                <button class="btn-delete" onclick="deleteTransaction(${actualIndex})">Delete</button>
+                <button class="btn-delete" onclick="deleteTransaction('${transaction.id}')">Delete</button>
             </div>
         `;
     }).join('');
@@ -93,7 +92,7 @@ function addTransaction(description, amount, type, date) {
     const transactions = loadTransactions();
     
     const newTransaction = {
-        id: Date.now(),
+        id: Date.now() + Math.random(), // Add random component to prevent collisions
         description,
         amount: parseFloat(amount),
         type,
@@ -106,10 +105,10 @@ function addTransaction(description, amount, type, date) {
 }
 
 // Delete transaction
-function deleteTransaction(index) {
+function deleteTransaction(id) {
     const transactions = loadTransactions();
-    transactions.splice(index, 1);
-    saveTransactions(transactions);
+    const filteredTransactions = transactions.filter(t => t.id !== parseFloat(id));
+    saveTransactions(filteredTransactions);
     updateDisplay();
 }
 

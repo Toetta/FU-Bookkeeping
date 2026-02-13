@@ -84,6 +84,7 @@
     <div class="row">
       <h1 id="companyName">Mini-bokföring</h1>
       <span class="pill" id="yearPill">Räkenskapsår: –</span>
+      <span class="pill" id="bootPill">JS: laddar…</span>
       <span class="pill">Lagring: localStorage (offline)</span>
     </div>
   </div>
@@ -92,17 +93,17 @@
 <main>
   <div class="wrap">
     <div class="layout">
-      <aside class="sidebar" aria-label="Navigation" role="tablist">
-        <button type="button" id="tabbtn-vouchers" class="tab active" data-tab="vouchers" role="tab" aria-controls="tab-vouchers" aria-selected="true">Verifikationer</button>
-        <button type="button" id="tabbtn-accounts" class="tab" data-tab="accounts" role="tab" aria-controls="tab-accounts" aria-selected="false">Kontoplan</button>
-        <button type="button" id="tabbtn-reports" class="tab" data-tab="reports" role="tab" aria-controls="tab-reports" aria-selected="false">Rapporter</button>
-        <button type="button" id="tabbtn-export" class="tab" data-tab="export" role="tab" aria-controls="tab-export" aria-selected="false">Import/Export</button>
-        <button type="button" id="tabbtn-settings" class="tab" data-tab="settings" role="tab" aria-controls="tab-settings" aria-selected="false">Inställningar</button>
+      <aside class="sidebar" aria-label="Navigation">
+        <button type="button" class="tab active" data-tab="vouchers">Verifikationer</button>
+        <button type="button" class="tab" data-tab="accounts">Kontoplan</button>
+        <button type="button" class="tab" data-tab="invoices">Fakturor</button>
+<button type="button" class="tab" data-tab="export">Import/Export</button>
+        <button type="button" class="tab" data-tab="settings">Inställningar</button>
       </aside>
       <div class="content">
 
     <!-- VERIFIKATIONER -->
-    <section id="tab-vouchers" role="tabpanel" aria-labelledby="tabbtn-vouchers">
+    <section id="tab-vouchers">
       <div class="grid two">
         <div class="card">
           <div class="row" style="justify-content:space-between; margin-bottom:10px;">
@@ -116,23 +117,23 @@
           <div class="grid" style="gap:10px;">
             <div class="row" style="gap:10px;">
               <div class="field" style="min-width:140px;">
-                <label for="vDate">Datum</label>
+                <label>Datum</label>
                 <input id="vDate" type="date" />
               </div>
               <div class="field" style="min-width:90px;">
-                <label for="vSeries">Serie</label>
+                <label>Serie</label>
                 <input id="vSeries" type="text" value="A" maxlength="10" />
               </div>
               <div class="field" style="min-width:110px;">
-                <label for="vNo">Vernr</label>
+                <label>Vernr</label>
                 <input id="vNo" type="text" placeholder="Auto" />
               </div>
               <div class="field" style="min-width:160px; flex:1;">
-                <label for="vText">Text</label>
+                <label>Text</label>
                 <input id="vText" type="text" placeholder="t.ex. Lagerjustering" />
               </div>
               <div class="field" style="min-width:140px;">
-                <label for="vSign">Sign</label>
+                <label>Sign</label>
                 <input id="vSign" type="text" placeholder="t.ex. MA" />
               </div>
             </div>
@@ -141,7 +142,7 @@
               <div class="row" style="justify-content:space-between; margin-bottom:8px;">
                 <div class="muted small">Rader</div>
                 <div class="row">
-                  <span id="balanceBadge" class="status bad" role="status" aria-live="polite">Inte i balans</span>
+                  <span id="balanceBadge" class="status bad">Inte i balans</span>
                   <button class="btn secondary" id="btnAddLine">+ Rad</button>
                 </div>
               </div>
@@ -180,7 +181,7 @@
           <div class="row" style="justify-content:space-between; margin-bottom:10px;">
             <h2>Verifikationer i året</h2>
             <div class="row">
-              <select id="yearSelect" aria-label="Räkenskapsår"></select>
+              <select id="yearSelect"></select>
               <button class="btn secondary" id="btnRefresh">Uppdatera</button>
             </div>
           </div>
@@ -191,21 +192,21 @@
     </section>
 
     <!-- KONTOPLAN -->
-    <section id="tab-accounts" hidden role="tabpanel" aria-labelledby="tabbtn-accounts">
+    <section id="tab-accounts" hidden>
       <div class="grid two">
         <div class="card">
           <h2>Lägg till konto</h2>
           <div class="row" style="gap:10px;">
             <div class="field" style="min-width:140px;">
-              <label for="aNo">Konto</label>
+              <label>Konto</label>
               <input id="aNo" placeholder="t.ex. 1930" />
             </div>
             <div class="field" style="flex:1; min-width:220px;">
-              <label for="aName">Namn</label>
+              <label>Namn</label>
               <input id="aName" placeholder="t.ex. Företagskonto" />
             </div>
             <div class="field" style="min-width:180px;">
-              <label for="aType">Typ (för rapporter)</label>
+              <label>Typ (för rapporter)</label>
               <select id="aType">
                 <option value="asset">Tillgång (klass 1)</option>
                 <option value="liability">Eget kapital/skuld (klass 2)</option>
@@ -223,7 +224,7 @@
           <div class="row" style="justify-content:space-between; margin-bottom:10px;">
             <h2>Kontoplan</h2>
             <div class="row">
-              <input id="accountSearch" placeholder="Sök (konto eller namn)" aria-label="Sök i kontoplan" />
+              <input id="accountSearch" placeholder="Sök (konto eller namn)" />
               <button class="btn danger" id="btnResetDemo">Återställ demo-kontoplan</button>
             </div>
           </div>
@@ -245,12 +246,12 @@
     </section>
 
     <!-- RAPPORTER -->
-    <section id="tab-reports" hidden role="tabpanel" aria-labelledby="tabbtn-reports">
+    <section id="tab-reports" hidden>
       <div class="grid two">
         <div class="card">
           <div class="row" style="justify-content:space-between;">
             <h2>Balans & Resultat (översikt)</h2>
-            <select id="reportsYearSelect" aria-label="Räkenskapsår för rapporter"></select>
+            <select id="reportsYearSelect"></select>
           </div>
           <div class="grid" style="gap:10px; margin-top:12px;">
             <div class="row" style="justify-content:space-between;">
@@ -274,7 +275,7 @@
         <div class="card">
           <h2>Huvudbok / Saldolista</h2>
           <div class="row" style="gap:10px; margin-bottom:10px;">
-            <select id="trialYearSelect" aria-label="Räkenskapsår för huvudbok/saldolista"></select>
+            <select id="trialYearSelect"></select>
             <button class="btn secondary" id="btnExportTrialCsv">Exportera CSV</button>
           </div>
           <div style="overflow:auto; max-height:520px;">
@@ -293,8 +294,145 @@
       </div>
     </section>
 
-    <!-- EXPORT -->
-    <section id="tab-export" hidden role="tabpanel" aria-labelledby="tabbtn-export">
+        <!-- FAKTUROR -->
+    <section id="tab-invoices" hidden>
+      <div class="grid two">
+        <div class="card">
+          <div class="row" style="justify-content:space-between; margin-bottom:10px;">
+            <h2>Skapa faktura</h2>
+            <div class="row">
+              <button class="btn secondary" id="btnInvNew">Ny</button>
+              <button class="btn" id="btnInvSave" disabled>Spara</button>
+            </div>
+          </div>
+
+          <div class="grid" style="gap:10px;">
+            <div class="row" style="gap:10px;">
+              <div class="field" style="min-width:140px;">
+                <label>Fakturadatum</label>
+                <input id="invDate" type="date" />
+              </div>
+              <div class="field" style="min-width:140px;">
+                <label>Förfallodatum</label>
+                <input id="invDue" type="date" />
+              </div>
+              <div class="field" style="min-width:110px;">
+                <label>Nr</label>
+                <input id="invNo" placeholder="Auto" />
+              </div>
+              <div class="field" style="flex:1; min-width:220px;">
+                <label>Referens</label>
+                <input id="invRef" placeholder="t.ex. Order 123" />
+              </div>
+            </div>
+
+            <div class="card" style="padding:10px; border-radius:14px; background:rgba(11,18,32,.55);">
+              <div class="row" style="justify-content:space-between; margin-bottom:8px;">
+                <div class="muted small">Kund</div>
+                <button class="btn secondary" id="btnInvPickCustomer">Välj/Lägg till</button>
+              </div>
+              <div id="invCustomerBox" class="muted small">Ingen kund vald.</div>
+            </div>
+
+            <div class="card" style="padding:10px; border-radius:14px; background:rgba(11,18,32,.55);">
+              <div class="row" style="justify-content:space-between; margin-bottom:8px;">
+                <div class="muted small">Rader</div>
+                <div class="row">
+                  <button class="btn secondary" id="btnInvAddItem">+ Artikel</button>
+                  <button class="btn secondary" id="btnInvAddComment">+ Kommentar</button>
+                </div>
+              </div>
+              <div style="overflow:auto;">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Beskrivning</th>
+                      <th class="right" style="width:90px;">Antal</th>
+                      <th class="right" style="width:140px;">Á-pris exkl.</th>
+                      <th class="right" style="width:90px;">Moms %</th>
+                      <th class="right" style="width:140px;">Radbelopp</th>
+                      <th style="width:70px;"></th>
+                    </tr>
+                  </thead>
+                  <tbody id="invLinesTbody"></tbody>
+                </table>
+              </div>
+              <div class="row" style="justify-content:space-between; margin-top:10px;">
+                <div class="muted small">Artikelrader räknas in i total. Kommentar-rader påverkar inte belopp.</div>
+                <button class="btn danger" id="btnInvClear">Rensa</button>
+              </div>
+            </div>
+
+            <div class="card" style="padding:10px; border-radius:14px; background:rgba(11,18,32,.55);">
+              <div class="row" style="justify-content:space-between;">
+                <div>
+                  <div class="muted small">Totalt inkl. moms</div>
+                  <div id="invTotal" style="font-size:24px; font-weight:900;">–</div>
+                  <div class="muted small">Öresavrundning <span id="invRounding">0,00</span></div>
+                </div>
+                <div class="row">
+                  <button class="btn secondary" id="btnInvPrint" disabled>Förhandsgranska/skriv ut</button>
+                  <button class="btn secondary" id="btnInvToVoucher" disabled>Skapa verifikation</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="row" style="justify-content:space-between; margin-bottom:10px;">
+            <h2>Fakturor</h2>
+            <div class="row">
+              <select id="invYearSelect" aria-label="Räkenskapsår för fakturor"></select>
+              <button class="btn secondary" id="btnInvRefresh">Uppdatera</button>
+            </div>
+          </div>
+          <div id="invoiceList" class="list"></div>
+        </div>
+      </div>
+
+      <!-- Enkel kund-dialog (utan externa bibliotek) -->
+      <dialog id="customerDialog" style="border:1px solid rgba(34,48,68,.8); border-radius:16px; padding:0; max-width:720px; width:calc(100% - 24px); background:rgba(11,15,20,.98); color:var(--text);">
+        <div style="padding:14px;">
+          <div class="row" style="justify-content:space-between; margin-bottom:10px;">
+            <h2 style="margin:0; font-size:14px; color:var(--muted);">Kund</h2>
+            <button class="btn secondary" id="btnCustomerClose">Stäng</button>
+          </div>
+
+          <div class="grid" style="gap:10px;">
+            <div class="row" style="gap:10px;">
+              <div class="field" style="flex:1; min-width:220px;">
+                <label>Namn</label>
+                <input id="custName" placeholder="t.ex. Mariano Vozzi" />
+              </div>
+              <div class="field" style="flex:1; min-width:220px;">
+                <label>Adress</label>
+                <input id="custAddr" placeholder="Gata, postnr, ort" />
+              </div>
+            </div>
+            <div class="row" style="gap:10px;">
+              <div class="field" style="flex:1; min-width:220px;">
+                <label>E-post (valfritt)</label>
+                <input id="custEmail" placeholder="kund@exempel.se" />
+              </div>
+              <div class="field" style="min-width:180px;">
+                <label>Org.nr (valfritt)</label>
+                <input id="custOrgnr" placeholder="559999-9999" />
+              </div>
+            </div>
+            <div class="row" style="justify-content:flex-end;">
+              <button class="btn" id="btnCustomerSave">Spara & välj</button>
+            </div>
+            <div style="height:1px; background:rgba(34,48,68,.8); margin:6px 0;"></div>
+            <div class="muted small">Befintliga kunder</div>
+            <div id="customerList" class="list"></div>
+          </div>
+        </div>
+      </dialog>
+    </section>
+
+
+    <section id="tab-export" hidden>
       <div class="grid two">
         <div class="card">
           <h2>Backup (JSON)</h2>
@@ -302,7 +440,7 @@
             <button class="btn" id="btnExportJson">Ladda ner backup.json</button>
             <label class="btn secondary" style="display:inline-flex; align-items:center; gap:8px; cursor:pointer;">
               Importera JSON
-              <input id="jsonImport" type="file" accept="application/json" hidden aria-label="Välj JSON-backup att importera" />
+              <input id="jsonImport" type="file" accept="application/json" hidden />
             </label>
             <button class="btn danger" id="btnWipe">Rensa ALL data</button>
           </div>
@@ -325,7 +463,7 @@
             <label class="muted small" style="display:flex; align-items:center; gap:8px;">
               <input id="fsRequireFile" type="checkbox" /> Kräv datafil (ingen bokföring utan fil)
             </label>
-            <span id="fsStatus" class="status bad" role="status" aria-live="polite">Inte ansluten</span>
+            <span id="fsStatus" class="status bad">Inte ansluten</span>
           </div>
           <p class="muted small" style="margin-top:10px;">
             Detta använder File System Access API (Chrome/Edge) och fungerar i <b>secure context</b> (HTTPS eller localhost). Välj en fil i en Google Drive-synkad mapp så syncas den av Drive for desktop.
@@ -335,7 +473,7 @@
         <div class="card">
           <h2>SIE-export (Typ 4)</h2>
           <div class="row" style="gap:10px;">
-            <select id="sieYearSelect" aria-label="Räkenskapsår för SIE-export"></select>
+            <select id="sieYearSelect"></select>
             <button class="btn" id="btnExportSie4">Ladda ner SIE4</button>
           </div>
           <p class="muted small" style="margin-top:10px;">
@@ -346,14 +484,14 @@
 
           <h2>SIE-import</h2>
           <div class="row" style="gap:10px; flex-wrap:wrap;">
-            <select id="sieImportEncoding" title="Teckenkodning" aria-label="Teckenkodning för SIE-import">
+            <select id="sieImportEncoding" title="Teckenkodning">
               <option value="utf-8">UTF-8</option>
               <option value="windows-1252">Windows-1252</option>
               <option value="ibm437">IBM437 (PC8/CP437)</option>
             </select>
             <label class="btn secondary" style="display:inline-flex; align-items:center; gap:8px; cursor:pointer;">
               Välj SIE-fil
-              <input id="sieImportFile" type="file" accept=".se,.sie,.txt,text/plain" hidden aria-label="Välj SIE-fil att importera" />
+              <input id="sieImportFile" type="file" accept=".se,.sie,.txt,text/plain" hidden />
             </label>
             <button class="btn" id="btnImportSie">Importera</button>
             <label class="muted small" style="display:flex; align-items:center; gap:8px;">
@@ -368,22 +506,22 @@
     </section>
 
     <!-- SETTINGS -->
-    <section id="tab-settings" hidden role="tabpanel" aria-labelledby="tabbtn-settings">
+    <section id="tab-settings" hidden>
       <div class="grid two">
         <div class="card">
           <h2>Företagsuppgifter</h2>
           <div class="grid" style="gap:10px;">
             <div class="field">
-              <label for="sCompany">Företagsnamn</label>
+              <label>Företagsnamn</label>
               <input id="sCompany" placeholder="t.ex. Innovatio Brutalis AB" />
             </div>
             <div class="row" style="gap:10px;">
               <div class="field" style="flex:1; min-width:220px;">
-                <label for="sOrgnr">Org.nr (för SIE)</label>
+                <label>Org.nr (för SIE)</label>
                 <input id="sOrgnr" placeholder="t.ex. 559999-9999" />
               </div>
               <div class="field" style="min-width:170px;">
-                <label for="sCurrency">Valuta</label>
+                <label>Valuta</label>
                 <select id="sCurrency">
                   <option>SEK</option>
                   <option>NOK</option>
@@ -393,7 +531,7 @@
                 </select>
               </div>
               <div class="field" style="min-width:140px;">
-                <label for="sSign">Sign (default)</label>
+                <label>Sign (default)</label>
                 <input id="sSign" placeholder="t.ex. MA" />
               </div>
             </div>
@@ -407,18 +545,18 @@
           <h2>Räkenskapsår</h2>
           <div class="row" style="gap:10px; margin-bottom:10px;">
             <div class="field" style="min-width:160px;">
-              <label for="fyStart">Start</label>
+              <label>Start</label>
               <input id="fyStart" type="date" />
             </div>
             <div class="field" style="min-width:160px;">
-              <label for="fyEnd">Slut</label>
+              <label>Slut</label>
               <input id="fyEnd" type="date" />
             </div>
             <button class="btn" id="btnAddYear">Lägg till år</button>
           </div>
           <div class="row" style="gap:10px; margin-bottom:10px;">
-            <select id="carryFrom" aria-label="För över IB: från-år"></select>
-            <select id="carryTo" aria-label="För över IB: till-år"></select>
+            <select id="carryFrom"></select>
+            <select id="carryTo"></select>
             <button class="btn secondary" id="btnCarry">För över IB (balanskonto)</button>
           </div>
           <div class="muted small">För över IB skapar en verifikation på första dagen i ”Till”-året med text “Ingående balans”.</div>
@@ -445,7 +583,10 @@
 
 <script>
 (function(){
-  const STORAGE_KEY = "mini_bokforing_v1";
+ 
+
+  const APP_VERSION = "1.1"; // bump when adding new data fields
+
 
   // --- Utilities ---
   const fmtSEK = (n) => {
@@ -454,18 +595,13 @@
   };
   const parseMoney = (s) => {
     if (s == null) return 0;
-    const t = String(s).trim().replace(/\s+/g, "").replace(/,/g, ".");
+    const t = String(s).trim().replace(/\s+/g, "").replace(",", ".");
     if (t === "") return 0;
     const v = Number(t);
     return Number.isFinite(v) ? v : 0;
   };
   const ymd = (d) => d.replaceAll("-", "");
-  const todayISO = () => {
-    // Use local date (accounting-friendly). toISOString() uses UTC and can be off by one day.
-    const now = new Date();
-    const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
-    return local.toISOString().slice(0, 10);
-  };
+  const todayISO = () => new Date().toISOString().slice(0,10);
   const clampText = (s, max=120) => String(s ?? "").slice(0,max);
 
   // --- IndexedDB (för att lagra fil-handle mellan sessioner) ---
@@ -522,9 +658,21 @@
     const y = now.getFullYear();
     return {
       company: { name: "Mini-bokföring", orgnr: "", currency: "SEK", defaultSign: "" },
-      // File sync is optional. Default to localStorage-only so the app works on file://,
-      // non-HTTPS contexts, and browsers without File System Access API.
       fileSync: { autosave: true, requireFile: false },
+      fiscalYears: [
+        { id: String(y-1), start: `${y-1}-01-01`, end: `${y-1}-12-31` },
+        { id: String(y),   start: `${y}-01-01`,   end: `${y}-12-31` },
+      ],
+      activeYearId: String(y),
+      accounts: demoAccounts(),
+      vouchers: [],
+      customers: {},
+      invoices: []
+    };
+  }
+
+      company: { name: "Mini-bokföring", orgnr: "", currency: "SEK", defaultSign: "" },
+      fileSync: { autosave: true, requireFile: true },
       fiscalYears: [
         { id: String(y-1), start: `${y-1}-01-01`, end: `${y-1}-12-31` },
         { id: String(y), start: `${y}-01-01`, end: `${y}-12-31` },
@@ -538,14 +686,18 @@
   function demoAccounts(){
     // Minimal BAS-ish set (du kan lägga fler i Kontoplan)
     return {
+      "1510": { name: "Kundfordringar", type: "asset" },
       "1630": { name: "Skattekonto", type: "asset" },
       "1930": { name: "Företagskonto/bank", type: "asset" },
       "1460": { name: "Varulager", type: "asset" },
       "2013": { name: "Eget uttag", type: "liability" },
       "2019": { name: "Årets resultat", type: "liability" },
+      "2611": { name: "Utgående moms 25 %", type: "liability" },
+      "3001": { name: "Försäljning varor 25 %", type: "income" },
       "4960": { name: "Förändring av lager", type: "expense" },
       "8999": { name: "Årets resultat (resultatkonto)", type: "other" }
     };
+      
   }
 
   function load(){
@@ -555,11 +707,13 @@
       const d = JSON.parse(raw);
       // very light migration defaults
       if (!d.company) d.company = defaultData().company;
-      if (!d.fileSync) d.fileSync = { autosave: true, requireFile: false };
-      if (typeof d.fileSync.requireFile !== "boolean") d.fileSync.requireFile = false;
+      if (!d.fileSync) d.fileSync = { autosave: true, requireFile: true };
+      if (typeof d.fileSync.requireFile !== "boolean") d.fileSync.requireFile = true;
       if (!d.fiscalYears) d.fiscalYears = defaultData().fiscalYears;
       if (!d.accounts) d.accounts = demoAccounts();
       if (!d.vouchers) d.vouchers = [];
+      if (!d.customers) d.customers = {};
+      if (!d.invoices) d.invoices = [];
       if (!d.activeYearId) d.activeYearId = d.fiscalYears[0]?.id ?? String(new Date().getFullYear());
       return d;
     } catch {
@@ -567,21 +721,15 @@
     }
   }
   function save(){
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      storageWriteFailed = false;
-    } catch (e){
-      // Quota exceeded / private mode can throw. Keep the UI functional but warn once.
-      if (!storageWriteFailed){
-        storageWriteFailed = true;
-        alert("Kunde inte spara i localStorage (troligen fullt eller blockerat). Exportera JSON-backup för att inte tappa data.");
-      }
-    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     renderAll();
     scheduleFileAutosave();
   }
 
   // --- Fil-synk (Drive-synkad mapp) ---
+  // OBS: Om hela UI:t "dör" beror det nästan alltid på att scriptet inte kan parsas
+  // (SyntaxError). Den här sektionen är avsiktligt skriven utan dubletter/konstiga block.
+
   function fsApiSupported(){
     return !!(window.showOpenFilePicker && window.showSaveFilePicker && window.isSecureContext);
   }
@@ -605,28 +753,24 @@
       if (el) el.disabled = !!locked;
     });
 
-    // Also disable voucher editor fields to make it obvious
+    // Disable important fields
     const fields = ["vDate","vSeries","vNo","vText","vSign","aNo","aName","aType","fyStart","fyEnd"]; 
     fields.forEach(id => {
       const el = document.getElementById(id);
       if (el) el.disabled = !!locked;
     });
 
-    // If locked, show a clear status
-    if (locked){
-      setFsStatus("bad", "Välj/Skapa datafil för att börja");
-    }
+    if (locked) setFsStatus("bad", "Välj/Skapa datafil för att börja");
   }
 
   function updateFsUI(){
     if (!fsStatus) return;
 
-    // Autosave checkbox
+    // checkboxes
     if (fsAutosave){
       fsAutosave.checked = !!(state.fileSync && state.fileSync.autosave);
       fsAutosave.disabled = !fsApiSupported();
     }
-
     if (fsRequireFile){
       fsRequireFile.checked = !!(state.fileSync && state.fileSync.requireFile);
       fsRequireFile.disabled = !fsApiSupported();
@@ -637,21 +781,13 @@
     if (btnSaveToFile) btnSaveToFile.disabled = !connected;
     if (btnDisconnectFile) btnDisconnectFile.disabled = !connected;
 
+    const requireFile = !!(state.fileSync && state.fileSync.requireFile);
+
     if (!fsApiSupported()){
-      const requireFile = !!(state.fileSync && state.fileSync.requireFile);
-      setFsStatus(
-        "bad",
-        requireFile
-          ? "Fil-synk kräver HTTPS/localhost + Chrome/Edge (kör localStorage istället)"
-          : "Fil-synk kräver HTTPS/localhost + Chrome/Edge"
-      );
-      // Even if the user previously enabled “require file”, fall back to localStorage when
-      // the browser/context can’t support file handles; don’t dead-lock the whole app.
-      setEditingLocked(false);
+      setFsStatus("bad", requireFile ? "Kräver HTTPS/localhost + Chrome/Edge (fil krävs)" : "Kräver HTTPS/localhost + Chrome/Edge");
+      setEditingLocked(requireFile);
       return;
     }
-
-    const requireFile = !!(state.fileSync && state.fileSync.requireFile);
 
     if (!connected){
       setFsStatus("bad", requireFile ? "Inte ansluten · kräver datafil" : "Inte ansluten");
@@ -696,8 +832,7 @@
     await writable.write(JSON.stringify(state, null, 2));
     await writable.close();
 
-    const now = new Date();
-    fsLastSavedAt = now.toLocaleString("sv-SE", { hour12:false });
+    fsLastSavedAt = new Date().toLocaleString("sv-SE", { hour12:false });
     fsLastError = null;
     updateFsUI();
   }
@@ -712,7 +847,6 @@
     if (!txt.trim()) throw new Error("Filen är tom");
 
     const d = JSON.parse(txt);
-    // minimal shape check
     if (!d || typeof d !== "object" || !Array.isArray(d.fiscalYears) || !d.accounts || !Array.isArray(d.vouchers)){
       throw new Error("Filen ser inte ut som en backup från appen");
     }
@@ -722,6 +856,7 @@
     if (!state.company) state.company = defaultData().company;
     if (!state.fileSync) state.fileSync = { autosave: true, requireFile: true };
     if (typeof state.fileSync.requireFile !== "boolean") state.fileSync.requireFile = true;
+
     save();
   }
 
@@ -748,11 +883,10 @@
       fsLastError = null;
       fsLastSavedAt = null;
 
-      // Ask permission now (user just clicked), and auto-load if possible
+      // Ask permission now (user click), and auto-load if possible
       const ok = await fsEnsurePermission(true);
       if (ok){
-        try { await fsLoadState(); }
-        catch { /* file might be empty; ignore */ }
+        try { await fsLoadState(); } catch { /* empty/invalid => ignore */ }
       }
 
       updateFsUI();
@@ -779,14 +913,13 @@
       fsLastSavedAt = null;
       updateFsUI();
 
-      // Request permission and write initial content
+      // write initial
       const ok = await fsEnsurePermission(true);
       if (ok){
         const writable = await fsHandle.createWritable();
         await writable.write(JSON.stringify(state, null, 2));
         await writable.close();
-        const now = new Date();
-        fsLastSavedAt = now.toLocaleString("sv-SE", { hour12:false });
+        fsLastSavedAt = new Date().toLocaleString("sv-SE", { hour12:false });
         updateFsUI();
       }
     } catch (e){
@@ -805,7 +938,7 @@
     if (fsAutosaveTimer) clearTimeout(fsAutosaveTimer);
     fsAutosaveTimer = setTimeout(async ()=>{
       try {
-        // Only autosave if permission is already granted (no prompts without klick)
+        // Only autosave if permission is already granted (no prompts without click)
         const ok = await fsEnsurePermission(false);
         if (!ok) return;
         await fsWriteState();
@@ -816,11 +949,9 @@
     }, 600);
   }
 
-
   // --- State ---
   let state = load();
   let editingVoucherId = null;
-  let storageWriteFailed = false;
 
   // File sync handle (stored in IndexedDB, not in state)
   let fsHandle = null;
@@ -834,6 +965,7 @@
     vouchers: document.getElementById("tab-vouchers"),
     accounts: document.getElementById("tab-accounts"),
     reports: document.getElementById("tab-reports"),
+    invoices: document.getElementById("tab-invoices"),
     export: document.getElementById("tab-export"),
     settings: document.getElementById("tab-settings"),
   };
@@ -901,18 +1033,15 @@
     const t = btn.dataset ? btn.dataset.tab : null;
     if (!t) return;
 
-    tabs.forEach(b => {
-      b.classList.remove("active");
-      b.setAttribute("aria-selected", "false");
-    });
+    tabs.forEach(b => b.classList.remove("active"));
     btn.classList.add("active");
-    btn.setAttribute("aria-selected", "true");
 
     Object.entries(sections).forEach(([k, el]) => {
       if (el) el.hidden = (k !== t);
     });
 
     if (t === "reports") renderReports();
+    if (t === "invoices") renderInvoices();
     if (t === "settings") renderSettings();
     if (t === "accounts") renderAccounts();
   }
@@ -974,7 +1103,553 @@
     return "other";
   }
 
-  // --- Voucher editor ---
+  // --- Invoice helpers ---
+  const invYearSelect = document.getElementById("invYearSelect");
+  const invoiceList = document.getElementById("invoiceList");
+  const invDate = document.getElementById("invDate");
+  const invDue = document.getElementById("invDue");
+  const invNo = document.getElementById("invNo");
+  const invRef = document.getElementById("invRef");
+  const invCustomerBox = document.getElementById("invCustomerBox");
+  const invLinesTbody = document.getElementById("invLinesTbody");
+  const invTotal = document.getElementById("invTotal");
+  const invRounding = document.getElementById("invRounding");
+  const btnInvNew = document.getElementById("btnInvNew");
+  const btnInvSave = document.getElementById("btnInvSave");
+  const btnInvClear = document.getElementById("btnInvClear");
+  const btnInvAddItem = document.getElementById("btnInvAddItem");
+  const btnInvAddComment = document.getElementById("btnInvAddComment");
+  const btnInvPickCustomer = document.getElementById("btnInvPickCustomer");
+  const btnInvPrint = document.getElementById("btnInvPrint");
+  const btnInvToVoucher = document.getElementById("btnInvToVoucher");
+  const btnInvRefresh = document.getElementById("btnInvRefresh");
+
+  const customerDialog = document.getElementById("customerDialog");
+  const btnCustomerClose = document.getElementById("btnCustomerClose");
+  const btnCustomerSave = document.getElementById("btnCustomerSave");
+  const customerList = document.getElementById("customerList");
+  const custName = document.getElementById("custName");
+  const custAddr = document.getElementById("custAddr");
+  const custEmail = document.getElementById("custEmail");
+  const custOrgnr = document.getElementById("custOrgnr");
+
+  let editingInvoiceId = null;
+  let invCustomerId = null;
+  let invLines = [];
+
+  function addDays(dateIso, days){
+    const d = new Date(dateIso + "T00:00:00");
+    d.setDate(d.getDate() + days);
+    const pad = (n)=> String(n).padStart(2,"0");
+    return d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate());
+  }
+
+  function nextInvoiceNo(yearId){
+    const nums = (state.invoices||[])
+      .filter(i => i.yearId === yearId)
+      .map(i => Number(i.no))
+      .filter(n => Number.isFinite(n));
+    const max = nums.length ? Math.max(...nums) : 1000;
+    return String(max + 1);
+  }
+
+  function newInvoice(){
+    editingInvoiceId = null;
+    invCustomerId = null;
+    invDate.value = todayISO();
+    invDue.value = addDays(invDate.value, 30);
+    invNo.value = "";
+    invRef.value = "";
+    invLines = [ { kind:"item", desc:"", qty:"1", price:"", vat:"25" } ];
+    renderInvoiceCustomer();
+    renderInvoiceLines();
+    updateInvoiceTotals();
+  }
+
+  function renderInvoiceCustomer(){
+    if (!invCustomerBox) return;
+    if (!invCustomerId){
+      invCustomerBox.textContent = "Ingen kund vald.";
+      return;
+    }
+    const c = state.customers?.[invCustomerId];
+    if (!c){
+      invCustomerBox.textContent = "Ingen kund vald.";
+      invCustomerId = null;
+      return;
+    }
+    invCustomerBox.innerHTML = `<div style="font-weight:800;">${escapeHtml(c.name||"(namn)")}</div>
+      <div class="muted small">${escapeHtml(c.addr||"")}</div>
+      <div class="muted small">${escapeHtml(c.email||"")}${c.orgnr?" · "+escapeHtml(c.orgnr):""}</div>`;
+  }
+
+  function lineAmount(ln){
+    if (ln.kind !== "item") return { net:0, vat:0, gross:0 };
+    const qty = Math.max(0, parseMoney(ln.qty));
+    const price = Math.max(0, parseMoney(ln.price));
+    const vatRate = Math.max(0, parseMoney(ln.vat));
+    const net = Math.round(qty * price * 100) / 100;
+    const vat = Math.round(net * (vatRate/100) * 100) / 100;
+    const gross = Math.round((net + vat) * 100) / 100;
+    return { net, vat, gross };
+  }
+
+  function updateInvoiceTotals(){
+    let net = 0, vat = 0;
+    for (const ln of invLines){
+      const a = lineAmount(ln);
+      net += a.net;
+      vat += a.vat;
+    }
+    net = Math.round(net*100)/100;
+    vat = Math.round(vat*100)/100;
+    // "Öresavrundning" – round to nearest 0.01 already; keep placeholder for future cash rounding.
+    const gross = Math.round((net+vat)*100)/100;
+
+    if (invTotal) invTotal.textContent = fmtSEK(gross) + " " + (state.company.currency || "SEK");
+    if (invRounding) invRounding.textContent = fmtSEK(0);
+
+    const ok = !!invCustomerId && invLines.some(l=>l.kind==="item" && lineAmount(l).net>0);
+    if (btnInvSave) btnInvSave.disabled = !ok;
+    if (btnInvPrint) btnInvPrint.disabled = !ok;
+    if (btnInvToVoucher) btnInvToVoucher.disabled = !ok;
+  }
+
+  function renderInvoiceLines(){
+    if (!invLinesTbody) return;
+    invLinesTbody.innerHTML = "";
+    invLines.forEach((ln, idx)=>{
+      const tr = document.createElement("tr");
+
+      const tdDesc = document.createElement("td");
+      const inpDesc = document.createElement("input");
+      inpDesc.value = ln.desc || "";
+      inpDesc.placeholder = (ln.kind === "comment") ? "Kommentar…" : "Artikel / tjänst…";
+      inpDesc.addEventListener("input", ()=>{ ln.desc = inpDesc.value; updateInvoiceTotals(); });
+      tdDesc.appendChild(inpDesc);
+
+      const tdQty = document.createElement("td"); tdQty.className = "right";
+      const inpQty = document.createElement("input");
+      inpQty.inputMode = "decimal";
+      inpQty.value = ln.kind === "item" ? (ln.qty ?? "1") : "";
+      inpQty.placeholder = ln.kind === "item" ? "1" : "–";
+      inpQty.disabled = ln.kind !== "item";
+      inpQty.addEventListener("input", ()=>{ ln.qty = inpQty.value; updateInvoiceTotals(); renderInvoiceLines(); });
+      tdQty.appendChild(inpQty);
+
+      const tdPrice = document.createElement("td"); tdPrice.className = "right";
+      const inpPrice = document.createElement("input");
+      inpPrice.inputMode = "decimal";
+      inpPrice.value = ln.kind === "item" ? (ln.price ?? "") : "";
+      inpPrice.placeholder = ln.kind === "item" ? "0" : "–";
+      inpPrice.disabled = ln.kind !== "item";
+      inpPrice.addEventListener("input", ()=>{ ln.price = inpPrice.value; updateInvoiceTotals(); renderInvoiceLines(); });
+      tdPrice.appendChild(inpPrice);
+
+      const tdVat = document.createElement("td"); tdVat.className = "right";
+      const inpVat = document.createElement("input");
+      inpVat.inputMode = "decimal";
+      inpVat.value = ln.kind === "item" ? (ln.vat ?? "25") : "";
+      inpVat.placeholder = ln.kind === "item" ? "25" : "–";
+      inpVat.disabled = ln.kind !== "item";
+      inpVat.addEventListener("input", ()=>{ ln.vat = inpVat.value; updateInvoiceTotals(); renderInvoiceLines(); });
+      tdVat.appendChild(inpVat);
+
+      const tdSum = document.createElement("td"); tdSum.className = "right";
+      const a = lineAmount(ln);
+      tdSum.textContent = ln.kind === "item" ? fmtSEK(a.gross) : "";
+
+      const tdX = document.createElement("td");
+      const bx = document.createElement("button");
+      bx.className = "btn secondary";
+      bx.textContent = "✕";
+      bx.addEventListener("click", ()=>{
+        invLines.splice(idx,1);
+        if (invLines.length===0) invLines.push({ kind:"item", desc:"", qty:"1", price:"", vat:"25" });
+        renderInvoiceLines();
+        updateInvoiceTotals();
+      });
+      tdX.appendChild(bx);
+
+      tr.appendChild(tdDesc);
+      tr.appendChild(tdQty);
+      tr.appendChild(tdPrice);
+      tr.appendChild(tdVat);
+      tr.appendChild(tdSum);
+      tr.appendChild(tdX);
+      invLinesTbody.appendChild(tr);
+    });
+  }
+
+  function invoiceYearId(){
+    const y = (invYearSelect && invYearSelect.value) || state.activeYearId;
+    return y;
+  }
+
+  function saveInvoice(){
+    const yearId = invoiceYearId();
+    const date = invDate.value || todayISO();
+    const due = invDue.value || addDays(date, 30);
+    const no = (invNo.value || "").trim() || nextInvoiceNo(yearId);
+    const ref = clampText(invRef.value || "");
+
+    const lines = invLines.map(l => ({
+      kind: l.kind,
+      desc: clampText(l.desc || "", 200),
+      qty: l.kind === "item" ? Math.round(parseMoney(l.qty)*100)/100 : 0,
+      price: l.kind === "item" ? Math.round(parseMoney(l.price)*100)/100 : 0,
+      vat: l.kind === "item" ? Math.round(parseMoney(l.vat)*100)/100 : 0
+    }));
+
+    const inv = {
+      id: editingInvoiceId ?? crypto.randomUUID(),
+      yearId,
+      no,
+      date,
+      due,
+      customerId: invCustomerId,
+      ref,
+      lines
+    };
+
+    const idx = (state.invoices||[]).findIndex(x=>x.id===inv.id);
+    if (idx>=0) state.invoices[idx] = inv; else state.invoices.push(inv);
+    state.invoices.sort((a,b)=> (a.yearId+a.no+a.date).localeCompare(b.yearId+b.no+b.date, "sv"));
+
+    save();
+    newInvoice();
+    renderInvoices();
+  }
+
+  function invoiceTotals(inv){
+    let net=0, vat=0;
+    for (const l of (inv.lines||[])){
+      if (l.kind !== "item") continue;
+      const n = Math.round((Number(l.qty)||0) * (Number(l.price)||0) * 100)/100;
+      const v = Math.round(n * ((Number(l.vat)||0)/100) * 100)/100;
+      net += n; vat += v;
+    }
+    net = Math.round(net*100)/100;
+    vat = Math.round(vat*100)/100;
+    const gross = Math.round((net+vat)*100)/100;
+    return { net, vat, gross };
+  }
+
+  function renderInvoices(){
+    // keep year selectors in sync
+    fillYearSelectors();
+    if (invYearSelect) invYearSelect.value = invYearSelect.value || state.activeYearId;
+
+    const yid = (invYearSelect && invYearSelect.value) || state.activeYearId;
+    const list = (state.invoices||[]).filter(i=>i.yearId===yid).slice().sort((a,b)=> (a.no+a.date).localeCompare(b.no+b.date, "sv"));
+
+    if (invoiceList){
+      invoiceList.innerHTML = "";
+      if (!list.length){
+        invoiceList.innerHTML = `<div class="muted small">Inga fakturor i detta år ännu.</div>`;
+      } else {
+        list.forEach(inv=>{
+          const c = state.customers?.[inv.customerId];
+          const tot = invoiceTotals(inv);
+          const div = document.createElement("div");
+          div.className = "item";
+          div.innerHTML = `
+            <div class="top">
+              <div>
+                <div class="title">Faktura #${escapeHtml(inv.no)} · ${escapeHtml(inv.date)} · ${escapeHtml(c?.name || "(kund)")}</div>
+                <div class="meta">Förfaller ${escapeHtml(inv.due)} · Totalt ${fmtSEK(tot.gross)} ${escapeHtml(state.company.currency||"SEK")}</div>
+              </div>
+              <div class="row">
+                <button class="btn secondary" data-act="edit" data-id="${inv.id}">Öppna</button>
+                <button class="btn secondary" data-act="print" data-id="${inv.id}">Skriv ut</button>
+                <button class="btn danger" data-act="del" data-id="${inv.id}">Ta bort</button>
+              </div>
+            </div>
+          `;
+          div.addEventListener("click", (e)=>{
+            const b = e.target.closest("button");
+            if (!b) return;
+            const id = b.dataset.id;
+            const act = b.dataset.act;
+            if (act==="edit") loadInvoiceToEditor(id);
+            if (act==="print") printInvoice(id);
+            if (act==="del") deleteInvoice(id);
+          });
+          invoiceList.appendChild(div);
+        });
+      }
+    }
+
+    updateInvoiceTotals();
+  }
+
+  function loadInvoiceToEditor(id){
+    const inv = (state.invoices||[]).find(x=>x.id===id);
+    if (!inv) return;
+    editingInvoiceId = inv.id;
+    if (invYearSelect) invYearSelect.value = inv.yearId;
+    invDate.value = inv.date;
+    invDue.value = inv.due;
+    invNo.value = inv.no;
+    invRef.value = inv.ref || "";
+    invCustomerId = inv.customerId || null;
+    invLines = (inv.lines||[]).map(l => ({
+      kind: l.kind || "item",
+      desc: l.desc || "",
+      qty: (l.kind==="item") ? String(l.qty ?? "1") : "",
+      price: (l.kind==="item") ? String(l.price ?? "") : "",
+      vat: (l.kind==="item") ? String(l.vat ?? "25") : ""
+    }));
+    if (!invLines.length) invLines = [ { kind:"item", desc:"", qty:"1", price:"", vat:"25" } ];
+    renderInvoiceCustomer();
+    renderInvoiceLines();
+    updateInvoiceTotals();
+  }
+
+  function deleteInvoice(id){
+    if (!confirm("Ta bort fakturan?")) return;
+    state.invoices = (state.invoices||[]).filter(i=>i.id!==id);
+    save();
+    renderInvoices();
+  }
+
+  function printInvoice(id){
+    const inv = (state.invoices||[]).find(x=>x.id===id);
+    if (!inv) return;
+    const c = state.customers?.[inv.customerId] || {};
+    const tot = invoiceTotals(inv);
+
+    const rows = (inv.lines||[]).map(l=>{
+      if (l.kind !== "item"){
+        return `<tr><td colspan="5" style="padding:8px 0; color:#666;">${escapeHtml(l.desc||"")}</td></tr>`;
+      }
+      const net = Math.round((Number(l.qty)||0)*(Number(l.price)||0)*100)/100;
+      const vat = Math.round(net*((Number(l.vat)||0)/100)*100)/100;
+      const gross = Math.round((net+vat)*100)/100;
+      return `<tr>
+        <td>${escapeHtml(l.desc||"")}</td>
+        <td style="text-align:right;">${(Number(l.qty)||0)}</td>
+        <td style="text-align:right;">${fmtSEK(Number(l.price)||0)}</td>
+        <td style="text-align:right;">${Number(l.vat)||0}%</td>
+        <td style="text-align:right;">${fmtSEK(gross)}</td>
+      </tr>`;
+    }).join("");
+
+    const html = `<!doctype html><html><head><meta charset="utf-8" />
+      <title>Faktura ${escapeHtml(inv.no)}</title>
+      <style>
+        body{ font-family: system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; padding:24px; }
+        h1{ margin:0 0 8px 0; }
+        .muted{ color:#555; }
+        .top{ display:flex; justify-content:space-between; gap:20px; flex-wrap:wrap; }
+        table{ width:100%; border-collapse:collapse; margin-top:16px; }
+        th,td{ border-bottom:1px solid #ddd; padding:8px 6px; }
+        th{ text-align:left; }
+        .sum{ margin-top:12px; display:flex; justify-content:flex-end; }
+        .sum div{ min-width:260px; }
+      </style></head><body>
+      <div class="top">
+        <div>
+          <h1>Faktura #${escapeHtml(inv.no)}</h1>
+          <div class="muted">Fakturadatum: ${escapeHtml(inv.date)} · Förfallodatum: ${escapeHtml(inv.due)}</div>
+          ${inv.ref?`<div class="muted">Referens: ${escapeHtml(inv.ref)}</div>`:""}
+        </div>
+        <div>
+          <div style="font-weight:800;">${escapeHtml(state.company.name||"")}</div>
+          ${state.company.orgnr?`<div class="muted">Org.nr: ${escapeHtml(state.company.orgnr)}</div>`:""}
+        </div>
+      </div>
+
+      <div style="margin-top:18px;">
+        <div class="muted">Kund</div>
+        <div style="font-weight:800;">${escapeHtml(c.name||"")}</div>
+        <div class="muted">${escapeHtml(c.addr||"")}</div>
+      </div>
+
+      <table>
+        <thead><tr><th>Rad</th><th style="text-align:right;">Antal</th><th style="text-align:right;">Á-pris</th><th style="text-align:right;">Moms</th><th style="text-align:right;">Belopp</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+
+      <div class="sum"><div>
+        <div style="display:flex; justify-content:space-between;"><span>Summa exkl. moms</span><span>${fmtSEK(tot.net)} ${escapeHtml(state.company.currency||"SEK")}</span></div>
+        <div style="display:flex; justify-content:space-between;"><span>Moms</span><span>${fmtSEK(tot.vat)} ${escapeHtml(state.company.currency||"SEK")}</span></div>
+        <div style="display:flex; justify-content:space-between; font-weight:900; font-size:18px;"><span>Att betala</span><span>${fmtSEK(tot.gross)} ${escapeHtml(state.company.currency||"SEK")}</span></div>
+      </div></div>
+
+      <script>window.onload=()=>window.print();<\/script>
+
+      </body></html>`;
+
+    const w = window.open("", "_blank");
+    if (!w) return alert("Popup blockerad. Tillåt popup för att skriva ut.");
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+  }
+
+  function createVoucherFromInvoice(){
+    // super-enkel bokning: 1510 Debet, 3001 Kredit (netto), 2611 Kredit (moms)
+    if (!invCustomerId) return;
+    const yearId = invoiceYearId();
+    const date = invDate.value || todayISO();
+    const no = nextVerno(yearId, "F");
+
+    const tmp = {
+      lines: invLines.map(l=>({kind:l.kind, qty:parseMoney(l.qty), price:parseMoney(l.price), vat:parseMoney(l.vat)}))
+    };
+    let net=0, vat=0;
+    for (const l of tmp.lines){
+      if (l.kind!=="item") continue;
+      const n = Math.round((l.qty||0)*(l.price||0)*100)/100;
+      const v = Math.round(n*((l.vat||0)/100)*100)/100;
+      net += n; vat += v;
+    }
+    net = Math.round(net*100)/100;
+    vat = Math.round(vat*100)/100;
+    const gross = Math.round((net+vat)*100)/100;
+    if (!(gross>0)) return;
+
+    // ensure accounts exist
+    if (!state.accounts["1510"]) state.accounts["1510"] = { name:"Kundfordringar", type:"asset" };
+    if (!state.accounts["3001"]) state.accounts["3001"] = { name:"Försäljning", type:"income" };
+    if (!state.accounts["2611"]) state.accounts["2611"] = { name:"Utgående moms", type:"liability" };
+
+    state.vouchers.push({
+      id: crypto.randomUUID(),
+      yearId,
+      series: "F",
+      no,
+      date,
+      text: clampText(`Faktura ${invNo.value||""}`.trim() || "Faktura"),
+      regDate: todayISO(),
+      sign: state.company.defaultSign || "",
+      lines: [
+        { account:"1510", text:"Faktura", amount: +gross },
+        { account:"3001", text:"Försäljning", amount: -net },
+        { account:"2611", text:"Moms", amount: -vat }
+      ].filter(l=>Math.abs(l.amount)>0.00001)
+    });
+
+    state.vouchers.sort((a,b)=> (a.yearId+b.series+a.no+a.date).localeCompare(b.yearId+b.series+b.no+b.date, "sv"));
+    save();
+    alert("Skapade verifikation (serie F). Kontrollera konton och moms innan du använder skarpt.");
+  }
+
+  function openCustomerDialog(){
+    if (!customerDialog) return;
+    custName.value = ""; custAddr.value = ""; custEmail.value = ""; custOrgnr.value = "";
+    renderCustomerList();
+    customerDialog.showModal();
+  }
+
+  function closeCustomerDialog(){
+    if (!customerDialog) return;
+    customerDialog.close();
+  }
+
+  function renderCustomerList(){
+    if (!customerList) return;
+    customerList.innerHTML = "";
+    const keys = Object.keys(state.customers||{}).sort((a,b)=> (state.customers[a]?.name||"").localeCompare(state.customers[b]?.name||"", "sv"));
+    if (!keys.length){
+      customerList.innerHTML = `<div class="muted small">Inga kunder sparade än.</div>`;
+      return;
+    }
+    keys.forEach(id=>{
+      const c = state.customers[id];
+      const div = document.createElement("div");
+      div.className = "item";
+      div.innerHTML = `
+        <div class="top">
+          <div>
+            <div class="title">${escapeHtml(c.name||"(namn)")}</div>
+            <div class="meta">${escapeHtml(c.addr||"")}</div>
+          </div>
+          <div class="row">
+            <button class="btn" data-pick="${id}">Välj</button>
+            <button class="btn danger" data-del="${id}">Ta bort</button>
+          </div>
+        </div>`;
+      div.addEventListener("click", (e)=>{
+        const b = e.target.closest("button");
+        if (!b) return;
+        if (b.dataset.pick){
+          invCustomerId = b.dataset.pick;
+          renderInvoiceCustomer();
+          updateInvoiceTotals();
+          closeCustomerDialog();
+        }
+        if (b.dataset.del){
+          if (!confirm("Ta bort kunden?")) return;
+          delete state.customers[b.dataset.del];
+          if (invCustomerId === b.dataset.del) invCustomerId = null;
+          save();
+          renderCustomerList();
+          renderInvoiceCustomer();
+          updateInvoiceTotals();
+        }
+      });
+      customerList.appendChild(div);
+    });
+  }
+
+  function saveCustomerAndPick(){
+    const name = (custName.value||"").trim();
+    if (!name) return alert("Ange kundnamn.");
+    const c = {
+      name,
+      addr: (custAddr.value||"").trim(),
+      email: (custEmail.value||"").trim(),
+      orgnr: (custOrgnr.value||"").trim()
+    };
+    const id = crypto.randomUUID();
+    if (!state.customers) state.customers = {};
+    state.customers[id] = c;
+    invCustomerId = id;
+    save();
+    renderInvoiceCustomer();
+    updateInvoiceTotals();
+    closeCustomerDialog();
+  }
+
+  function wireInvoiceEvents(){
+    if (btnInvNew) btnInvNew.addEventListener("click", newInvoice);
+    if (btnInvClear) btnInvClear.addEventListener("click", ()=>{ if (!confirm("Rensa fakturan?")) return; newInvoice(); });
+    if (btnInvAddItem) btnInvAddItem.addEventListener("click", ()=>{ invLines.push({ kind: "item", desc: "", qty: "1", price: "", vat: "25" });
+ renderInvoiceLines(); updateInvoiceTotals(); });
+    if (btnInvAddComment) btnInvAddComment.addEventListener("click", ()=>{ invLines.push({kind:"comment", desc:""}); renderInvoiceLines(); updateInvoiceTotals(); });
+    if (btnInvPickCustomer) btnInvPickCustomer.addEventListener("click", openCustomerDialog);
+    if (btnInvSave) btnInvSave.addEventListener("click", saveInvoice);
+    if (btnInvPrint) btnInvPrint.addEventListener("click", ()=>{
+      // print current editor as a "draft" by saving temporarily in memory
+      const tmpId = editingInvoiceId || "__draft__";
+      const tmp = { id: tmpId, yearId: invoiceYearId(), no: (invNo.value||"").trim()||"Utkast", date: invDate.value||todayISO(), due: invDue.value||addDays(invDate.value||todayISO(),30), customerId: invCustomerId, ref: invRef.value||"", lines: invLines.map(l=>({kind:l.kind, desc:l.desc||"", qty:parseMoney(l.qty), price:parseMoney(l.price), vat:parseMoney(l.vat)})) };
+      // temporarily render without storing
+      const c = state.customers?.[tmp.customerId];
+      if (!c) return alert("Välj kund först.");
+      // reuse printInvoice by pushing temp into state briefly
+      const exists = (state.invoices||[]).find(x=>x.id===tmpId);
+      if (!exists){
+        state.invoices = state.invoices || [];
+        state.invoices.push(tmp);
+        printInvoice(tmpId);
+        state.invoices = state.invoices.filter(x=>x.id!==tmpId);
+      } else {
+        printInvoice(tmpId);
+      }
+    });
+    if (btnInvToVoucher) btnInvToVoucher.addEventListener("click", ()=>{ if (!confirm("Skapa en verifikation för fakturan (serie F)?")) return; createVoucherFromInvoice(); });
+    if (btnInvRefresh) btnInvRefresh.addEventListener("click", renderInvoices);
+    if (invYearSelect) invYearSelect.addEventListener("change", renderInvoices);
+
+    if (btnCustomerClose) btnCustomerClose.addEventListener("click", closeCustomerDialog);
+    if (btnCustomerSave) btnCustomerSave.addEventListener("click", saveCustomerAndPick);
+
+    [invDate, invDue, invNo, invRef].filter(Boolean).forEach(el=> el.addEventListener("input", updateInvoiceTotals));
+  }
+
+// --- Voucher editor ---
   let currentLines = [];
 
   function newVoucher(){
@@ -1007,7 +1682,6 @@
       const tdAcc = document.createElement("td");
       const sel = document.createElement("select");
       sel.style.width = "100%";
-      sel.setAttribute("aria-label", `Konto (rad ${idx+1})`);
       accList.forEach(no => {
         const opt = document.createElement("option");
         opt.value = no;
@@ -1030,7 +1704,6 @@
       const inpText = document.createElement("input");
       inpText.value = ln.text;
       inpText.placeholder = "valfritt";
-      inpText.setAttribute("aria-label", `Radtext (rad ${idx+1})`);
       inpText.addEventListener("input", () => ln.text = inpText.value);
       tdText.appendChild(inpText);
 
@@ -1040,7 +1713,6 @@
       inpD.inputMode = "decimal";
       inpD.placeholder = "0";
       inpD.value = ln.debit;
-      inpD.setAttribute("aria-label", `Debet (rad ${idx+1})`);
       inpD.addEventListener("input", () => {
         ln.debit = inpD.value;
         if (parseMoney(ln.debit) !== 0) ln.credit = "";
@@ -1055,7 +1727,6 @@
       inpC.inputMode = "decimal";
       inpC.placeholder = "0";
       inpC.value = ln.credit;
-      inpC.setAttribute("aria-label", `Kredit (rad ${idx+1})`);
       inpC.addEventListener("input", () => {
         ln.credit = inpC.value;
         if (parseMoney(ln.credit) !== 0) ln.debit = "";
@@ -1070,7 +1741,6 @@
       bx.className = "btn secondary";
       bx.textContent = "✕";
       bx.title = "Ta bort rad";
-      bx.setAttribute("aria-label", `Ta bort rad ${idx+1}`);
       bx.addEventListener("click", () => {
         currentLines.splice(idx, 1);
         if (currentLines.length === 0) currentLines.push(makeLine());
@@ -1264,7 +1934,7 @@
     rows.forEach(r => {
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td>${escapeHtml(r.acc)}</td>
+        <td>${r.acc}</td>
         <td>${escapeHtml(r.name)}</td>
         <td class="right">${fmtSEK(r.amt)}</td>
       `;
@@ -1884,17 +2554,8 @@
     const txt = await file.text();
     try {
       const d = JSON.parse(txt);
-      // Minimal validation + migration defaults (same intent as fsLoadState)
-      if (!d || typeof d !== "object" || !Array.isArray(d.fiscalYears) || !d.accounts || !Array.isArray(d.vouchers)){
-        throw new Error("Invalid backup shape");
-      }
       state = d;
-      if (!state.company) state.company = defaultData().company;
-      if (!state.fileSync) state.fileSync = { autosave: true, requireFile: false };
-      if (typeof state.fileSync.requireFile !== "boolean") state.fileSync.requireFile = false;
-      if (!state.activeYearId) state.activeYearId = state.fiscalYears[0]?.id ?? String(new Date().getFullYear());
       save();
-      updateFsUI();
       alert("Import klar.");
     } catch {
       alert("Kunde inte läsa JSON.");
@@ -1944,13 +2605,13 @@
   });
 
   if (fsAutosave) fsAutosave.addEventListener("change", ()=>{
-    if (!state.fileSync) state.fileSync = { autosave: true, requireFile: false };
+    if (!state.fileSync) state.fileSync = { autosave: true, requireFile: true };
     state.fileSync.autosave = !!fsAutosave.checked;
     save();
   });
 
   if (fsRequireFile) fsRequireFile.addEventListener("change", ()=>{
-    if (!state.fileSync) state.fileSync = { autosave: true, requireFile: false };
+    if (!state.fileSync) state.fileSync = { autosave: true, requireFile: true };
     state.fileSync.requireFile = !!fsRequireFile.checked;
     save();
     updateFsUI();
@@ -1969,12 +2630,10 @@
         const txt = await readFileAsText(file, enc);
         const parsed = parseSIE(txt);
         const stats = mergeParsedSIE(parsed, wipe);
-        alert(
-          `Import klar.\n` +
-          `År: ${stats.before.years} → ${stats.after.years}\n` +
-          `Konton: ${stats.before.accounts} → ${stats.after.accounts}\n` +
-          `Verifikationer: ${stats.before.vouchers} → ${stats.after.vouchers}`
-        );
+        alert(`Import klar.
+År: ${stats.before.years} → ${stats.after.years}
+Konton: ${stats.before.accounts} → ${stats.after.accounts}
+Verifikationer: ${stats.before.vouchers} → ${stats.after.vouchers}`);
       } catch (e){
         console.error(e);
         alert("Kunde inte importera filen. Testa en annan teckenkodning (UTF-8 / Windows-1252 / IBM437)." );
@@ -2054,6 +2713,28 @@
   // --- Render all ---
   function renderAll(){
     fillYearSelectors();
+    // invoices also need year selector options
+    if (invYearSelect){
+      const prev = invYearSelect.value;
+      invYearSelect.innerHTML = "";
+      state.fiscalYears.slice().sort((a,b)=>a.id.localeCompare(b.id,"sv")).forEach(y=>{
+        const opt = document.createElement("option");
+        opt.value = y.id;
+        opt.textContent = `${y.id} (${y.start} – ${y.end})`;
+        invYearSelect.appendChild(opt);
+      });
+      invYearSelect.value = state.fiscalYears.find(y=>y.id===prev)?.id || state.activeYearId;
+    }
+
+    renderVoucherList();
+    renderLines();
+    updateBalanceBadge();
+
+    if (!document.getElementById("tab-reports").hidden) renderReports();
+    if (!document.getElementById("tab-accounts").hidden) renderAccounts();
+    if (!document.getElementById("tab-invoices").hidden) renderInvoices();
+  }
+    fillYearSelectors();
     renderVoucherList();
     renderLines();
     updateBalanceBadge();
@@ -2066,7 +2747,20 @@
   yearSelect.value = state.activeYearId;
   vDate.value = todayISO();
   newVoucher();
+
+  // Invoices init
+  if (!state.customers) state.customers = {};
+  if (!state.invoices) state.invoices = [];
+  if (invYearSelect) invYearSelect.value = state.activeYearId;
+  if (invDate) invDate.value = todayISO();
+  if (invDue) invDue.value = addDays(todayISO(), 30);
+  newInvoice();
+  wireInvoiceEvents();
   renderAll();
+
+  // Boot-indikator (om denna aldrig blir "OK" så har scriptet kraschat vid parsning)
+  const bootPill = document.getElementById("bootPill");
+  if (bootPill) bootPill.textContent = "JS: OK";
 
   // Restore file handle (if previously connected)
   (async ()=>{

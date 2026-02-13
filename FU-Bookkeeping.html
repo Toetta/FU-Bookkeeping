@@ -670,19 +670,6 @@
       invoices: []
     };
   }
-
-      company: { name: "Mini-bokföring", orgnr: "", currency: "SEK", defaultSign: "" },
-      fileSync: { autosave: true, requireFile: true },
-      fiscalYears: [
-        { id: String(y-1), start: `${y-1}-01-01`, end: `${y-1}-12-31` },
-        { id: String(y), start: `${y}-01-01`, end: `${y}-12-31` },
-      ],
-      activeYearId: String(y),
-      accounts: demoAccounts(),
-      vouchers: []
-    };
-  }
-
   function demoAccounts(){
     // Minimal BAS-ish set (du kan lägga fler i Kontoplan)
     return {
@@ -2710,70 +2697,60 @@ Verifikationer: ${stats.before.vouchers} → ${stats.after.vouchers}`);
   // Keep balance badge updated
   [vDate, vSeries, vNo, vText, vSign].forEach(el => el.addEventListener("input", updateBalanceBadge));
 
-  // --- Render all ---
-  function renderAll(){
-    fillYearSelectors();
-    // invoices also need year selector options
-    if (invYearSelect){
-      const prev = invYearSelect.value;
-      invYearSelect.innerHTML = "";
-      state.fiscalYears.slice().sort((a,b)=>a.id.localeCompare(b.id,"sv")).forEach(y=>{
+// --- Render all ---
+function renderAll(){
+  fillYearSelectors();
+
+  // invoices also need year selector options
+  if (invYearSelect){
+    const prev = invYearSelect.value;
+    invYearSelect.innerHTML = "";
+    state.fiscalYears
+      .slice()
+      .sort((a,b)=>a.id.localeCompare(b.id,"sv"))
+      .forEach(y=>{
         const opt = document.createElement("option");
         opt.value = y.id;
         opt.textContent = `${y.id} (${y.start} – ${y.end})`;
         invYearSelect.appendChild(opt);
       });
-      invYearSelect.value = state.fiscalYears.find(y=>y.id===prev)?.id || state.activeYearId;
-    }
 
-    renderVoucherList();
-    renderLines();
-    updateBalanceBadge();
-
-    if (!document.getElementById("tab-reports").hidden) renderReports();
-    if (!document.getElementById("tab-accounts").hidden) renderAccounts();
-    if (!document.getElementById("tab-invoices").hidden) renderInvoices();
-  }
-    fillYearSelectors();
-    renderVoucherList();
-    renderLines();
-    updateBalanceBadge();
-    if (!document.getElementById("tab-reports").hidden) renderReports();
-    if (!document.getElementById("tab-accounts").hidden) renderAccounts();
+    invYearSelect.value =
+      state.fiscalYears.find(y=>y.id===prev)?.id || state.activeYearId;
   }
 
-  // --- Init ---
-  fillYearSelectors();
-  yearSelect.value = state.activeYearId;
-  vDate.value = todayISO();
-  newVoucher();
+  renderVoucherList();
+  renderLines();
+  updateBalanceBadge();
 
-  // Invoices init
-  if (!state.customers) state.customers = {};
-  if (!state.invoices) state.invoices = [];
-  if (invYearSelect) invYearSelect.value = state.activeYearId;
-  if (invDate) invDate.value = todayISO();
-  if (invDue) invDue.value = addDays(todayISO(), 30);
-  newInvoice();
-  wireInvoiceEvents();
-  renderAll();
+  const rep = document.getElementById("tab-reports");
+  const acc = document.getElementById("tab-accounts");
+  const inv = document.getElementById("tab-invoices");
 
-  // Boot-indikator (om denna aldrig blir "OK" så har scriptet kraschat vid parsning)
-  const bootPill = document.getElementById("bootPill");
-  if (bootPill) bootPill.textContent = "JS: OK";
+  if (rep && !rep.hidden) renderReports();
+  if (acc && !acc.hidden) renderAccounts();
+  if (inv && !inv.hidden) renderInvoices();
+}
 
-  // Restore file handle (if previously connected)
-  (async ()=>{
-    try {
-      const h = await idbGet("dataFileHandle");
-      if (h){
-        fsHandle = h;
-      }
-    } catch (e){
-      // ignore
-    }
-    updateFsUI();
-  })();
+// --- Init ---
+fillYearSelectors();
+
+if (yearSelect) yearSelect.value = state.activeYearId;
+if (vDate) vDate.value = todayISO();
+
+newVoucher();
+
+// Invoices init
+state.customers = state.customers || {};
+state.invoices = state.invoices || [];
+
+if (invYearSelect) invYearSelect.value = state.activeYearId;
+if (invDate) invDate.value = todayISO();
+if (invDue) invDue.value = addDays(todayISO(), 30);
+
+wireInvoiceEvents();
+newInvoice();
+renderAll();
 
 })();
 </script>

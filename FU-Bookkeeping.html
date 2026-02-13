@@ -3301,18 +3301,39 @@ Verifikationer: ${stats.before.vouchers} → ${stats.after.vouchers}`);
     state.company.currency = (sCurrency?.value || "SEK");
     state.company.defaultSign = (sSign?.value || "").trim();
 
-    // Fakturauppgifter (om fälten finns i DOM)
-    state.company.address = (sAddress?.value || "").trim();
-    state.company.contactEmail = (sEmail?.value || "").trim();
-    state.company.contactPhone = (sPhone?.value || "").trim();
+    // Fakturauppgifter
+    state.company.addr = (sAddr?.value || "").trim();
+    state.company.zip = (sZip?.value || "").trim();
+    state.company.city = (sCity?.value || "").trim();
+    state.company.country = (sCountry?.value || "").trim();
+    state.company.email = (sEmail?.value || "").trim();
+    state.company.phone = (sPhone?.value || "").trim();
+    state.company.web = (sWeb?.value || "").trim();
+    state.company.vat = (sVat?.value || "").trim();
 
-    state.company.paymentMethod = (sPayMethod?.value || "").trim(); // t.ex. Bankgiro/Plusgiro/IBAN
-    state.company.paymentAccount = (sPayAccount?.value || "").trim(); // nummer
-    state.company.paymentReferencePrefix = (sPayRefPrefix?.value || "").trim(); // t.ex. OCR-prefix
-    state.company.paymentTermsDays = Number.isFinite(Number(sPayTerms?.value)) ? Number(sPayTerms.value) : (state.company.paymentTermsDays || 30);
+    const payDaysNum = Number(sPayDays?.value);
+    state.company.payDays = Number.isFinite(payDaysNum) && payDaysNum > 0 ? payDaysNum : 30;
 
-    // Logo-data sparas redan när man väljer fil, men behåll om den finns
-    if (typeof state.company.logoData !== "string") state.company.logoData = state.company.logoData || "";
+    const bg = (sBg?.value || "").trim();
+    state.company.bg = bg;
+    state.company.bankgiro = bg;
+
+    const pg = (sPg?.value || "").trim();
+    state.company.pg = pg;
+    state.company.plusgiro = pg;
+
+    state.company.iban = (sIban?.value || "").trim();
+    state.company.swift = (sSwift?.value || "").trim();
+
+    const invNote = (sInvNote?.value || "").trim();
+    state.company.invNote = invNote;
+    state.company.invoiceNote = invNote;
+
+    const invFooter = (sInvFooter?.value || "").trim();
+    state.company.invFooter = invFooter;
+    state.company.invoiceFooter = invFooter;
+    // logoDataUrl hanteras av filväljaren; se till att nyckeln finns
+    if (typeof state.company.logoDataUrl !== "string") state.company.logoDataUrl = state.company.logoDataUrl || "";
 
     save();
     renderSettings();

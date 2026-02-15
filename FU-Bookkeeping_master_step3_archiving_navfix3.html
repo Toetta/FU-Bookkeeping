@@ -1297,9 +1297,40 @@ if (!d.features) d.features = { sruEnabled: false };
     }
   }
   function save(){
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    renderAll();
-    scheduleFileAutosave();
+    const isQuotaError = (e) => {
+      const name = e && e.name ? String(e.name) : "";
+      const msg = e && e.message ? String(e.message) : "";
+      return name === "QuotaExceededError" || /quota/i.test(msg) || e?.code === 22 || e?.code === 1014;
+    };
+
+    let persisted = false;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      persisted = true;
+    } catch (e){
+      console.error(e);
+
+      // If state is too large, the most common culprit is an embedded logo.
+      if (isQuotaError(e) && state?.company?.logoDataUrl){
+        const prev = state.company.logoDataUrl;
+        try {
+          state.company.logoDataUrl = "";
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+          persisted = true;
+          alert("Kunde inte spara p.g.a. lagringsutrymme. Logotypen var troligen för stor och togs bort – försök med en mindre bild.");
+        } catch (e2){
+          console.error(e2);
+          state.company.logoDataUrl = prev;
+          alert("Kunde inte spara data till webbläsarens lagring. Se konsolen för detaljer.");
+        }
+      } else {
+        alert("Kunde inte spara data till webbläsarens lagring. Se konsolen för detaljer.");
+      }
+    }
+
+    try { renderAll(); } catch (e){ console.error(e); }
+    try { scheduleFileAutosave(); } catch (e){ console.error(e); }
+    return persisted;
   }
 
   // --- Fil-synk (Drive-synkad mapp) ---
@@ -1720,8 +1751,8 @@ if (!state.features) state.features = { sruEnabled: false };
     state.features.sruEnabled = !!(sSruEnabled && sSruEnabled.checked);
 
     if (companyNameEl) companyNameEl.textContent = state.company.name || "FU-BOOKKEEPING";
-    save();
-    alert("Inställningar sparade.");
+    const ok = save();
+    if (ok) alert("Inställningar sparade.");
   }
 
   const fyStart = document.getElementById("fyStart");
@@ -3620,7 +3651,11 @@ if (rptYearSelect){
     btnSaveSettings.addEventListener("click", (e)=>{
       e.preventDefault();
       try { saveSettings(); }
-      catch(err){ console.error(err); alert("Kunde inte spara inställningar. Se konsolen."); }
+      catch(err){
+        console.error(err);
+        const msg = (err && (err.message || err.name)) ? String(err.message || err.name) : "(okänt fel)";
+        alert(`Kunde inte spara inställningar: ${msg}. Se konsolen.`);
+      }
     });
   }
 

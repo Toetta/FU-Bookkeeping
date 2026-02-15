@@ -2384,7 +2384,7 @@ if (!d.features) d.features = { sruEnabled: false };
 
   function fixMojibake(s){
     // Common UTF-8-as-Latin1 sequences
-    return String(s ?? "")
+    let out = String(s ?? "")
       .replaceAll("Ã¥", "å")
       .replaceAll("Ã¤", "ä")
       .replaceAll("Ã¶", "ö")
@@ -2399,6 +2399,22 @@ if (!d.features) d.features = { sruEnabled: false };
       .replaceAll("â€\u0098", "‘")
       .replaceAll("â€¢", "•")
       .replaceAll("Â ", " ");
+
+    // If the original bytes were already lost and replaced with U+FFFD ("�"),
+    // we can't recover generally. But we can fix a few very common Swedish patterns.
+    // Example: "F�rlagsinsatser" -> "Förlagsinsatser".
+    out = out
+      .replace(/F\uFFFDrl/g, "Förl")
+      .replace(/f\uFFFDrl/g, "förl")
+      .replace(/F\uFFFDretag/g, "Företag")
+      .replace(/f\uFFFDretag/g, "företag")
+      .replace(/F\uFFFDrsälj/g, "Försälj")
+      .replace(/f\uFFFDrsälj/g, "försälj")
+      .replace(/\bF\uFFFDrlags\b/g, "Förlags")
+      .replace(/\b(f)\uFFFDr\b/g, "$1ör")
+      .replace(/\bF\uFFFDr\b/g, "För");
+
+    return out;
   }
 
   function renderAccounts(){
@@ -2508,6 +2524,7 @@ if (!d.features) d.features = { sruEnabled: false };
         e.preventDefault();
         state.accounts = state.accounts || {};
         let changed = 0;
+        let remainingReplacement = 0;
         for (const no of Object.keys(state.accounts)){
           const a = state.accounts[no];
           if (!a) continue;
@@ -2517,14 +2534,23 @@ if (!d.features) d.features = { sruEnabled: false };
             a.name = next;
             changed++;
           }
+          if (String(a.name || "").includes("\uFFFD")) remainingReplacement++;
         }
         if (changed){
           save();
           renderAccounts();
           try { if (typeof renderLines === "function") renderLines(); } catch {}
-          showToast(`Fixade tecken i ${changed} konton.`, 3500);
+          if (remainingReplacement){
+            showToast(`Fixade tecken i ${changed} konton. Obs: ${remainingReplacement} konton innehåller fortfarande \"�\" och behöver skrivas om manuellt (kontonamn-info är redan förlorad).`, 6500);
+          } else {
+            showToast(`Fixade tecken i ${changed} konton.`, 3500);
+          }
         } else {
-          showToast("Inga teckenfel hittades.", 2500);
+          if (remainingReplacement){
+            showToast(`Hittade \"�\" i ${remainingReplacement} konton men kan inte auto-fixa. Skriv om kontonamnet manuellt genom att lägga till kontot igen.`, 6500);
+          } else {
+            showToast("Inga teckenfel hittades.", 2500);
+          }
         }
       });
     }

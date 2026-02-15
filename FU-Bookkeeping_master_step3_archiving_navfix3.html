@@ -284,7 +284,7 @@
             </div>
             <div class="field" style="flex:1; min-width:220px;">
               <label>Namn</label>
-              <input id="aName" placeholder="t.ex. Företagskonto" />
+              <input id="aName" placeholder="t.ex. Företagskonto" spellcheck="true" lang="sv" />
             </div>
             <div class="field" style="min-width:180px;">
               <label>Typ (för rapporter)</label>
@@ -308,6 +308,7 @@
               <input id="accountSearch" placeholder="Sök (konto eller namn)" />
               <button class="btn danger" id="btnResetDemo">Återställ demo-kontoplan</button>
               <button class="btn secondary" id="btnFixChars" title="Försöker rätta vanliga teckenkodningsfel (Ã¥→å osv).">Fixa ÅÄÖ</button>
+              <button class="btn secondary" id="btnExportAccountNameTemplate" title="Exporterar en CSV-mall (konto;namn;typ) som du kan rätta i Excel och sedan importera via Standardlista.">Exportera mall</button>
               <label class="btn secondary" style="display:inline-flex; align-items:center; gap:8px; cursor:pointer;" title="Välj en standardlista (CSV/JSON) för att auto-fixa konton som innehåller \"�\".">
                 Standardlista
                 <input id="stdAccountsFile" type="file" accept=".json,.csv,.txt" hidden />
@@ -2083,6 +2084,7 @@ if (!d.features) d.features = { sruEnabled: false };
   const btnAddAccount = document.getElementById("btnAddAccount");
   const btnResetDemo = document.getElementById("btnResetDemo");
   const btnFixChars = document.getElementById("btnFixChars");
+  const btnExportAccountNameTemplate = document.getElementById("btnExportAccountNameTemplate");
   const stdAccountsFile = document.getElementById("stdAccountsFile");
   // Reports (Rapportgenerator)
   const rptYearSelect = document.getElementById("rptYearSelect");
@@ -2389,6 +2391,25 @@ if (!d.features) d.features = { sruEnabled: false };
     return String(no || "").trim();
   }
 
+  function downloadTextFile(filename, text, mime){
+    const blob = new Blob([String(text || "")], { type: mime || "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename || "download.txt";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=> URL.revokeObjectURL(url), 5000);
+  }
+
+  function toCsvCell(v){
+    const s = String(v ?? "");
+    // use semicolon-separated CSV; escape quotes
+    if (/["\r\n;]/.test(s)) return '"' + s.replaceAll('"', '""') + '"';
+    return s;
+  }
+
   function fixMojibake(s){
     // Common UTF-8-as-Latin1 sequences
     let out = String(s ?? "")
@@ -2648,6 +2669,25 @@ if (!d.features) d.features = { sruEnabled: false };
     });
   }
 
+  let editingAccountNo = null;
+  function setAccountEditMode(no){
+    editingAccountNo = no ? String(no) : null;
+    if (btnAddAccount) btnAddAccount.textContent = editingAccountNo ? "Spara" : "Lägg till";
+    if (aNo) aNo.disabled = !!editingAccountNo;
+  }
+
+  function startAccountEdit(no){
+    const n = normalizeAccountNo(no);
+    if (!n) return;
+    const a = state.accounts && state.accounts[n];
+    if (!a) return;
+    if (aNo) aNo.value = n;
+    if (aName) aName.value = String(a.name || "");
+    if (aType) aType.value = a.type || guessTypeFromAccountNo(n);
+    setAccountEditMode(n);
+    try { aName && aName.focus(); } catch {}
+  }
+
   let accountsWired = false;
   function wireAccountEvents(){
     if (accountsWired) return;
@@ -2663,6 +2703,7 @@ if (!d.features) d.features = { sruEnabled: false };
 
         state.accounts = state.accounts || {};
         const type = (aType && aType.value) ? aType.value : guessTypeFromAccountNo(no);
+        const existed = !!state.accounts[no];
         state.accounts[no] = { name, type };
         save();
         renderAccounts();
@@ -2670,10 +2711,13 @@ if (!d.features) d.features = { sruEnabled: false };
         // Refresh voucher editor account selects if visible
         try { if (typeof renderLines === "function") renderLines(); } catch {}
 
+        setAccountEditMode(null);
         if (aNo) aNo.value = "";
         if (aName) aName.value = "";
         if (aType) aType.value = guessTypeFromAccountNo(no);
         if (aNo) aNo.focus();
+
+        showToast(existed ? "Konto uppdaterat." : "Konto tillagt.", 2500);
       });
     }
 
@@ -2812,6 +2856,24 @@ if (!d.features) d.features = { sruEnabled: false };
       });
     }
 
+    if (btnExportAccountNameTemplate){
+      btnExportAccountNameTemplate.addEventListener("click", (e)=>{
+        e.preventDefault();
+        state.accounts = state.accounts || {};
+        const rows = Object.keys(state.accounts)
+          .map(no => ({ no: String(no), a: state.accounts[no] || {} }))
+          .sort((x,y)=> x.no.localeCompare(y.no, "sv"));
+
+        let csv = "konto;namn;typ\n";
+        for (const r of rows){
+          csv += [toCsvCell(r.no), toCsvCell(r.a.name || ""), toCsvCell(r.a.type || "")].join(";") + "\n";
+        }
+        const fname = `kontoplan-mall-${new Date().toISOString().slice(0,10)}.csv`;
+        downloadTextFile(fname, csv, "text/csv;charset=utf-8");
+        showToast("Mall exporterad. Rätta namn i CSV och importera via Standardlista för att reparera \"�\".", 8000);
+      });
+    }
+
     if (stdAccountsFile){
       stdAccountsFile.addEventListener("change", async ()=>{
         const f = stdAccountsFile.files && stdAccountsFile.files[0];
@@ -2849,21 +2911,39 @@ if (!d.features) d.features = { sruEnabled: false };
     if (accountsTbody){
       accountsTbody.addEventListener("click", async (e)=>{
         const b = e.target && e.target.closest ? e.target.closest("button[data-act]") : null;
-        if (!b) return;
-        const act = b.dataset.act;
-        const no = b.dataset.no;
-        if (act !== "del" || !no) return;
+        if (b){
+          const act = b.dataset.act;
+          const no = b.dataset.no;
+          if (act !== "del" || !no) return;
 
-        // Warn if used in vouchers
-        const used = (state.vouchers || []).some(v => (v.lines || []).some(l => String(l.account) === String(no)));
-        const msg = used
-          ? `Kontot ${no} används i verifikationer. Ta bort ändå? (Det kommer visas som "okänt konto" i historik.)`
-          : `Ta bort konto ${no}?`;
-        if (!(await confirmAsync(msg, { okText:"Ta bort", cancelText:"Avbryt", okKind:"danger" }))) return;
-        delete state.accounts[no];
-        save();
-        renderAccounts();
-        try { if (typeof renderLines === "function") renderLines(); } catch {}
+          // Warn if used in vouchers
+          const used = (state.vouchers || []).some(v => (v.lines || []).some(l => String(l.account) === String(no)));
+          const msg = used
+            ? `Kontot ${no} används i verifikationer. Ta bort ändå? (Det kommer visas som "okänt konto" i historik.)`
+            : `Ta bort konto ${no}?`;
+          if (!(await confirmAsync(msg, { okText:"Ta bort", cancelText:"Avbryt", okKind:"danger" }))) return;
+          delete state.accounts[no];
+          save();
+          renderAccounts();
+          try { if (typeof renderLines === "function") renderLines(); } catch {}
+          if (editingAccountNo === String(no)){
+            setAccountEditMode(null);
+            if (aNo) aNo.value = "";
+            if (aName) aName.value = "";
+            if (aType) aType.value = guessTypeFromAccountNo(no);
+          }
+          return;
+        }
+
+        // Click row to edit
+        const tr = e.target && e.target.closest ? e.target.closest("tr") : null;
+        if (!tr) return;
+        const firstCell = tr.querySelector("td");
+        const no = firstCell ? firstCell.textContent : "";
+        const n = normalizeAccountNo(no);
+        if (!n) return;
+        if (!state.accounts || !state.accounts[n]) return;
+        startAccountEdit(n);
       });
     }
   }

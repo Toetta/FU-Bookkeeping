@@ -963,8 +963,21 @@
   const bootPill = document.getElementById("bootPill");
   const setBoot = (text) => { if (bootPill) bootPill.textContent = text; };
   setBoot("JS: OK");
-  window.addEventListener("error", () => setBoot("JS: fel (konsol)"));
-  window.addEventListener("unhandledrejection", () => setBoot("JS: fel (konsol)"));
+  window.addEventListener("error", (ev) => {
+    try {
+      const msg = ev && ev.message ? String(ev.message) : "(okänt fel)";
+      setBoot(`JS: fel · ${msg}`.slice(0, 60));
+    } catch { setBoot("JS: fel (konsol)"); }
+    try { console.error("Global error", ev && ev.error ? ev.error : ev); } catch {}
+  });
+  window.addEventListener("unhandledrejection", (ev) => {
+    try {
+      const reason = ev && ev.reason ? ev.reason : "(okänd promise-rejection)";
+      const msg = (reason && (reason.message || reason.name)) ? String(reason.message || reason.name) : String(reason);
+      setBoot(`JS: fel · ${msg}`.slice(0, 60));
+    } catch { setBoot("JS: fel (konsol)"); }
+    try { console.error("Unhandled rejection", ev && ev.reason ? ev.reason : ev); } catch {}
+  });
 
 
   // --- Utilities ---
@@ -4011,12 +4024,12 @@ if (rptYearSelect){
   }
 
 // --- Init ---
-fillYearSelectors();
+try { fillYearSelectors(); } catch (e){ console.error(e); }
 
-if (yearSelect) yearSelect.value = state.activeYearId;
-if (vDate) vDate.value = todayISO();
+try { if (yearSelect) yearSelect.value = state.activeYearId; } catch (e){ console.error(e); }
+try { if (vDate) vDate.value = todayISO(); } catch (e){ console.error(e); }
 
-newVoucher();
+try { if (typeof newVoucher === "function") newVoucher(); } catch (e){ console.error(e); }
 
 // Invoices init
 state.customers = state.customers || {};
@@ -4024,12 +4037,12 @@ state.suppliers = state.suppliers || {};
 state.invoices = state.invoices || [];
 state.features = state.features || { sruEnabled: false };
 
-if (invYearSelect) invYearSelect.value = state.activeYearId;
-if (invDate) invDate.value = todayISO();
-if (invDue) invDue.value = addDays(todayISO(), (state.company.payDays||30));
+try { if (invYearSelect) invYearSelect.value = state.activeYearId; } catch (e){ console.error(e); }
+try { if (invDate) invDate.value = todayISO(); } catch (e){ console.error(e); }
+try { if (invDue) invDue.value = addDays(todayISO(), (state.company.payDays||30)); } catch (e){ console.error(e); }
 
-wireInvoiceEvents();
-newInvoice();
+try { if (typeof wireInvoiceEvents === "function") wireInvoiceEvents(); } catch (e){ console.error(e); }
+try { if (typeof newInvoice === "function") newInvoice(); } catch (e){ console.error(e); }
 try { if (typeof renderAll === "function") renderAll(); } catch (e){ console.error(e); }
 
 // --- Import/Export wiring ---

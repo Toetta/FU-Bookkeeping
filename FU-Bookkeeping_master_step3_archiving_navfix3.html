@@ -307,7 +307,6 @@
             <div class="row">
               <input id="accountSearch" placeholder="Sök (konto eller namn)" />
               <button class="btn danger" id="btnResetDemo">Återställ demo-kontoplan</button>
-              <button class="btn secondary" id="btnFixChars" title="Försöker rätta vanliga teckenkodningsfel (Ã¥→å osv).">Fixa ÅÄÖ</button>
               <button class="btn secondary" id="btnExportAccountNameTemplate" title="Exporterar en CSV-mall (konto;namn;typ) som du kan rätta i Excel och sedan importera via Standardlista.">Exportera mall</button>
               <label class="btn secondary" style="display:inline-flex; align-items:center; gap:8px; cursor:pointer;" title="Välj en standardlista (CSV/JSON) för att auto-fixa konton som innehåller \"�\".">
                 Standardlista
@@ -2083,7 +2082,6 @@ if (!d.features) d.features = { sruEnabled: false };
   const accountSearch = document.getElementById("accountSearch");
   const btnAddAccount = document.getElementById("btnAddAccount");
   const btnResetDemo = document.getElementById("btnResetDemo");
-  const btnFixChars = document.getElementById("btnFixChars");
   const btnExportAccountNameTemplate = document.getElementById("btnExportAccountNameTemplate");
   const stdAccountsFile = document.getElementById("stdAccountsFile");
   // Reports (Rapportgenerator)
@@ -2104,21 +2102,8 @@ if (!d.features) d.features = { sruEnabled: false };
   let lastReportHtml = "";
   let lastReportTitle = "";
 
+  // SIE export/import
   const sieYearSelect = document.getElementById("sieYearSelect");
-  const btnExportSie4 = document.getElementById("btnExportSie4");
-  const btnExportJson = document.getElementById("btnExportJson");
-  const jsonImport = document.getElementById("jsonImport");
-  const btnWipe = document.getElementById("btnWipe");
-  // Arkivering
-  const archiveYearSelect = document.getElementById("archiveYearSelect");
-  const btnMakeArchive = document.getElementById("btnMakeArchive");
-  const archiveImportJson = document.getElementById("archiveImportJson");
-  const archiveImportSha = document.getElementById("archiveImportSha");
-  const btnVerifyArchive = document.getElementById("btnVerifyArchive");
-  const archiveVerifyResult = document.getElementById("archiveVerifyResult");
-
-
-  // SIE import
   const sieImportFile = document.getElementById("sieImportFile");
   const btnImportSie = document.getElementById("btnImportSie");
   const sieImportEncoding = document.getElementById("sieImportEncoding");
@@ -2134,6 +2119,7 @@ if (!d.features) d.features = { sruEnabled: false };
   const fsRequireFile = document.getElementById("fsRequireFile");
   const fsStatus = document.getElementById("fsStatus");
 
+  // Settings
   const sCompany = document.getElementById("sCompany");
   const sOrgnr = document.getElementById("sOrgnr");
   const sCurrency = document.getElementById("sCurrency");
@@ -2156,64 +2142,26 @@ if (!d.features) d.features = { sruEnabled: false };
   const sInvNote = document.getElementById("sInvNote");
   const sInvFooter = document.getElementById("sInvFooter");
   const sSruEnabled = document.getElementById("sSruEnabled");
-  const sLogo = document.getElementById("sLogo");
   const btnSaveSettings = document.getElementById("btnSaveSettings");
+  const sLogo = document.getElementById("sLogo");
   const btnRemoveLogo = document.getElementById("btnRemoveLogo");
   const logoPreview = document.getElementById("logoPreview");
 
   function renderLogoPreview(){
     if (!logoPreview) return;
-    const url = state?.company?.logoDataUrl;
+    const url = state && state.company && state.company.logoDataUrl ? String(state.company.logoDataUrl) : "";
     if (!url){
       logoPreview.textContent = "Ingen logotyp vald.";
       return;
     }
-    logoPreview.innerHTML = `<img alt="Logotyp" src="${url}" style="max-height:48px; max-width:180px; vertical-align:middle;" />`;
-  }
-
-  function renderSettings(){
-    state.company = state.company || defaultData().company;
-    state.features = state.features || { sruEnabled: false };
-
-    if (sCompany) sCompany.value = state.company.name || "";
-    if (sOrgnr) sOrgnr.value = state.company.orgnr || "";
-    if (sCurrency) sCurrency.value = state.company.currency || "SEK";
-    if (sSign) sSign.value = state.company.defaultSign || "";
-
-    if (sAddr) sAddr.value = state.company.addr || "";
-    if (sZip) sZip.value = state.company.zip || "";
-    if (sCity) sCity.value = state.company.city || "";
-    if (sCountry) sCountry.value = state.company.country || "";
-
-    if (sEmail) sEmail.value = state.company.email || "";
-    if (sPhone) sPhone.value = state.company.phone || "";
-    if (sWeb) sWeb.value = state.company.web || "";
-    if (sVat) sVat.value = state.company.vat || "";
-    if (sPayDays) sPayDays.value = String(state.company.payDays ?? 30);
-
-    if (sBg) sBg.value = state.company.bankgiro || "";
-    if (sPg) sPg.value = state.company.plusgiro || "";
-    if (sSwish) sSwish.value = state.company.swishPhone || "";
-    if (sBankAccount) sBankAccount.value = state.company.bankAccountNo || "";
-    if (sIban) sIban.value = state.company.iban || "";
-    if (sSwift) sSwift.value = state.company.swift || "";
-
-    if (sInvNote) sInvNote.value = state.company.invoiceNote || "";
-    if (sInvFooter) sInvFooter.value = state.company.invoiceFooter || "";
-
-    if (sSruEnabled) sSruEnabled.checked = !!state.features.sruEnabled;
-
-    if (companyNameEl) companyNameEl.textContent = state.company.name || "FU-BOOKKEEPING";
-    renderLogoPreview();
-    try { updateFsUI(); } catch (e){ console.error(e); }
+    logoPreview.innerHTML = `<img src="${escapeAttr(url)}" alt="Logotyp" style="max-height:64px; max-width:240px; display:block;" />`;
   }
 
   function saveSettings(){
     state.company = state.company || defaultData().company;
     state.features = state.features || { sruEnabled: false };
 
-    const payDaysRaw = (sPayDays?.value || "").trim();
-    const payDays = parseInt(payDaysRaw, 10);
+    const payDays = parseInt(String(sPayDays?.value || "").trim(), 10);
 
     state.company.name = (sCompany?.value || "").trim();
     state.company.orgnr = (sOrgnr?.value || "").trim();
@@ -2408,41 +2356,6 @@ if (!d.features) d.features = { sruEnabled: false };
     // use semicolon-separated CSV; escape quotes
     if (/["\r\n;]/.test(s)) return '"' + s.replaceAll('"', '""') + '"';
     return s;
-  }
-
-  function fixMojibake(s){
-    // Common UTF-8-as-Latin1 sequences
-    let out = String(s ?? "")
-      .replaceAll("Ã¥", "å")
-      .replaceAll("Ã¤", "ä")
-      .replaceAll("Ã¶", "ö")
-      .replaceAll("Ã…", "Å")
-      .replaceAll("Ã„", "Ä")
-      .replaceAll("Ã–", "Ö")
-      .replaceAll("â€“", "–")
-      .replaceAll("â€”", "—")
-      .replaceAll("â€", "“")
-      .replaceAll("â€\u009d", "”")
-      .replaceAll("â€\u0099", "’")
-      .replaceAll("â€\u0098", "‘")
-      .replaceAll("â€¢", "•")
-      .replaceAll("Â ", " ");
-
-    // If the original bytes were already lost and replaced with U+FFFD ("�"),
-    // we can't recover generally. But we can fix a few very common Swedish patterns.
-    // Example: "F�rlagsinsatser" -> "Förlagsinsatser".
-    out = out
-      .replace(/F\uFFFDrl/g, "Förl")
-      .replace(/f\uFFFDrl/g, "förl")
-      .replace(/F\uFFFDretag/g, "Företag")
-      .replace(/f\uFFFDretag/g, "företag")
-      .replace(/F\uFFFDrsälj/g, "Försälj")
-      .replace(/f\uFFFDrsälj/g, "försälj")
-      .replace(/\bF\uFFFDrlags\b/g, "Förlags")
-      .replace(/\b(f)\uFFFDr\b/g, "$1ör")
-      .replace(/\bF\uFFFDr\b/g, "För");
-
-    return out;
   }
 
   const STD_ACCOUNTS_KEY = "FU_STD_ACCOUNTS_MAP_V1";
@@ -2735,124 +2648,6 @@ if (!d.features) d.features = { sruEnabled: false };
         renderAccounts();
         try { if (typeof renderLines === "function") renderLines(); } catch {}
         showToast("Demo-kontoplan återställd.", 3500);
-      });
-    }
-
-    if (btnFixChars){
-      btnFixChars.addEventListener("click", async (e)=>{
-        e.preventDefault();
-        state.accounts = state.accounts || {};
-        let changed = 0;
-        let remainingReplacement = 0;
-        let standardized = 0;
-        let standardizedStd = 0;
-        for (const no of Object.keys(state.accounts)){
-          const a = state.accounts[no];
-          if (!a) continue;
-          const prev = String(a.name || "");
-          const next = fixMojibake(prev);
-          if (next !== prev){
-            a.name = next;
-            changed++;
-          }
-          if (String(a.name || "").includes("\uFFFD")) remainingReplacement++;
-        }
-
-        // If some names still contain U+FFFD and we have a known standardized name
-        // (from our built-in minimal kontoplan), use that as a safe auto-correct.
-        if (remainingReplacement){
-          const std = demoAccounts();
-          for (const no of Object.keys(state.accounts)){
-            const a = state.accounts[no];
-            if (!a || !String(a.name||"").includes("\uFFFD")) continue;
-            if (std[no] && std[no].name){
-              a.name = std[no].name;
-              if (!a.type && std[no].type) a.type = std[no].type;
-              standardized++;
-            }
-          }
-          if (standardized){
-            // re-count after standardization
-            remainingReplacement = 0;
-            for (const no of Object.keys(state.accounts||{})){
-              const a = state.accounts[no];
-              if (a && String(a.name||"").includes("\uFFFD")) remainingReplacement++;
-            }
-          }
-        }
-
-        // If U+FFFD still remains, try user-provided standard list (CSV/JSON)
-        if (remainingReplacement){
-          const stdMap = loadStdAccountsMap();
-          if (stdMap){
-            for (const no of Object.keys(state.accounts)){
-              const a = state.accounts[no];
-              if (!a || !String(a.name||"").includes("\uFFFD")) continue;
-              const stdName = stdMap[String(no)] || stdMap[String(no).trim()];
-              if (stdName){
-                a.name = String(stdName);
-                if (!a.type) a.type = guessTypeFromAccountNo(no);
-                standardizedStd++;
-              }
-            }
-            if (standardizedStd){
-              remainingReplacement = 0;
-              for (const no of Object.keys(state.accounts||{})){
-                const a = state.accounts[no];
-                if (a && String(a.name||"").includes("\uFFFD")) remainingReplacement++;
-              }
-            }
-          }
-        }
-
-        // If U+FFFD remains, the real fix is to decode the ORIGINAL bytes correctly.
-        // We can do that if user has selected the SIE file (Import/Export → Välj SIE-fil).
-        if (remainingReplacement && sieImportFile && sieImportFile.files && sieImportFile.files[0]){
-          try {
-            const res = await repairAccountNamesFromSieFile(
-              sieImportFile.files[0],
-              (sieImportEncoding && sieImportEncoding.value) || "utf-8"
-            );
-            // Re-count after SIE repair
-            remainingReplacement = 0;
-            for (const no of Object.keys(state.accounts||{})){
-              const a = state.accounts[no];
-              if (a && String(a.name||"").includes("\uFFFD")) remainingReplacement++;
-            }
-
-            save();
-            renderAccounts();
-            try { if (typeof renderLines === "function") renderLines(); } catch {}
-
-            const msg = `Uppdaterade ${res.updated} kontonamn${res.added?` (+${res.added} nya konton)`:""} från SIE (${res.encoding}).`;
-            if (remainingReplacement){
-              showToast(msg + ` Obs: ${remainingReplacement} konton innehåller fortfarande "�" (kan kräva annan encoding eller manuell ändring).`, 8000);
-            } else {
-              showToast(msg, 4500);
-            }
-            return;
-          } catch (err){
-            console.error(err);
-            // fall through to normal save + message
-          }
-        }
-
-        if (changed){
-          save();
-          renderAccounts();
-          try { if (typeof renderLines === "function") renderLines(); } catch {}
-          if (remainingReplacement){
-            showToast(`Fixade tecken i ${changed} konton${standardized?` (+${standardized} standardiserade)`:""}${standardizedStd?` (+${standardizedStd} från standardlista)`:""}. För att reparera "�": gå till Import/Export, välj original SIE-fil, och klicka "Fixa ÅÄÖ" igen (appen kan då läsa #KONTO med rätt encoding).`, 8000);
-          } else {
-            showToast(`Fixade tecken i ${changed} konton${standardized?` (+${standardized} standardiserade)`:""}${standardizedStd?` (+${standardizedStd} från standardlista)`:""}.`, 3500);
-          }
-        } else {
-          if (remainingReplacement){
-            showToast(`Hittade "�" i ${remainingReplacement} konton. För att fixa automatiskt: (1) välj original SIE-fil under Import/Export, eller (2) ladda en Standardlista i Kontoplan och klicka "Fixa ÅÄÖ" igen.`, 8000);
-          } else {
-            showToast("Inga teckenfel hittades.", 2500);
-          }
-        }
       });
     }
 

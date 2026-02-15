@@ -1,6 +1,15 @@
 <!doctype html>
 <html lang="sv">
 <head>
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-LGJK9XKDZB"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-LGJK9XKDZB');
+  </script>
+
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>FU-BOOKKEEPING (BAS) – offline i webbläsaren</title>
@@ -43,6 +52,8 @@
     .row{ display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
     h1{ margin:0; font-size:18px; font-weight:700; }
     .pill{ font-size:12px; color:var(--muted); border:1px solid var(--line); padding:6px 10px; border-radius:999px; }
+    .pill.ok{ border:3px solid rgba(34,197,94,.7); background:rgba(34,197,94,.08); color:var(--text); }
+    .pill.bad{ border:3px solid rgba(239,68,68,.7); background:rgba(239,68,68,.08); color:var(--text); }
     /* Header year dropdown should look like a pill */
     select.pill{
       appearance:none;
@@ -120,9 +131,12 @@
   <div class="wrap">
     <div class="row">
       <h1 id="companyName">FU-BOOKKEEPING</h1>
-      <select class="pill" id="yearPillSelect" aria-label="Aktivt räkenskapsår"></select>
+      <div class="field" style="gap:4px; min-width: 180px;">
+        <label for="yearPillSelect">Räkenskapsår</label>
+        <select class="pill" id="yearPillSelect" aria-label="Räkenskapsår"></select>
+      </div>
       <span class="pill" id="bootPill">JS: laddar…</span>
-      <span class="pill">Lagring: localStorage (offline)</span>
+      <span class="pill" id="storagePill">Lagring: localStorage (offline)</span>
     </div>
   </div>
 </header>
@@ -222,8 +236,7 @@
           <div class="row" style="justify-content:space-between; margin-bottom:10px;">
             <h2>Verifikationer i året</h2>
             <div class="row">
-              <select id="yearSelect"></select>
-              <button class="btn secondary" id="btnRefresh">Uppdatera</button>
+              <span class="pill" id="voucherYearPill" aria-label="Visat räkenskapsår"></span>
             </div>
           </div>
 
@@ -917,11 +930,39 @@
   const APP_VERSION = "1.1"; // bump when adding new data fields
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE";
 
+  let localStorageOk = true;
+
+  const setPillState = (el, state) => {
+    if (!el) return;
+    el.classList.remove("ok", "bad");
+    if (state === "ok" || state === "bad") el.classList.add(state);
+  };
+
   const bootPill = document.getElementById("bootPill");
-  const setBoot = (text) => { if (bootPill) bootPill.textContent = text; };
-  setBoot("JS: OK");
-  window.addEventListener("error", () => setBoot("JS: fel (konsol)"));
-  window.addEventListener("unhandledrejection", () => setBoot("JS: fel (konsol)"));
+  const setBoot = (text) => {
+    if (!bootPill) return;
+    bootPill.textContent = text;
+    const t = String(text || "").trim().toUpperCase();
+    setPillState(bootPill, t.startsWith("JS: OK") ? "ok" : "bad");
+  };
+  setBoot("JS: init…");
+  window.addEventListener("error", (ev) => {
+    try {
+      const msg = (ev && (ev.message || ev.error?.message)) ? (ev.message || ev.error?.message) : "fel (konsol)";
+      setBoot(("JS: " + String(msg)).slice(0, 120));
+    } catch (_){
+      setBoot("JS: fel (konsol)");
+    }
+  });
+  window.addEventListener("unhandledrejection", (ev) => {
+    try {
+      const r = ev ? ev.reason : null;
+      const msg = (r && (r.message || r.name)) ? (r.message || r.name) : String(r ?? "fel (konsol)");
+      setBoot(("JS: " + String(msg)).slice(0, 120));
+    } catch (_){
+      setBoot("JS: fel (konsol)");
+    }
+  });
 
 
   // --- Utilities ---
@@ -935,6 +976,14 @@
     if (t === "") return 0;
     const v = Number(t);
     return Number.isFinite(v) ? v : 0;
+  };
+  const escapeHtml = (s) => {
+    return String(s ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
   };
   const ymd = (d) => d.replaceAll("-", "");
   const todayISO = () => new Date().toISOString().slice(0,10);
@@ -1058,7 +1107,14 @@
   }
 
   function load(){
-    const raw = localStorage.getItem(STORAGE_KEY);
+    let raw = null;
+    try {
+      raw = localStorage.getItem(STORAGE_KEY);
+    } catch (e){
+      localStorageOk = false;
+      setBoot("JS: localStorage blockerad");
+      return defaultData();
+    }
     if (!raw) return defaultData();
     try {
       const d = JSON.parse(raw);
@@ -1089,7 +1145,14 @@ if (!d.features) d.features = { sruEnabled: false };
     }
   }
   function save(){
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      localStorageOk = true;
+    } catch (e){
+      localStorageOk = false;
+      // Still keep the UI responsive even if persistence is blocked.
+      setBoot("JS: kunde inte spara (localStorage)");
+    }
     renderAll();
     scheduleFileAutosave();
   }
@@ -1111,7 +1174,7 @@ if (!d.features) d.features = { sruEnabled: false };
   function setEditingLocked(locked){
     // Lock core editing actions if user requires a file but none is connected.
     const ids = [
-      "btnNewVoucher","btnAddLine","btnClearVoucher","btnSaveVoucher",
+      "btnAddLine","btnClearVoucher","btnSaveVoucher",
       "btnAddAccount",
       "btnAddYear","btnCarry",
       "btnWipe"
@@ -1134,6 +1197,26 @@ if (!d.features) d.features = { sruEnabled: false };
   function updateFsUI(){
     if (!fsStatus) return;
 
+    // Header storage indicator (reacts to file connection)
+    if (storagePill){
+      const supported = fsApiSupported();
+      const connected = !!fsHandle;
+      const requireFile = !!(state.fileSync && state.fileSync.requireFile);
+
+      if (supported && connected){
+        const name = fsHandle && fsHandle.name ? fsHandle.name : "datafil";
+        storagePill.textContent = `Lagring: datafil (${name})`;
+        setPillState(storagePill, fsLastError ? "bad" : "ok");
+      } else {
+        storagePill.textContent = localStorageOk ? "Lagring: localStorage (offline)" : "Lagring: localStorage blockerad";
+        // Offline storage is considered an error state in this app.
+        // Green should mean "datafil ansluten och OK".
+        const bad = true;
+        void requireFile; // keep variable (used for readability)
+        setPillState(storagePill, bad ? "bad" : "ok");
+      }
+    }
+
     // checkboxes
     if (fsAutosave){
       fsAutosave.checked = !!(state.fileSync && state.fileSync.autosave);
@@ -1152,8 +1235,19 @@ if (!d.features) d.features = { sruEnabled: false };
     const requireFile = !!(state.fileSync && state.fileSync.requireFile);
 
     if (!fsApiSupported()){
-      setFsStatus("bad", requireFile ? "Kräver HTTPS/localhost + Chrome/Edge (fil krävs)" : "Kräver HTTPS/localhost + Chrome/Edge");
-      setEditingLocked(requireFile);
+      // File System Access API is not available (e.g. Firefox/Safari, or insecure context).
+      // Never lock the whole app in that case; instead, auto-disable the "require file" guard.
+      if (requireFile){
+        try {
+          state.fileSync = state.fileSync || { autosave: true, requireFile: false };
+          state.fileSync.requireFile = false;
+          if (fsRequireFile) fsRequireFile.checked = false;
+          // Persist without triggering a full render loop.
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        } catch (_) {}
+      }
+      setFsStatus("bad", "Fil-synk kräver HTTPS/localhost + Chrome/Edge (krav avstängt här)");
+      setEditingLocked(false);
       return;
     }
 
@@ -1226,7 +1320,7 @@ if (!d.features) d.features = { sruEnabled: false };
 if (!state.features) state.features = { sruEnabled: false };
     if (typeof state.features.sruEnabled !== "boolean") state.features.sruEnabled = false;
     if (!state.fileSync) state.fileSync = { autosave: true, requireFile: false };
-    if (typeof state.fileSync.requireFile !== "boolean") state.fileSync.requireFile = true;
+    if (typeof state.fileSync.requireFile !== "boolean") state.fileSync.requireFile = false;
 
     save();
   }
@@ -1346,8 +1440,10 @@ if (!state.features) state.features = { sruEnabled: false };
 
   const companyNameEl = document.getElementById("companyName");
   const yearPillSelect = document.getElementById("yearPillSelect");
+  const storagePill = document.getElementById("storagePill");
 
   const yearSelect = document.getElementById("yearSelect");
+  const voucherYearPill = document.getElementById("voucherYearPill");
   const voucherList = document.getElementById("voucherList");
 
   const vDate = document.getElementById("vDate");
@@ -1359,11 +1455,19 @@ if (!state.features) state.features = { sruEnabled: false };
   const balanceBadge = document.getElementById("balanceBadge");
   const btnSaveVoucher = document.getElementById("btnSaveVoucher");
 
+  const btnNewVoucher = document.getElementById("btnNewVoucher");
+  const btnAddLine = document.getElementById("btnAddLine");
+  const btnClearVoucher = document.getElementById("btnClearVoucher");
+  const btnRefresh = document.getElementById("btnRefresh");
+
   const aNo = document.getElementById("aNo");
   const aName = document.getElementById("aName");
   const aType = document.getElementById("aType");
   const accountsTbody = document.getElementById("accountsTbody");
   const accountSearch = document.getElementById("accountSearch");
+  const btnAddAccount = document.getElementById("btnAddAccount");
+  const btnResetDemo = document.getElementById("btnResetDemo");
+  const btnFixChars = document.getElementById("btnFixChars");
   // Reports (Rapportgenerator)
   const rptYearSelect = document.getElementById("rptYearSelect");
   const rptFrom = document.getElementById("rptFrom");
@@ -1381,6 +1485,7 @@ if (!state.features) state.features = { sruEnabled: false };
   // Last generated report (HTML fragment)
   let lastReportHtml = "";
   let lastReportTitle = "";
+  let lastReportData = null;
 
   const sieYearSelect = document.getElementById("sieYearSelect");
 
@@ -1424,9 +1529,19 @@ if (!state.features) state.features = { sruEnabled: false };
   const btnRemoveLogo = document.getElementById("btnRemoveLogo");
   const logoPreview = document.getElementById("logoPreview");
 
+  const btnSaveSettings = document.getElementById("btnSaveSettings");
+  const btnAddYear = document.getElementById("btnAddYear");
+  const btnCarry = document.getElementById("btnCarry");
+
   const fyStart = document.getElementById("fyStart");
   const fyEnd = document.getElementById("fyEnd");
   const yearsTbody = document.getElementById("yearsTbody");
+
+  // Export/backup
+  const btnExportJson = document.getElementById("btnExportJson");
+  const jsonImport = document.getElementById("jsonImport");
+  const btnWipe = document.getElementById("btnWipe");
+  const btnExportSie4 = document.getElementById("btnExportSie4");
 
   // SRU tab
   const sruLockedBox = document.getElementById("sruLockedBox");
@@ -1455,6 +1570,11 @@ if (!state.features) state.features = { sruEnabled: false };
     if (t === "settings") renderSettings();
     if (t === "sru") renderSru();
     if (t === "accounts") renderAccounts();
+  }
+
+  function activateTab(tabName){
+    const btn = tabs.find(b => (b && b.dataset && b.dataset.tab === tabName));
+    if (btn) activateTabByButton(btn);
   }
 
   // Direct handler
@@ -1513,6 +1633,930 @@ if (!state.features) state.features = { sruEnabled: false };
     if (["4","5","6","7","8"].includes(first)) return "expense";
     return "other";
   }
+
+  // --- Download helper ---
+  function downloadText(filename, text, mime){
+    const blob = new Blob([text], { type: mime || "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename || "download.txt";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=> URL.revokeObjectURL(url), 1500);
+  }
+
+  // --- Year selectors ---
+  function fiscalYearLabelFromPeriod(startIso, endIso){
+    if (!isoIsValid(startIso) && !isoIsValid(endIso)) return "";
+    const sy = isoIsValid(startIso) ? String(startIso).slice(0,4) : "";
+    const ey = isoIsValid(endIso) ? String(endIso).slice(0,4) : "";
+    if (sy && !/^\d{4}$/.test(sy)) return "";
+    if (ey && !/^\d{4}$/.test(ey)) return "";
+    if (sy && ey && sy !== ey) return `${sy}/${ey}`;
+    return sy || ey || "";
+  }
+
+  function voucherYearIds(){
+    const s = new Set();
+    (state.vouchers || []).forEach(v => {
+      if (v && v.yearId != null) s.add(String(v.yearId));
+    });
+    return s;
+  }
+
+  function normalizeFiscalYears(){
+    state.fiscalYears = Array.isArray(state.fiscalYears) ? state.fiscalYears : [];
+
+    // Convert SIE #RAR ids like "0"/"-1" into readable IDs derived from the period.
+    const out = [];
+    const used = new Set();
+
+    for (const y of state.fiscalYears){
+      if (!y || typeof y !== "object") continue;
+      const start = String(y.start || "");
+      const end = String(y.end || "");
+      let id = String(y.id || "").trim();
+
+      const inferred = fiscalYearLabelFromPeriod(start, end);
+      const isSmallNumericId = /^-?\d+$/.test(id) && Math.abs(Number(id)) < 100;
+      if ((id === "" || isSmallNumericId) && inferred) id = inferred;
+
+      // Guard against empty/invalid ids
+      if (!id) continue;
+
+      // De-duplicate exact same year entries
+      const exactKey = `${id}|${start}|${end}`;
+      if (used.has(exactKey)) continue;
+
+      // If id collides with a different period, disambiguate
+      if (out.some(z => z.id === id && (z.start !== start || z.end !== end))){
+        const suffix = isoIsValid(start) ? start.replaceAll("-", "") : "";
+        id = suffix ? `${id}_${suffix}` : `${id}_2`;
+      }
+
+      used.add(`${id}|${start}|${end}`);
+      out.push({ id, start, end });
+    }
+
+    state.fiscalYears = out;
+  }
+
+  function normalizeActiveYear(){
+    normalizeFiscalYears();
+    state.fiscalYears = Array.isArray(state.fiscalYears) ? state.fiscalYears : [];
+    if (!state.fiscalYears.length){
+      state.fiscalYears = defaultData().fiscalYears.slice();
+    }
+    const ids = new Set(state.fiscalYears.map(y=>y.id));
+    if (!state.activeYearId || !ids.has(state.activeYearId)){
+      // pick last (usually current year)
+      const sorted = state.fiscalYears.slice().sort((a,b)=>a.id.localeCompare(b.id,"sv"));
+      state.activeYearId = sorted[sorted.length-1]?.id || sorted[0]?.id || String(new Date().getFullYear());
+    }
+  }
+
+  function fillSelectWithYears(selectEl, opts){
+    if (!selectEl) return;
+    const prev = selectEl.value;
+    let ys = state.fiscalYears.slice().sort((a,b)=>a.id.localeCompare(b.id,"sv"));
+    if (opts && opts.onlyActiveYear){
+      const active = String(state.activeYearId || "");
+      const only = ys.filter(y => String(y.id) === active);
+      if (only.length) ys = only;
+    }
+    if (opts && opts.onlyWithVouchers){
+      const vset = voucherYearIds();
+      const filtered = ys.filter(y => vset.has(String(y.id)));
+      // If there are no vouchers yet, keep full list to avoid empty selectors.
+      if (filtered.length) ys = filtered;
+    }
+    selectEl.innerHTML = "";
+    ys.forEach(y=>{
+      const opt = document.createElement("option");
+      opt.value = y.id;
+      opt.textContent = (opts && opts.verbose)
+        ? `${y.id} (${y.start} – ${y.end})`
+        : y.id;
+      selectEl.appendChild(opt);
+    });
+    const wanted = ys.find(y=>y.id===prev)?.id || state.activeYearId || ys[0]?.id || "";
+    selectEl.value = wanted;
+
+    if (opts && Object.prototype.hasOwnProperty.call(opts, "setDisabled")){
+      selectEl.disabled = !!opts.setDisabled;
+    }
+  }
+
+  function fillYearSelectors(){
+    normalizeActiveYear();
+    // Only the header dropdown is used to change year.
+    // All other year selectors follow the active year and are locked.
+    fillSelectWithYears(yearPillSelect, { onlyWithVouchers: true, setDisabled: false });
+    fillSelectWithYears(invYearSelect, { onlyActiveYear: true, setDisabled: true });
+    fillSelectWithYears(rptYearSelect, { onlyActiveYear: true, setDisabled: true });
+    fillSelectWithYears(sieYearSelect, { onlyActiveYear: true, setDisabled: true });
+    fillSelectWithYears(document.getElementById("sruYearSelect"), { onlyActiveYear: true, setDisabled: true });
+    fillSelectWithYears(carryFrom);
+    fillSelectWithYears(carryTo);
+  }
+
+  function setActiveYear(yearId){
+    if (!yearId) return;
+    if (state.activeYearId === yearId) return;
+    state.activeYearId = yearId;
+    try { save(); } catch (_){ renderAll(); }
+  }
+
+  // --- Vouchers list ---
+  function renderVoucherList(){
+    if (!voucherList) return;
+    const yearId = state.activeYearId;
+    if (voucherYearPill) voucherYearPill.textContent = String(yearId || "");
+    const vs = (state.vouchers||[])
+      .filter(v => v.yearId === yearId)
+      .slice()
+      .sort((a,b)=> (a.date+a.series+a.no).localeCompare(b.date+b.series+b.no,"sv"));
+
+    voucherList.innerHTML = "";
+    if (!vs.length){
+      voucherList.innerHTML = `<div class="muted small">Inga verifikationer i detta år ännu.</div>`;
+      return;
+    }
+
+    vs.forEach(v=>{
+      const div = document.createElement("div");
+      div.className = "item";
+      const ver = `${v.series||""}${v.no||""}`;
+      const deb = (v.lines||[]).reduce((s,l)=> s + Math.max(0, Number(l.amount)||0), 0);
+      div.innerHTML = `
+        <div class="top">
+          <div>
+            <div class="title">${escapeHtml(v.date||"")} · ${escapeHtml(ver)}</div>
+            <div class="meta">${escapeHtml(v.text||"")}</div>
+            <div class="meta">Rader: ${(v.lines||[]).length} · Debet: ${fmtSEK(Math.round(deb*100)/100)}</div>
+          </div>
+          <div class="row">
+            <button class="btn secondary" data-open="${escapeHtml(v.id)}">Öppna</button>
+            <button class="btn danger" data-del="${escapeHtml(v.id)}">Ta bort</button>
+          </div>
+        </div>
+      `;
+      div.addEventListener("click", (e)=>{
+        const b = e.target.closest("button");
+        if (b && b.dataset && b.dataset.del){
+          deleteVoucher(b.dataset.del);
+          return;
+        }
+        const id = (b && b.dataset && b.dataset.open) ? b.dataset.open : v.id;
+        loadVoucherToEditor(id);
+      });
+      voucherList.appendChild(div);
+    });
+  }
+
+  // --- Accounts ---
+  function typeLabel(t){
+    if (t === "asset") return "Tillgång";
+    if (t === "liability") return "Skuld/EK";
+    if (t === "income") return "Intäkt";
+    if (t === "expense") return "Kostnad";
+    return "Övrigt";
+  }
+
+  function renderAccounts(){
+    if (!accountsTbody) return;
+    const q = (accountSearch && accountSearch.value) ? accountSearch.value.trim().toLowerCase() : "";
+    const keys = Object.keys(state.accounts||{}).sort((a,b)=>a.localeCompare(b,"sv"));
+
+    accountsTbody.innerHTML = "";
+    if (!keys.length){
+      accountsTbody.innerHTML = `<tr><td colspan="4" class="muted small">Inga konton.</td></tr>`;
+      return;
+    }
+
+    keys.forEach(no=>{
+      const a = state.accounts[no];
+      const hay = `${no} ${a?.name||""}`.toLowerCase();
+      if (q && !hay.includes(q)) return;
+
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${escapeHtml(no)}</td>
+        <td>${escapeHtml(a?.name||"")}</td>
+        <td>${escapeHtml(typeLabel(a?.type||guessTypeFromAccountNo(no)))}</td>
+        <td class="right"><button class="btn danger" data-del="${escapeHtml(no)}">Ta bort</button></td>
+      `;
+      tr.addEventListener("click", (e)=>{
+        const b = e.target.closest("button");
+        if (!b || !b.dataset.del) return;
+        const acc = b.dataset.del;
+        if (!confirm(`Ta bort konto ${acc}?`)) return;
+        delete state.accounts[acc];
+        save();
+        // Refresh voucher editor account selects
+        renderLines();
+        updateBalanceBadge();
+        renderAccounts();
+      });
+      accountsTbody.appendChild(tr);
+    });
+  }
+
+  function fixMojibake(s){
+    return String(s||"")
+      .replaceAll("Ã¥","å")
+      .replaceAll("Ã¤","ä")
+      .replaceAll("Ã¶","ö")
+      .replaceAll("Ã…","Å")
+      .replaceAll("Ã„","Ä")
+      .replaceAll("Ã–","Ö")
+      .replaceAll("â€“","–")
+      .replaceAll("â€”","—")
+      .replaceAll("â€™","’")
+      .replaceAll("â€œ","“")
+      .replaceAll("â€�","”");
+  }
+
+  // --- Settings ---
+  function renderYearsTable(){
+    if (!yearsTbody) return;
+    const ys = state.fiscalYears.slice().sort((a,b)=>a.id.localeCompare(b.id,"sv"));
+    yearsTbody.innerHTML = "";
+    ys.forEach(y=>{
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${escapeHtml(y.id)}</td>
+        <td>${escapeHtml(y.start||"")}</td>
+        <td>${escapeHtml(y.end||"")}</td>
+        <td class="right"><button class="btn danger" data-del="${escapeHtml(y.id)}">Ta bort</button></td>
+      `;
+      tr.addEventListener("click", (e)=>{
+        const b = e.target.closest("button");
+        if (!b || !b.dataset.del) return;
+        const id = b.dataset.del;
+        const used = (state.vouchers||[]).some(v=>v.yearId===id) || (state.invoices||[]).some(inv=>inv.yearId===id);
+        const msg = used
+          ? `Året ${id} har data. Ta bort ändå?`
+          : `Ta bort räkenskapsår ${id}?`;
+        if (!confirm(msg)) return;
+        state.fiscalYears = state.fiscalYears.filter(x=>x.id!==id);
+        if (state.activeYearId === id){
+          normalizeActiveYear();
+        }
+        save();
+        fillYearSelectors();
+        renderYearsTable();
+        renderVoucherList();
+      });
+      yearsTbody.appendChild(tr);
+    });
+  }
+
+  function renderLogoPreview(){
+    if (!logoPreview) return;
+    const url = state.company?.logoDataUrl;
+    if (!url){
+      logoPreview.textContent = "Ingen logotyp vald.";
+      return;
+    }
+    logoPreview.innerHTML = `<img alt="Logotyp" src="${escapeHtml(url)}" style="max-height:48px; max-width:260px; display:block;" />`;
+  }
+
+  function renderSettings(){
+    state.company = state.company || defaultData().company;
+    state.features = state.features || { sruEnabled: false };
+    state.sru = state.sru || { enabled:false, periodSuffix:"P4", neMappings: [] };
+
+    if (sCompany) sCompany.value = state.company.name || "";
+    if (sOrgnr) sOrgnr.value = state.company.orgnr || "";
+    if (sCurrency) sCurrency.value = state.company.currency || "SEK";
+    if (sSign) sSign.value = state.company.defaultSign || "";
+
+    if (sAddr) sAddr.value = state.company.addr || "";
+    if (sZip) sZip.value = state.company.zip || "";
+    if (sCity) sCity.value = state.company.city || "";
+    if (sCountry) sCountry.value = state.company.country || "";
+    if (sEmail) sEmail.value = state.company.email || "";
+    if (sPhone) sPhone.value = state.company.phone || "";
+    if (sWeb) sWeb.value = state.company.web || "";
+    if (sVat) sVat.value = state.company.vat || "";
+    if (sPayDays) sPayDays.value = String(state.company.payDays ?? 30);
+    if (sBg) sBg.value = state.company.bankgiro || "";
+    if (sPg) sPg.value = state.company.plusgiro || "";
+    if (sIban) sIban.value = state.company.iban || "";
+    if (sSwift) sSwift.value = state.company.swift || "";
+    if (sInvNote) sInvNote.value = state.company.invoiceNote || "";
+    if (sInvFooter) sInvFooter.value = state.company.invoiceFooter || "";
+
+    if (sSruEnabled) sSruEnabled.checked = !!state.features.sruEnabled;
+    renderLogoPreview();
+
+    // Default FY inputs to active year if empty
+    const fy = getYear(state.activeYearId);
+    if (fyStart && !fyStart.value) fyStart.value = fy?.start || (state.activeYearId + "-01-01");
+    if (fyEnd && !fyEnd.value) fyEnd.value = fy?.end || (state.activeYearId + "-12-31");
+
+    fillYearSelectors();
+    renderYearsTable();
+  }
+
+  function saveSettings(){
+    state.company = state.company || defaultData().company;
+    state.features = state.features || { sruEnabled: false };
+    state.sru = state.sru || { enabled:false, periodSuffix:"P4", neMappings: [] };
+
+    state.company.name = (sCompany?.value || "").trim() || "FU-BOOKKEEPING";
+    state.company.orgnr = (sOrgnr?.value || "").trim();
+    state.company.currency = (sCurrency?.value || "SEK").trim() || "SEK";
+    state.company.defaultSign = (sSign?.value || "").trim();
+
+    state.company.addr = (sAddr?.value || "").trim();
+    state.company.zip = (sZip?.value || "").trim();
+    state.company.city = (sCity?.value || "").trim();
+    state.company.country = (sCountry?.value || "").trim();
+    state.company.email = (sEmail?.value || "").trim();
+    state.company.phone = (sPhone?.value || "").trim();
+    state.company.web = (sWeb?.value || "").trim();
+    state.company.vat = (sVat?.value || "").trim();
+    const pd = parseInt((sPayDays?.value||"").trim(), 10);
+    state.company.payDays = Number.isFinite(pd) && pd > 0 ? pd : 30;
+    state.company.bankgiro = (sBg?.value || "").trim();
+    state.company.plusgiro = (sPg?.value || "").trim();
+    state.company.iban = (sIban?.value || "").trim();
+    state.company.swift = (sSwift?.value || "").trim();
+    state.company.invoiceNote = (sInvNote?.value || "").trim();
+    state.company.invoiceFooter = (sInvFooter?.value || "").trim();
+
+    state.features.sruEnabled = !!(sSruEnabled && sSruEnabled.checked);
+    state.sru.enabled = state.features.sruEnabled;
+
+    save();
+    renderSru();
+  }
+
+  function addFiscalYear(){
+    const start = fyStart?.value || "";
+    const end = fyEnd?.value || "";
+    if (!isoIsValid(start) || !isoIsValid(end)) return alert("Ange giltiga datum för start/slut.");
+    if (end < start) return alert("Slutdatum kan inte vara före startdatum.");
+
+    const id = start.slice(0,4);
+    if (state.fiscalYears.some(y=>y.id===id)) return alert(`Året ${id} finns redan.`);
+    state.fiscalYears.push({ id, start, end });
+    state.activeYearId = id;
+    save();
+    fillYearSelectors();
+    renderYearsTable();
+    renderVoucherList();
+  }
+
+  function carryOpeningBalances(){
+    const fromId = carryFrom?.value || "";
+    const toId = carryTo?.value || "";
+    if (!fromId || !toId) return;
+    if (fromId === toId) return alert("Välj olika år.");
+    const toStart = fiscalYearStart(toId);
+    const bal = accountBalances(fromId);
+    const lines = Object.entries(bal)
+      .map(([acc, amt]) => ({ acc, amt }))
+      .filter(x => Math.abs(x.amt) > 0.00001)
+      .filter(x => {
+        const t = state.accounts[x.acc]?.type || guessTypeFromAccountNo(x.acc);
+        return t === "asset" || t === "liability";
+      })
+      .map(x => ({ account: x.acc, text: "IB", amount: Math.round(x.amt*100)/100 }));
+
+    if (!lines.length) return alert("Inga balanskonton med saldo att föra över.");
+    const sum = lines.reduce((s,l)=>s+(l.amount||0),0);
+    if (Math.abs(sum) > 0.01){
+      // This can happen if accounts are mis-typed; keep safe.
+      return alert("IB blir inte i balans. Kontrollera kontotyper (tillgång/skuld)." );
+    }
+
+    const v = {
+      id: crypto.randomUUID(),
+      yearId: toId,
+      series: "IB",
+      no: nextVerno(toId, "IB"),
+      date: toStart,
+      text: "Ingående balans",
+      regDate: todayISO(),
+      sign: state.company.defaultSign || "",
+      lines
+    };
+    state.vouchers.push(v);
+    state.vouchers.sort((a,b)=> (a.yearId+a.series+a.no+a.date).localeCompare(b.yearId+b.series+b.no+b.date, "sv"));
+    save();
+    alert("Skapade IB-verifikation i " + toId + ".");
+  }
+
+  // --- SRU (beta) ---
+  function sruEls(){
+    return {
+      lockBadge: document.getElementById("sruLockBadge"),
+      lockedBox: document.getElementById("sruLockedBox"),
+      unlockedBox: document.getElementById("sruUnlockedBox"),
+      btnEnable: document.getElementById("btnEnableSRU"),
+      yearSelect: document.getElementById("sruYearSelect"),
+      periodSuffix: document.getElementById("sruPeriodSuffix"),
+      btnExport: document.getElementById("btnExportSRUNE"),
+      mapTbody: document.getElementById("sruMapTbody"),
+      btnAddMap: document.getElementById("btnSruAddMap"),
+      btnSaveMap: document.getElementById("btnSruSaveMap"),
+    };
+  }
+
+  function renderSru(){
+    state.features = state.features || { sruEnabled: false };
+    state.sru = state.sru || { enabled:false, periodSuffix:"P4", neMappings: [] };
+    if (typeof state.sru.enabled !== "boolean") state.sru.enabled = false;
+    if (!Array.isArray(state.sru.neMappings)) state.sru.neMappings = [];
+
+    const el = sruEls();
+    const enabled = !!state.features.sruEnabled;
+
+    if (el.lockBadge){
+      el.lockBadge.hidden = enabled;
+    }
+    if (el.lockedBox) el.lockedBox.hidden = enabled;
+    if (el.unlockedBox) el.unlockedBox.hidden = !enabled;
+
+    if (el.periodSuffix) el.periodSuffix.value = state.sru.periodSuffix || "P4";
+
+    fillYearSelectors();
+
+    if (el.mapTbody){
+      el.mapTbody.innerHTML = "";
+      (state.sru.neMappings||[]).forEach((m, idx)=>{
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td><input data-k="code" data-i="${idx}" value="${escapeHtml(m.code||"")}" placeholder="R1" /></td>
+          <td><input data-k="filter" data-i="${idx}" value="${escapeHtml(m.filter||"")}" placeholder="3001, 30*, 3000-3099" /></td>
+          <td>
+            <select data-k="sign" data-i="${idx}">
+              <option value="1">Normalt</option>
+              <option value="-1">Invertera</option>
+            </select>
+          </td>
+          <td><input data-k="comment" data-i="${idx}" value="${escapeHtml(m.comment||"")}" placeholder="valfritt" /></td>
+          <td class="right"><button class="btn danger" data-del="${idx}">✕</button></td>
+        `;
+        const sel = tr.querySelector("select");
+        if (sel) sel.value = String(m.sign ?? 1);
+        tr.addEventListener("input", (e)=>{
+          const t = e.target;
+          if (!t || !t.dataset) return;
+          const i = Number(t.dataset.i);
+          const k = t.dataset.k;
+          if (!Number.isFinite(i) || !k) return;
+          const row = state.sru.neMappings[i];
+          if (!row) return;
+          if (k === "sign") row.sign = Number(t.value)||1;
+          else row[k] = t.value;
+        });
+        tr.addEventListener("change", (e)=>{
+          const t = e.target;
+          if (!t || !t.dataset) return;
+          if (t.dataset.k !== "sign") return;
+          const i = Number(t.dataset.i);
+          if (!Number.isFinite(i)) return;
+          const row = state.sru.neMappings[i];
+          if (!row) return;
+          row.sign = Number(t.value)||1;
+        });
+        tr.addEventListener("click", (e)=>{
+          const b = e.target.closest("button");
+          if (!b || b.dataset.del == null) return;
+          const i = Number(b.dataset.del);
+          if (!Number.isFinite(i)) return;
+          state.sru.neMappings.splice(i,1);
+          renderSru();
+        });
+        el.mapTbody.appendChild(tr);
+      });
+    }
+  }
+
+  function parseSruFilter(filterStr){
+    const parts = String(filterStr||"")
+      .split(",")
+      .map(s=>s.trim())
+      .filter(Boolean);
+    const tests = parts.map(p=>{
+      if (p.endsWith("*")){
+        const pre = p.slice(0,-1);
+        return (acc)=> String(acc).startsWith(pre);
+      }
+      if (/^\d+\s*-\s*\d+$/.test(p)){
+        const [a,b] = p.split("-").map(x=>x.trim());
+        const lo = Number(a), hi = Number(b);
+        return (acc)=>{
+          const n = Number(acc);
+          return Number.isFinite(n) && n>=lo && n<=hi;
+        };
+      }
+      return (acc)=> String(acc) === p;
+    });
+    return (acc)=> tests.some(fn=>fn(acc));
+  }
+
+  function exportSruNe(){
+    const el = sruEls();
+    if (!state.features?.sruEnabled) return alert("SRU är låst. Aktivera under Inställningar.");
+    const yearId = el.yearSelect?.value || state.activeYearId;
+    const suffix = (el.periodSuffix?.value || state.sru.periodSuffix || "P4").trim() || "P4";
+    state.sru.periodSuffix = suffix;
+
+    const sums = [];
+    (state.sru.neMappings||[]).forEach(m=>{
+      const code = (m.code||"").trim();
+      const filter = (m.filter||"").trim();
+      if (!code || !filter) return;
+      const match = parseSruFilter(filter);
+      let sum = 0;
+      yearVouchers(yearId).forEach(v=>{
+        (v.lines||[]).forEach(l=>{
+          if (match(l.account)) sum += Number(l.amount)||0;
+        });
+      });
+      sum = Math.round(sum*100)/100;
+      const sign = Number(m.sign)||1;
+      sum = Math.round((sum*sign)*100)/100;
+      sums.push({ code, value: sum, comment: m.comment||"" });
+    });
+
+    const info = [
+      "FU-BOOKKEEPING SRU (beta)",
+      `Company=${state.company?.name||""}`,
+      `OrgNr=${state.company?.orgnr||""}`,
+      `Year=${yearId}`,
+      `PeriodSuffix=${suffix}`,
+      "",
+      "Mappings:",
+      ...sums.map(s=> `${s.code};${s.value.toFixed(2)};${(s.comment||"").replaceAll("\n"," ")}`)
+    ].join("\n") + "\n";
+
+    const blanketter = [
+      "# BLANKETTER.SRU (beta) – values are sums of matching accounts",
+      ...sums.map(s=> `${s.code};${s.value.toFixed(2)}`)
+    ].join("\n") + "\n";
+
+    downloadText("INFO.SRU", info, "text/plain");
+    downloadText("BLANKETTER.SRU", blanketter, "text/plain");
+    save();
+  }
+
+  // --- Backup / import ---
+  function exportJsonBackup(){
+    downloadText("backup.json", JSON.stringify(state, null, 2), "application/json");
+  }
+
+  async function importJsonBackup(file){
+    if (!file) return;
+    const txt = await file.text();
+    const d = JSON.parse(txt);
+    if (!d || typeof d !== "object" || !Array.isArray(d.fiscalYears) || !d.accounts || !Array.isArray(d.vouchers)){
+      alert("Filen ser inte ut som en backup från appen.");
+      return;
+    }
+    state = d;
+    // migration defaults
+    if (!state.company) state.company = defaultData().company;
+    { const cdef = defaultData().company; state.company = state.company || {}; for (const k of Object.keys(cdef)) if (state.company[k] == null) state.company[k] = cdef[k]; }
+    if (!state.features) state.features = { sruEnabled: false };
+    if (typeof state.features.sruEnabled !== "boolean") state.features.sruEnabled = false;
+    if (!state.fileSync) state.fileSync = { autosave: true, requireFile: false };
+    if (typeof state.fileSync.requireFile !== "boolean") state.fileSync.requireFile = false;
+    if (!state.customers) state.customers = {};
+    if (!state.suppliers) state.suppliers = {};
+    if (!state.invoices) state.invoices = [];
+    if (!state.sru) state.sru = { enabled:false, periodSuffix:"P4", neMappings: [] };
+    normalizeActiveYear();
+
+    save();
+    alert("Backup importerad.");
+  }
+
+  async function wipeAllData(){
+    if (!confirm("Rensa ALL data i webbläsaren?")) return;
+    try { localStorage.removeItem(STORAGE_KEY); } catch (_){ }
+    try { await idbDel("dataFileHandle"); } catch (_){ }
+    location.reload();
+  }
+
+  // --- SIE (basic) ---
+  function yyyymmdd(iso){
+    if (!isoIsValid(iso)) return "";
+    return iso.replaceAll("-", "");
+  }
+
+  function sieQuote(s){
+    return '"' + String(s||"").replaceAll('"','""') + '"';
+  }
+
+  function exportSie4(){
+    const yearId = (sieYearSelect && sieYearSelect.value) ? sieYearSelect.value : state.activeYearId;
+    const fy = getYear(yearId);
+    if (!fy) return alert("Välj räkenskapsår.");
+
+    const lines = [];
+    lines.push("#FLAGGA 0");
+    lines.push(`#PROGRAM ${sieQuote("FU-BOOKKEEPING")} ${sieQuote(APP_VERSION)}`);
+    lines.push("#FORMAT PC8");
+    lines.push(`#GEN ${yyyymmdd(todayISO())}`);
+    lines.push("#SIETYP 4");
+    if (state.company?.orgnr) lines.push(`#ORGNR ${state.company.orgnr}`);
+    lines.push(`#FNAMN ${sieQuote(state.company?.name || "FU-BOOKKEEPING")}`);
+    if (state.company?.currency) lines.push(`#VALUTA ${state.company.currency}`);
+    lines.push(`#RAR ${yearId} ${yyyymmdd(fy.start)} ${yyyymmdd(fy.end)}`);
+
+    Object.keys(state.accounts||{}).sort((a,b)=>a.localeCompare(b,"sv")).forEach(no=>{
+      lines.push(`#KONTO ${no} ${sieQuote(state.accounts[no]?.name || "")}`);
+    });
+
+    const vs = (state.vouchers||[])
+      .filter(v=>v.yearId===yearId)
+      .slice()
+      .sort((a,b)=> (a.date+a.series+a.no).localeCompare(b.date+b.series+b.no,"sv"));
+
+    vs.forEach(v=>{
+      lines.push(`#VER ${sieQuote(v.series||"")} ${v.no||""} ${yyyymmdd(v.date)} ${sieQuote(v.text||"")} ${yyyymmdd(v.regDate||v.date)} ${sieQuote(v.sign||"")}`);
+      lines.push("{");
+      (v.lines||[]).forEach(t=>{
+        const amt = Number(t.amount)||0;
+        // SIE uses dot as decimal separator
+        lines.push(`#TRANS ${t.account} {} ${amt.toFixed(2)} ${yyyymmdd(v.date)} ${sieQuote(t.text||"")}`);
+      });
+      lines.push("}");
+    });
+
+    downloadText(`SIE4_${yearId}.se`, lines.join("\n") + "\n", "text/plain");
+  }
+
+  function tokenizeSieLine(line){
+    const out = [];
+    let i = 0;
+    const s = line.trim();
+    while (i < s.length){
+      while (i < s.length && /\s/.test(s[i])) i++;
+      if (i >= s.length) break;
+      if (s[i] === '"'){
+        i++;
+        let val = "";
+        while (i < s.length){
+          if (s[i] === '"' && s[i+1] === '"'){ val += '"'; i += 2; continue; }
+          if (s[i] === '"'){ i++; break; }
+          val += s[i++];
+        }
+        out.push(val);
+      } else {
+        let j = i;
+        while (j < s.length && !/\s/.test(s[j])) j++;
+        out.push(s.slice(i,j));
+        i = j;
+      }
+    }
+    return out;
+  }
+
+  function parseSieAmount(s){
+    const v = String(s||"").replace(",",".");
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function isoFromYmd(ymd){
+    const t = String(ymd||"");
+    if (!/^\d{8}$/.test(t)) return "";
+    return t.slice(0,4) + "-" + t.slice(4,6) + "-" + t.slice(6,8);
+  }
+
+  async function importSieFile(file){
+    if (!file) return;
+    const txt = await file.text();
+    const wipe = !!(sieImportWipe && sieImportWipe.checked);
+    if (wipe){
+      state = defaultData();
+    }
+
+    const accounts = state.accounts || {};
+    let currentYearId = state.activeYearId;
+    let currentVoucher = null;
+    let inVer = false;
+
+    const lines = txt.split(/\r?\n/);
+    for (const raw of lines){
+      const line = raw.trim();
+      if (!line) continue;
+      if (line.startsWith("//")) continue;
+      if (line === "{"){ inVer = true; continue; }
+      if (line === "}"){
+        inVer = false;
+        if (currentVoucher){
+          state.vouchers = state.vouchers || [];
+          state.vouchers.push(currentVoucher);
+          currentVoucher = null;
+        }
+        continue;
+      }
+      if (!line.startsWith("#")) continue;
+      const toks = tokenizeSieLine(line);
+      const tag = toks[0];
+
+      if (tag === "#RAR"){
+        const sieId = toks[1];
+        const start = isoFromYmd(toks[2]);
+        const end = isoFromYmd(toks[3]);
+        if (sieId && start && end){
+          const inferred = fiscalYearLabelFromPeriod(start, end);
+          let id = String(sieId);
+          const isSmallNumericId = /^-?\d+$/.test(id) && Math.abs(Number(id)) < 100;
+          if ((id === "" || isSmallNumericId) && inferred) id = inferred;
+          if (!id && inferred) id = inferred;
+          if (!id) continue;
+
+          // If the same id exists with same period, keep it. If it exists with different period, disambiguate.
+          const existing = (state.fiscalYears||[]).find(y=>y.id===id);
+          let finalId = id;
+          if (existing && (existing.start !== start || existing.end !== end)){
+            finalId = `${id}_${start.replaceAll("-", "")}`;
+          }
+
+          state.fiscalYears = state.fiscalYears || [];
+          if (!state.fiscalYears.some(y=>y.id===finalId)) state.fiscalYears.push({ id: finalId, start, end });
+          currentYearId = finalId;
+          state.activeYearId = finalId;
+        }
+      }
+      if (tag === "#KONTO"){
+        const no = toks[1];
+        const name = toks[2] || "";
+        if (no){
+          accounts[no] = accounts[no] || { name: "", type: guessTypeFromAccountNo(no) };
+          accounts[no].name = name;
+          if (!accounts[no].type) accounts[no].type = guessTypeFromAccountNo(no);
+        }
+      }
+      if (tag === "#VER"){
+        // #VER "A" 1 20250101 "Text" 20250101 "SIGN"
+        const series = toks[1] || "A";
+        const no = toks[2] || "";
+        const date = isoFromYmd(toks[3]) || todayISO();
+        const text = toks[4] || "";
+        const regDate = isoFromYmd(toks[5]) || date;
+        const sign = toks[6] || "";
+        currentVoucher = { id: crypto.randomUUID(), yearId: currentYearId, series, no, date, text, regDate, sign, lines: [] };
+      }
+      if (tag === "#TRANS" && currentVoucher){
+        const acc = toks[1];
+        const amt = parseSieAmount(toks[3]);
+        const tText = toks[5] || "";
+        currentVoucher.lines.push({ account: String(acc||""), text: String(tText||""), amount: Math.round(amt*100)/100 });
+      }
+    }
+
+    state.accounts = accounts;
+    state.vouchers = state.vouchers || [];
+    state.vouchers.sort((a,b)=> (a.yearId+a.series+a.no+a.date).localeCompare(b.yearId+b.series+b.no+b.date, "sv"));
+    normalizeActiveYear();
+    save();
+    alert("SIE importerat (enkel tolkning)." );
+  }
+
+  // --- Render all (safe) ---
+  function renderAll(){
+    if (companyNameEl) companyNameEl.textContent = state.company?.name || "FU-BOOKKEEPING";
+    fillYearSelectors();
+    // keep selectors in sync
+    if (yearPillSelect) yearPillSelect.value = state.activeYearId;
+    if (voucherYearPill) voucherYearPill.textContent = String(state.activeYearId || "");
+    renderVoucherList();
+    renderAccounts();
+    updateFsUI();
+  }
+
+  // --- Core wiring (missing in this build) ---
+  function wireCoreEvents(){
+    if (btnNewVoucher) btnNewVoucher.addEventListener("click", newVoucher);
+    if (btnAddLine) btnAddLine.addEventListener("click", ()=>{ currentLines.push(makeLine()); renderLines(); updateBalanceBadge(); });
+    if (btnClearVoucher) btnClearVoucher.addEventListener("click", ()=>{ if (!confirm("Rensa verifikationen?")) return; newVoucher(); });
+    if (btnSaveVoucher) btnSaveVoucher.addEventListener("click", saveVoucher);
+    // Year is changed only via the header dropdown.
+    if (yearPillSelect) yearPillSelect.addEventListener("change", ()=>{ setActiveYear(yearPillSelect.value); });
+
+    if (btnAddAccount) btnAddAccount.addEventListener("click", ()=>{
+      const no = (aNo?.value || "").trim();
+      const name = (aName?.value || "").trim();
+      if (!no || !/^\d{3,6}$/.test(no)) return alert("Ange kontonummer (t.ex. 1930)." );
+      if (!name) return alert("Ange kontonamn." );
+      state.accounts = state.accounts || {};
+      state.accounts[no] = { name, type: (aType?.value || guessTypeFromAccountNo(no)) };
+      if (aNo) aNo.value = "";
+      if (aName) aName.value = "";
+      save();
+      renderAccounts();
+      renderLines();
+    });
+    if (btnResetDemo) btnResetDemo.addEventListener("click", ()=>{ if (!confirm("Återställ demo-kontoplan?")) return; state.accounts = demoAccounts(); save(); renderAccounts(); renderLines(); });
+    if (btnFixChars) btnFixChars.addEventListener("click", ()=>{
+      Object.keys(state.accounts||{}).forEach(no=>{ state.accounts[no].name = fixMojibake(state.accounts[no].name); });
+      save();
+      renderAccounts();
+    });
+    if (accountSearch) accountSearch.addEventListener("input", renderAccounts);
+
+    if (btnCustNew) btnCustNew.addEventListener("click", ()=>{ resetCustomerEditor(); });
+    if (btnCustSave) btnCustSave.addEventListener("click", saveCustomerFromRegistry);
+    if (btnCustRefresh) btnCustRefresh.addEventListener("click", renderCustomers);
+    if (custSearch) custSearch.addEventListener("input", renderCustomers);
+
+    if (btnSupNew) btnSupNew.addEventListener("click", ()=>{ resetSupplierEditor(); });
+    if (btnSupSave) btnSupSave.addEventListener("click", saveSupplierFromRegistry);
+    if (btnSupRefresh) btnSupRefresh.addEventListener("click", renderSuppliers);
+    if (supSearch) supSearch.addEventListener("input", renderSuppliers);
+
+    if (btnSaveSettings) btnSaveSettings.addEventListener("click", saveSettings);
+    if (btnAddYear) btnAddYear.addEventListener("click", addFiscalYear);
+    if (btnCarry) btnCarry.addEventListener("click", carryOpeningBalances);
+
+    if (sLogo) sLogo.addEventListener("change", async ()=>{
+      const f = sLogo.files && sLogo.files[0] ? sLogo.files[0] : null;
+      if (!f) return;
+      const reader = new FileReader();
+      reader.onload = ()=>{
+        state.company = state.company || defaultData().company;
+        state.company.logoDataUrl = String(reader.result||"");
+        save();
+        renderLogoPreview();
+      };
+      reader.readAsDataURL(f);
+    });
+    if (btnRemoveLogo) btnRemoveLogo.addEventListener("click", ()=>{
+      state.company = state.company || defaultData().company;
+      state.company.logoDataUrl = "";
+      save();
+      renderLogoPreview();
+    });
+
+    if (btnExportJson) btnExportJson.addEventListener("click", exportJsonBackup);
+    if (jsonImport) jsonImport.addEventListener("change", async ()=>{
+      const f = jsonImport.files && jsonImport.files[0] ? jsonImport.files[0] : null;
+      try { await importJsonBackup(f); } catch (e){ alert("Kunde inte importera JSON: " + (e?.message||e)); }
+      jsonImport.value = "";
+    });
+    if (btnWipe) btnWipe.addEventListener("click", wipeAllData);
+
+    if (btnExportSie4) btnExportSie4.addEventListener("click", exportSie4);
+    if (btnImportSie) btnImportSie.addEventListener("click", async ()=>{
+      const f = sieImportFile && sieImportFile.files && sieImportFile.files[0] ? sieImportFile.files[0] : null;
+      if (!f) return alert("Välj SIE-fil först." );
+      try { await importSieFile(f); } catch (e){ alert("Kunde inte importera SIE: " + (e?.message||e)); }
+    });
+
+    // File sync wiring
+    if (btnConnectFile) btnConnectFile.addEventListener("click", fsConnectExisting);
+    if (btnCreateFile) btnCreateFile.addEventListener("click", fsCreateNew);
+    if (btnLoadFromFile) btnLoadFromFile.addEventListener("click", async ()=>{ try { await fsLoadState(); } catch (e){ alert(e?.message||e); } updateFsUI(); });
+    if (btnSaveToFile) btnSaveToFile.addEventListener("click", async ()=>{ try { await fsWriteState(); } catch (e){ alert(e?.message||e); } updateFsUI(); });
+    if (btnDisconnectFile) btnDisconnectFile.addEventListener("click", async ()=>{ await fsDisconnect(); });
+    if (fsAutosave) fsAutosave.addEventListener("change", ()=>{ state.fileSync = state.fileSync || { autosave:true, requireFile:false }; state.fileSync.autosave = !!fsAutosave.checked; save(); updateFsUI(); });
+    if (fsRequireFile) fsRequireFile.addEventListener("change", ()=>{ state.fileSync = state.fileSync || { autosave:true, requireFile:false }; state.fileSync.requireFile = !!fsRequireFile.checked; save(); updateFsUI(); });
+
+    // SRU wiring
+    const sru = sruEls();
+    if (sru.btnEnable) sru.btnEnable.addEventListener("click", ()=>{ state.features = state.features || { sruEnabled:false }; state.sru = state.sru || { enabled:false, periodSuffix:"P4", neMappings: [] }; state.features.sruEnabled = true; state.sru.enabled = true; save(); renderSru(); });
+    if (sru.btnAddMap) sru.btnAddMap.addEventListener("click", ()=>{ state.sru = state.sru || { enabled:true, periodSuffix:"P4", neMappings: [] }; state.sru.neMappings = state.sru.neMappings || []; state.sru.neMappings.push({ code:"", filter:"", sign:1, comment:"" }); renderSru(); });
+    if (sru.btnSaveMap) sru.btnSaveMap.addEventListener("click", ()=>{ save(); renderSru(); });
+    if (sru.btnExport) sru.btnExport.addEventListener("click", exportSruNe);
+  }
+
+  // Auto-refresh (no manual refresh button)
+  // - Updates list when returning to the tab
+  // - Syncs if another tab modifies localStorage
+  window.addEventListener("focus", ()=>{
+    try {
+      renderVoucherList();
+      updateFsUI();
+    } catch (_) {}
+  });
+
+  document.addEventListener("visibilitychange", ()=>{
+    if (document.hidden) return;
+    try {
+      renderVoucherList();
+      updateFsUI();
+    } catch (_) {}
+  });
+
+  window.addEventListener("storage", (e)=>{
+    if (!e || e.key !== STORAGE_KEY) return;
+    try {
+      state = load();
+      renderAll();
+    } catch (_) {}
+  });
 
   // --- Invoice helpers ---
   const invYearSelect = document.getElementById("invYearSelect");
@@ -2314,6 +3358,12 @@ if (!state.features) state.features = { sruEnabled: false };
   let currentLines = [];
 
   function newVoucher(){
+    // If user has enabled "Kräv datafil" but no file is connected yet, guide them.
+    if (fsApiSupported() && state.fileSync && state.fileSync.requireFile && !fsHandle){
+      alert("Du har 'Kräv datafil' påslaget men ingen fil är ansluten. Gå till Import/Export och välj/skapa datafil, eller avmarkera 'Kräv datafil'.");
+      activateTab("export");
+      return;
+    }
     editingVoucherId = null;
     vDate.value = todayISO();
     vSeries.value = "A";
@@ -2462,7 +3512,7 @@ if (!state.features) state.features = { sruEnabled: false };
   }
 
   function saveVoucher(){
-    const yearId = yearSelect.value || state.activeYearId;
+    const yearId = state.activeYearId;
     const date = vDate.value || todayISO();
     const series = (vSeries.value || "A").trim() || "A";
     const no = (vNo.value || "").trim() || nextVerno(yearId, series);
@@ -2504,7 +3554,9 @@ if (!state.features) state.features = { sruEnabled: false };
     const v = state.vouchers.find(x => x.id === id);
     if (!v) return;
     editingVoucherId = v.id;
-    yearSelect.value = v.yearId;
+    if (v.yearId && v.yearId !== state.activeYearId){
+      setActiveYear(v.yearId);
+    }
     vDate.value = v.date;
     vSeries.value = v.series;
     vNo.value = v.no;
@@ -3100,20 +4152,6 @@ if (!state.features) state.features = { sruEnabled: false };
     // Fill year selector and set sensible defaults
     fillYearSelectors();
 
-    if (rptYearSelect){
-      // Build options (reuse fiscal years)
-      const ys = state.fiscalYears.slice().sort((a,b)=>a.id.localeCompare(b.id,"sv"));
-      const prev = rptYearSelect.value;
-      rptYearSelect.innerHTML = "";
-      ys.forEach(y=>{
-        const opt = document.createElement("option");
-        opt.value = y.id;
-        opt.textContent = `${y.id} (${y.start} – ${y.end})`;
-        rptYearSelect.appendChild(opt);
-      });
-      rptYearSelect.value = ys.find(y=>y.id===prev)?.id || state.activeYearId || ys[0]?.id || "";
-    }
-
     // Default range: full FY
     if (rptFrom && rptTo){
       const yearId = (rptYearSelect && rptYearSelect.value) ? rptYearSelect.value : state.activeYearId;
@@ -3196,26 +4234,33 @@ if (rptYearSelect){
 
 
 // --- Init ---
-fillYearSelectors();
+try {
+  fillYearSelectors();
+  if (vDate) vDate.value = todayISO();
 
-if (yearSelect) yearSelect.value = state.activeYearId;
-if (vDate) vDate.value = todayISO();
+  newVoucher();
 
-newVoucher();
+  // Invoices init
+  state.customers = state.customers || {};
+  state.suppliers = state.suppliers || {};
+  state.invoices = state.invoices || [];
+  state.features = state.features || { sruEnabled: false };
 
-// Invoices init
-state.customers = state.customers || {};
-state.suppliers = state.suppliers || {};
-state.invoices = state.invoices || [];
-state.features = state.features || { sruEnabled: false };
+  if (invYearSelect) invYearSelect.value = state.activeYearId;
+  if (invDate) invDate.value = todayISO();
+  if (invDue) invDue.value = addDays(todayISO(), (state.company.payDays||30));
 
-if (invYearSelect) invYearSelect.value = state.activeYearId;
-if (invDate) invDate.value = todayISO();
-if (invDue) invDue.value = addDays(todayISO(), (state.company.payDays||30));
+  wireInvoiceEvents();
+  newInvoice();
+  wireCoreEvents();
+  renderAll();
 
-wireInvoiceEvents();
-newInvoice();
-renderAll();
+  setBoot("JS: OK");
+} catch (e){
+  try { console.error(e); } catch (_) {}
+  const msg = (e && (e.message || e.name)) ? (e.message || e.name) : String(e || "fel");
+  setBoot(("JS: " + msg).slice(0, 120));
+}
 
 })();
 </script>

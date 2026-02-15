@@ -1,6 +1,15 @@
 <!doctype html>
 <html lang="sv">
 <head>
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-LGJK9XKDZB"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-LGJK9XKDZB');
+  </script>
+
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>FU-BOOKKEEPING (BAS) – offline i webbläsaren</title>
@@ -42,8 +51,13 @@
       .sidebar .tab{ width:auto; }
     }
     .row{ display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+    .header-row{ align-items:flex-end; }
+    .header-row .pill{ align-self:flex-end; }
+    .header-row .field{ align-self:flex-end; }
     h1{ margin:0; font-size:18px; font-weight:700; }
     .pill{ font-size:12px; color:var(--muted); border:1px solid var(--line); padding:6px 10px; border-radius:999px; }
+    .pill.ok{ border:3px solid rgba(34,197,94,.7); background:rgba(34,197,94,.08); color:var(--text); }
+    .pill.bad{ border:3px solid rgba(239,68,68,.7); background:rgba(239,68,68,.08); color:var(--text); }
     /* Header year dropdown should look like a pill */
     select.pill{
       appearance:none;
@@ -158,11 +172,14 @@
 <body>
 <header>
   <div class="wrap">
-    <div class="row">
+    <div class="row header-row">
       <h1 id="companyName">FU-BOOKKEEPING</h1>
-      <select class="pill" id="yearPillSelect" aria-label="Aktivt räkenskapsår"></select>
+      <div class="field" style="gap:4px; min-width: 180px;">
+        <label for="yearPillSelect">Räkenskapsår</label>
+        <select class="pill" id="yearPillSelect" aria-label="Räkenskapsår"></select>
+      </div>
       <span class="pill" id="bootPill">JS: laddar…</span>
-      <span class="pill">Lagring: localStorage (offline)</span>
+      <span class="pill" id="storagePill">Lagring: localStorage (offline)</span>
     </div>
   </div>
 </header>
@@ -1026,22 +1043,37 @@
   const APP_VERSION = "1.1"; // bump when adding new data fields
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE";
 
+  let localStorageOk = true;
+
+  function setPillState(el, kind){
+    if (!el) return;
+    try {
+      el.classList.remove("ok", "bad");
+      if (kind === "ok") el.classList.add("ok");
+      else if (kind === "bad") el.classList.add("bad");
+    } catch {}
+  }
+
   const bootPill = document.getElementById("bootPill");
-  const setBoot = (text) => { if (bootPill) bootPill.textContent = text; };
-  setBoot("JS: OK");
+  const setBoot = (text, kind) => {
+    if (!bootPill) return;
+    bootPill.textContent = text;
+    if (kind) setPillState(bootPill, kind);
+  };
+  setBoot("JS: OK", "ok");
   window.addEventListener("error", (ev) => {
     try {
       const msg = ev && ev.message ? String(ev.message) : "(okänt fel)";
-      setBoot(`JS: fel · ${msg}`.slice(0, 60));
-    } catch { setBoot("JS: fel (konsol)"); }
+      setBoot(`JS: fel · ${msg}`.slice(0, 60), "bad");
+    } catch { setBoot("JS: fel (konsol)", "bad"); }
     try { console.error("Global error", ev && ev.error ? ev.error : ev); } catch {}
   });
   window.addEventListener("unhandledrejection", (ev) => {
     try {
       const reason = ev && ev.reason ? ev.reason : "(okänd promise-rejection)";
       const msg = (reason && (reason.message || reason.name)) ? String(reason.message || reason.name) : String(reason);
-      setBoot(`JS: fel · ${msg}`.slice(0, 60));
-    } catch { setBoot("JS: fel (konsol)"); }
+      setBoot(`JS: fel · ${msg}`.slice(0, 60), "bad");
+    } catch { setBoot("JS: fel (konsol)", "bad"); }
     try { console.error("Unhandled rejection", ev && ev.reason ? ev.reason : ev); } catch {}
   });
 
@@ -1726,7 +1758,15 @@
   }
 
   function load(){
-    const raw = localStorage.getItem(STORAGE_KEY);
+    let raw = "";
+    try {
+      raw = localStorage.getItem(STORAGE_KEY) || "";
+      localStorageOk = true;
+    } catch (e){
+      console.error(e);
+      localStorageOk = false;
+      return defaultData();
+    }
     if (!raw) return defaultData();
     try {
       const d = JSON.parse(raw);
@@ -1775,6 +1815,8 @@ if (!d.features) d.features = { sruEnabled: false };
     } catch (e){
       console.error(e);
 
+      localStorageOk = false;
+
       // If state is too large, the most common culprit is an embedded logo.
       if (isQuotaError(e) && state?.company?.logoDataUrl){
         const prev = state.company.logoDataUrl;
@@ -1792,6 +1834,8 @@ if (!d.features) d.features = { sruEnabled: false };
         showToast("Kunde inte spara data till webbläsarens lagring. Se konsolen för detaljer.", 8000);
       }
     }
+
+    if (persisted) localStorageOk = true;
 
     try { renderAll(); } catch (e){ console.error(e); }
     try { scheduleFileAutosave(); } catch (e){ console.error(e); }
@@ -1837,6 +1881,22 @@ if (!d.features) d.features = { sruEnabled: false };
 
   function updateFsUI(){
     if (!fsStatus) return;
+
+    // Header storage indicator (reacts to file connection)
+    if (storagePill){
+      const supported = fsApiSupported();
+      const connected = !!fsHandle;
+
+      if (supported && connected){
+        const name = fsHandle && fsHandle.name ? fsHandle.name : "datafil";
+        storagePill.textContent = `Lagring: datafil (${name})`;
+        setPillState(storagePill, fsLastError ? "bad" : "ok");
+      } else {
+        storagePill.textContent = localStorageOk ? "Lagring: localStorage (offline)" : "Lagring: localStorage blockerad";
+        // Offline storage is considered an error state in this app.
+        setPillState(storagePill, "bad");
+      }
+    }
 
     // checkboxes
     if (fsAutosave){
@@ -2057,6 +2117,7 @@ if (!d.features) d.features = { sruEnabled: false };
 
   const companyNameEl = document.getElementById("companyName");
   const yearPillSelect = document.getElementById("yearPillSelect");
+  const storagePill = document.getElementById("storagePill");
 
   const yearSelect = document.getElementById("yearSelect");
   const voucherList = document.getElementById("voucherList");

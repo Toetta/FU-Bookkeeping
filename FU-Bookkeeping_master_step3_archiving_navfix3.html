@@ -1140,6 +1140,20 @@
   const ymd = (d) => d.replaceAll("-", "");
   const todayISO = () => new Date().toISOString().slice(0,10);
   const clampText = (s, max=120) => String(s ?? "").slice(0,max);
+
+  function escapeHtml(s){
+    return String(s ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
+  }
+  function escapeAttr(s){
+    // For quoted attributes; reuse HTML escaping.
+    return escapeHtml(s);
+  }
+
   // Download helper (creates a local file download)
   function downloadText(filename, text, mime="text/plain"){
     const blob = new Blob([text], { type: mime });
@@ -1561,8 +1575,7 @@
     }
 
     fillSelect(yearSelect, active);
-    fillSelect(reportsYearSelect, active);
-    fillSelect(trialYearSelect, active);
+  fillSelect(rptYearSelect, active);
     fillSelect(sieYearSelect, active);
     fillSelect(archiveYearSelect, active);
     fillSelect(carryFrom, ys[0]?.id || active);
@@ -1829,7 +1842,10 @@ if (!d.features) d.features = { sruEnabled: false };
     }
     if (fsRequireFile){
       fsRequireFile.checked = !!(state.fileSync && state.fileSync.requireFile);
-      fsRequireFile.disabled = !fsApiSupported();
+      // Important: never disable this checkbox.
+      // Otherwise users can get locked out (buttons disabled) when opening the app in
+      // a context where the File System Access API isn't available (e.g. file://).
+      fsRequireFile.disabled = false;
     }
 
     const connected = !!fsHandle;
@@ -1910,11 +1926,11 @@ if (!d.features) d.features = { sruEnabled: false };
     state = d;
     // migration defaults
     if (!state.company) state.company = defaultData().company;
-        { const cdef = defaultData().company; state.company = state.company || {}; for (const k of Object.keys(cdef)) if (state.company[k] == null) state.company[k] = cdef[k]; }
-if (!state.features) state.features = { sruEnabled: false };
+    { const cdef = defaultData().company; state.company = state.company || {}; for (const k of Object.keys(cdef)) if (state.company[k] == null) state.company[k] = cdef[k]; }
+    if (!state.features) state.features = { sruEnabled: false };
     if (typeof state.features.sruEnabled !== "boolean") state.features.sruEnabled = false;
     if (!state.fileSync) state.fileSync = { autosave: true, requireFile: false };
-    if (typeof state.fileSync.requireFile !== "boolean") state.fileSync.requireFile = true;
+    if (typeof state.fileSync.requireFile !== "boolean") state.fileSync.requireFile = false;
 
     save();
   }
@@ -2046,7 +2062,12 @@ if (!state.features) state.features = { sruEnabled: false };
   const vSign = document.getElementById("vSign");
   const linesTbody = document.getElementById("linesTbody");
   const balanceBadge = document.getElementById("balanceBadge");
+  const btnFillExample = document.getElementById("btnFillExample");
+  const btnNewVoucher = document.getElementById("btnNewVoucher");
+  const btnAddLine = document.getElementById("btnAddLine");
+  const btnClearVoucher = document.getElementById("btnClearVoucher");
   const btnSaveVoucher = document.getElementById("btnSaveVoucher");
+  const btnRefresh = document.getElementById("btnRefresh");
 
   const aNo = document.getElementById("aNo");
   const aName = document.getElementById("aName");
@@ -2236,6 +2257,16 @@ if (!state.features) state.features = { sruEnabled: false };
   // --- Tab logic (single delegated handler; avoids overlay/propagation edge-cases) ---
   const sidebar = document.querySelector(".sidebar");
 
+  function setActiveYear(yearId){
+    const yid = (yearId || "").trim();
+    if (!yid) return;
+    state.activeYearId = yid;
+    save();
+    try { fillYearSelectors(); } catch (e){ console.error(e); }
+    try { if (typeof renderVouchers === "function") renderVouchers(); } catch (e){ console.error(e); }
+    try { if (typeof renderInvoices === "function") renderInvoices(); } catch (e){ console.error(e); }
+  }
+
   function safeUiCall(fn){
     try { if (typeof fn === "function") fn(); }
     catch (err) { console.error(err); }
@@ -2311,6 +2342,14 @@ if (!state.features) state.features = { sruEnabled: false };
   // Ensure initial tab is consistent with markup (first .tab.active)
   const initial = (tabs.find(b => b.classList.contains("active"))?.dataset?.tab) || "vouchers";
   activateTab(initial);
+
+  // Keep year selectors in sync (top pill <-> vouchers list)
+  if (yearPillSelect){
+    yearPillSelect.addEventListener("change", ()=> setActiveYear(yearPillSelect.value));
+  }
+  if (yearSelect){
+    yearSelect.addEventListener("change", ()=> setActiveYear(yearSelect.value));
+  }
 
   // --- Accounts helpers ---
 
@@ -3131,6 +3170,116 @@ if (!state.features) state.features = { sruEnabled: false };
   let voucherEditorReadOnly = false;
   let viewingVoucherId = null; // when viewing an existing voucher (read-only)
 
+  function renderVouchers(){
+    if (!voucherList) return;
+    const yearId = (yearSelect && yearSelect.value) || state.activeYearId;
+    const list = (state.vouchers || []).filter(v => (v.yearId || "") === yearId);
+    list.sort((a,b)=>{
+      const ad = (a.date || "");
+      const bd = (b.date || "");
+      if (ad !== bd) return ad.localeCompare(bd, "sv");
+      const as = (a.series || "");
+      const bs = (b.series || "");
+      if (as !== bs) return as.localeCompare(bs, "sv");
+      const an = Number(a.no);
+      const bn = Number(b.no);
+      if (Number.isFinite(an) && Number.isFinite(bn) && an !== bn) return an - bn;
+      return String(a.no||"").localeCompare(String(b.no||""), "sv");
+    });
+
+    voucherList.innerHTML = "";
+    if (!list.length){
+      const empty = document.createElement("div");
+      empty.className = "muted small";
+      empty.textContent = "Inga verifikationer i detta år.";
+      voucherList.appendChild(empty);
+      return;
+    }
+
+    list.forEach(v=>{
+      const div = document.createElement("div");
+      div.className = "item";
+      const title = `${(v.series||"")}${(v.no||"")} · ${v.date || ""} · ${(v.text||"").trim() || "(utan text)"}`;
+      const meta = `Reg: ${v.regDate || ""}${v.sign ? " · Sign: " + v.sign : ""}${v.correctionOf ? " · Rättelse av: " + v.correctionOf : ""}`;
+      div.innerHTML = `
+        <div class="top">
+          <div>
+            <div class="title">${escapeHtml(title)}</div>
+            <div class="meta">${escapeHtml(meta)}</div>
+          </div>
+          <div class="row">
+            <button type="button" class="btn secondary" data-act="open" data-id="${escapeAttr(v.id)}">Öppna</button>
+            <button type="button" class="btn danger" data-act="del" data-id="${escapeAttr(v.id)}">Ta bort</button>
+          </div>
+        </div>
+      `;
+      voucherList.appendChild(div);
+    });
+  }
+
+  let voucherListWired = false;
+  function wireVoucherEvents(){
+    if (btnNewVoucher) btnNewVoucher.addEventListener("click", (e)=>{ e.preventDefault(); newVoucher(); });
+    if (btnAddLine) btnAddLine.addEventListener("click", (e)=>{ e.preventDefault(); if (voucherEditorReadOnly) return; currentLines.push(makeLine()); renderLines(); updateBalanceBadge(); });
+    if (btnClearVoucher) btnClearVoucher.addEventListener("click", async (e)=>{ e.preventDefault(); if (!(await confirmAsync("Rensa verifikationen?"))) return; newVoucher(); });
+    if (btnSaveVoucher) btnSaveVoucher.addEventListener("click", (e)=>{ e.preventDefault(); saveVoucher(); });
+    if (btnRefresh) btnRefresh.addEventListener("click", (e)=>{ e.preventDefault(); renderVouchers(); });
+
+    if (btnFillExample) btnFillExample.addEventListener("click", async (e)=>{
+      e.preventDefault();
+      if (!(await confirmAsync("Skapa exempelverifikationer A76–A79 i valt år?"))) return;
+      const yearId = (yearSelect && yearSelect.value) || state.activeYearId;
+      const date = todayISO();
+      const cash = state.accounts["1930"] ? "1930" : (Object.keys(state.accounts)[0] || "");
+      const other = state.accounts["4010"] ? "4010" : (Object.keys(state.accounts)[1] || cash || "");
+      const defs = [
+        { no:"76", text:"Exempel: köp", amount: 1000 },
+        { no:"77", text:"Exempel: försäljning", amount: 1250 },
+        { no:"78", text:"Exempel: avgift", amount: 99 },
+        { no:"79", text:"Exempel: justering", amount: 250 },
+      ];
+      let added = 0;
+      defs.forEach(d=>{
+        const exists = (state.vouchers||[]).some(v=>v.yearId===yearId && (v.series||"")==="A" && String(v.no||"")===d.no);
+        if (exists) return;
+        const lines = [
+          { account: other, text: d.text, amount: Math.round(d.amount*100)/100 },
+          { account: cash, text: d.text, amount: -Math.round(d.amount*100)/100 },
+        ];
+        state.vouchers.push({
+          id: crypto.randomUUID(),
+          yearId,
+          series: "A",
+          no: d.no,
+          date,
+          text: d.text,
+          regDate: date,
+          sign: state.company.defaultSign || "",
+          lines,
+          correctionOf: null
+        });
+        added++;
+      });
+      save();
+      renderVouchers();
+      showToast(added ? `Skapade ${added} exempelverifikationer.` : "Exempelverifikationerna fanns redan.", 4500);
+    });
+
+    if (voucherList && !voucherListWired){
+      voucherListWired = true;
+      voucherList.addEventListener("click", async (e)=>{
+        const b = e.target && e.target.closest ? e.target.closest("button[data-act]") : null;
+        if (!b) return;
+        const act = b.dataset.act;
+        const id = b.dataset.id;
+        if (!id) return;
+        if (act === "open") viewVoucherToEditor(id);
+        if (act === "del") await deleteVoucher(id);
+        renderVouchers();
+      });
+    }
+  }
+
 
   function newVoucher(){
     editingVoucherId = null;
@@ -3346,6 +3495,7 @@ if (!state.features) state.features = { sruEnabled: false };
     state.vouchers.sort((a,b)=> (a.yearId+b.series+a.no+a.date).localeCompare(b.yearId+a.series+b.no+b.date, "sv"));
     save();
     newVoucher();
+    renderVouchers();
   }
 
   function viewVoucherToEditor(id){
@@ -3383,6 +3533,7 @@ if (!state.features) state.features = { sruEnabled: false };
     if (!(await confirmAsync("Ta bort verifikationen?"))) return;
     state.vouchers = state.vouchers.filter(v => v.id !== id);
     save();
+    if (viewingVoucherId === id) newVoucher();
   }
 
 
@@ -4183,6 +4334,10 @@ try { if (yearSelect) yearSelect.value = state.activeYearId; } catch (e){ consol
 try { if (vDate) vDate.value = todayISO(); } catch (e){ console.error(e); }
 
 try { if (typeof newVoucher === "function") newVoucher(); } catch (e){ console.error(e); }
+
+// Voucher wiring
+try { if (typeof wireVoucherEvents === "function") wireVoucherEvents(); } catch (e){ console.error(e); }
+try { if (typeof renderVouchers === "function") renderVouchers(); } catch (e){ console.error(e); }
 
 // Invoices init
 state.customers = state.customers || {};

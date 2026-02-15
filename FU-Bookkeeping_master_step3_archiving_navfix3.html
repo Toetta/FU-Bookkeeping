@@ -658,19 +658,6 @@
 <section id="tab-export" hidden>
       <div class="grid two">
         <div class="card">
-          <h2>Backup (JSON)</h2>
-          <div class="row" style="gap:10px; flex-wrap:wrap;">
-            <button class="btn" id="btnExportJson">Ladda ner backup.json</button>
-            <label class="btn secondary" style="display:inline-flex; align-items:center; gap:8px; cursor:pointer;">
-              Importera JSON
-              <input id="jsonImport" type="file" accept="application/json" hidden />
-            </label>
-            <button class="btn danger" id="btnWipe">Rensa ALL data</button>
-          </div>
-          <p class="muted small" style="margin-top:10px;">Tips: ta en backup innan du gör bokslutsverifikationer.</p>
-        </div>
-
-        <div class="card">
           <h2>SIE-export (Typ 4)</h2>
           <div class="row" style="gap:10px;">
             <select id="sieYearSelect"></select>
@@ -680,8 +667,9 @@
             Exporten följer SIE 4B-principerna (#VER/#TRANS, samt #IB/#UB för balanskonto). Om mottagande program är super-strikt med teckenkodning (PC8/CP437) kan du behöva spara om filen via en editor som kan konvertera encoding.
           </p>
 
-          <div style="height:1px; background:rgba(34,48,68,.8); margin:12px 0;"></div>
+        </div>
 
+        <div class="card">
           <h2>SIE-import</h2>
           <div class="row" style="gap:10px; flex-wrap:wrap;">
             <select id="sieImportEncoding" title="Teckenkodning">
@@ -701,32 +689,7 @@
           <p class="muted small" style="margin-top:10px;">
             Importen läser #KONTO, #RAR, #VER/#TRANS (objekt ignoreras). Tips: om importen blir konstig, testa att byta teckenkodning (många SIE är PC8/CP437).
           </p>
-        
-          <div style="height:1px; background:rgba(34,48,68,.8); margin:12px 0;"></div>
-
-          <h2>Arkivering (årspaket)</h2>
-          <div class="row" style="gap:10px; flex-wrap:wrap;">
-            <select id="archiveYearSelect" aria-label="Räkenskapsår för arkiv"></select>
-            <button class="btn" id="btnMakeArchive">Skapa arkivpaket</button>
-          </div>
-          <p class="muted small" style="margin-top:10px;">
-            Skapar en fryst export för valt år (kontoplan, verifikationer, fakturor + relevanta register) samt en SHA-256 checksumma.
-            Spara båda filerna på ett säkert ställe (t.ex. skrivskyddad plats / offline-kopia). Programmet kan inte garantera arkivering om du bara har localStorage.
-          </p>
-
-          <div class="row" style="gap:10px; flex-wrap:wrap;">
-            <label class="btn secondary" style="display:inline-flex; align-items:center; gap:8px; cursor:pointer;">
-              Välj arkiv-JSON
-              <input id="archiveImportJson" type="file" accept="application/json" hidden />
-            </label>
-            <label class="btn secondary" style="display:inline-flex; align-items:center; gap:8px; cursor:pointer;">
-              Välj .sha256 (valfritt)
-              <input id="archiveImportSha" type="file" accept="text/plain" hidden />
-            </label>
-            <button class="btn secondary" id="btnVerifyArchive">Verifiera arkiv</button>
-          </div>
-          <div id="archiveVerifyResult" class="muted small" style="margin-top:10px;"></div>
-</div>
+        </div>
       </div>
     </section>
 
@@ -945,6 +908,44 @@
           <p class="muted small" style="margin-top:10px;">
             Detta använder File System Access API (Chrome/Edge) och fungerar i <b>secure context</b> (HTTPS eller localhost). Välj en fil i en Google Drive-synkad mapp så syncas den av Drive for desktop.
           </p>
+        </div>
+
+        <div class="card">
+          <h2>Backup (JSON)</h2>
+          <div class="row" style="gap:10px; flex-wrap:wrap;">
+            <button class="btn" id="btnExportJson">Ladda ner backup.json</button>
+            <label class="btn secondary" style="display:inline-flex; align-items:center; gap:8px; cursor:pointer;">
+              Importera JSON
+              <input id="jsonImport" type="file" accept="application/json" hidden />
+            </label>
+            <button class="btn danger" id="btnWipe">Rensa ALL data</button>
+          </div>
+          <p class="muted small" style="margin-top:10px;">Tips: ta en backup innan du gör bokslutsverifikationer.</p>
+        </div>
+
+        <div class="card">
+          <h2>Arkivering (årspaket)</h2>
+          <div class="row" style="gap:10px; flex-wrap:wrap;">
+            <select id="archiveYearSelect" aria-label="Räkenskapsår för arkiv"></select>
+            <button class="btn" id="btnMakeArchive">Skapa arkivpaket</button>
+          </div>
+          <p class="muted small" style="margin-top:10px;">
+            Skapar en fryst export för valt år (kontoplan, verifikationer, fakturor + relevanta register) samt en SHA-256 checksumma.
+            Spara båda filerna på ett säkert ställe (t.ex. skrivskyddad plats / offline-kopia). Programmet kan inte garantera arkivering om du bara har localStorage.
+          </p>
+
+          <div class="row" style="gap:10px; flex-wrap:wrap;">
+            <label class="btn secondary" style="display:inline-flex; align-items:center; gap:8px; cursor:pointer;">
+              Välj arkiv-JSON
+              <input id="archiveImportJson" type="file" accept="application/json" hidden />
+            </label>
+            <label class="btn secondary" style="display:inline-flex; align-items:center; gap:8px; cursor:pointer;">
+              Välj .sha256 (valfritt)
+              <input id="archiveImportSha" type="file" accept="text/plain" hidden />
+            </label>
+            <button class="btn secondary" id="btnVerifyArchive">Verifiera arkiv</button>
+          </div>
+          <div id="archiveVerifyResult" class="muted small" style="margin-top:10px;"></div>
         </div>
       </div>
     </section>

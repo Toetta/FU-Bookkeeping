@@ -308,6 +308,10 @@
               <input id="accountSearch" placeholder="Sök (konto eller namn)" />
               <button class="btn danger" id="btnResetDemo">Återställ demo-kontoplan</button>
               <button class="btn secondary" id="btnFixChars" title="Försöker rätta vanliga teckenkodningsfel (Ã¥→å osv).">Fixa ÅÄÖ</button>
+              <label class="btn secondary" style="display:inline-flex; align-items:center; gap:8px; cursor:pointer;" title="Välj en standardlista (CSV/JSON) för att auto-fixa konton som innehåller \"�\".">
+                Standardlista
+                <input id="stdAccountsFile" type="file" accept=".json,.csv,.txt" hidden />
+              </label>
             </div>
           </div>
           <div style="overflow:auto;">
@@ -1307,12 +1311,11 @@
     if (wipe && !(await confirmAsync("Rensa innan import? (Rekommenderas endast om du vill ersätta allt.)"))) return;
 
     const buf = await file.arrayBuffer();
-    let txt = "";
-    try {
-      txt = new TextDecoder(String(encoding || "utf-8")).decode(buf);
-    } catch (e){
-      console.error(e);
-      txt = new TextDecoder("utf-8").decode(buf);
+    const preferred = String(encoding || "utf-8");
+    const dec = decodeWithBestEncoding(buf, preferred);
+    const txt = dec.text;
+    if (dec.enc && String(dec.enc) !== String(preferred)){
+      showToast(`Teckenkodning: använde ${dec.enc} (i stället för ${preferred}) för att undvika "�".`, 6500);
     }
 
     if (wipe){
@@ -2077,6 +2080,7 @@ if (!d.features) d.features = { sruEnabled: false };
   const btnAddAccount = document.getElementById("btnAddAccount");
   const btnResetDemo = document.getElementById("btnResetDemo");
   const btnFixChars = document.getElementById("btnFixChars");
+  const stdAccountsFile = document.getElementById("stdAccountsFile");
   // Reports (Rapportgenerator)
   const rptYearSelect = document.getElementById("rptYearSelect");
   const rptFrom = document.getElementById("rptFrom");
@@ -2417,6 +2421,148 @@ if (!d.features) d.features = { sruEnabled: false };
     return out;
   }
 
+  const STD_ACCOUNTS_KEY = "FU_STD_ACCOUNTS_MAP_V1";
+
+  function loadStdAccountsMap(){
+    try {
+      const raw = localStorage.getItem(STD_ACCOUNTS_KEY);
+      if (!raw) return null;
+      const obj = JSON.parse(raw);
+      return (obj && typeof obj === "object") ? obj : null;
+    } catch {
+      return null;
+    }
+  }
+  function saveStdAccountsMap(map){
+    try {
+      localStorage.setItem(STD_ACCOUNTS_KEY, JSON.stringify(map || {}));
+      return true;
+    } catch (e){
+      console.error(e);
+      return false;
+    }
+  }
+
+  function normalizeStdAccountsMap(map){
+    const out = {};
+    if (!map) return out;
+    if (Array.isArray(map)){
+      for (const it of map){
+        if (!it) continue;
+        const no = String(it.no ?? it.account ?? it.konto ?? it.nr ?? "").trim();
+        const name = String(it.name ?? it.namn ?? it.title ?? "").trim();
+        if (no && name) out[no] = name;
+      }
+      return out;
+    }
+    if (typeof map === "object"){
+      for (const k of Object.keys(map)){
+        const v = map[k];
+        const no = String(k || "").trim();
+        const name = (typeof v === "string") ? v : (v && typeof v === "object" ? String(v.name ?? v.namn ?? "").trim() : "");
+        if (no && name) out[no] = name;
+      }
+    }
+    return out;
+  }
+
+  function parseStdAccountsText(txt){
+    const s = String(txt || "").trim();
+    if (!s) return {};
+    // JSON object/array support
+    if (s.startsWith("{") || s.startsWith("[")){
+      const obj = JSON.parse(s);
+      return normalizeStdAccountsMap(obj);
+    }
+
+    // CSV / TXT: konto;namn or konto,namn or tab
+    const out = {};
+    const lines = s.split(/\r?\n/);
+    for (const raw of lines){
+      const line = raw.trim();
+      if (!line) continue;
+      if (line.startsWith("#")) continue;
+      // detect delimiter
+      const delim = line.includes(";") ? ";" : (line.includes("\t") ? "\t" : ",");
+      const parts = line.split(delim);
+      if (parts.length < 2) continue;
+      const no = String(parts[0] || "").trim().replace(/^"|"$/g, "");
+      const name = String(parts.slice(1).join(delim) || "").trim().replace(/^"|"$/g, "");
+      if (!no || !name) continue;
+      // skip header rows
+      const low = no.toLowerCase();
+      if (low === "konto" || low === "account" || low === "nr") continue;
+      out[no] = name;
+    }
+    return out;
+  }
+
+  function countReplacementChars(s){
+    // U+FFFD replacement character means decoding already lost information.
+    return (String(s ?? "").match(/\uFFFD/g) || []).length;
+  }
+
+  function decodeWithBestEncoding(buf, preferredEncoding){
+    const preferred = String(preferredEncoding || "utf-8").trim() || "utf-8";
+    const candidates = [preferred, "windows-1252", "ibm437", "utf-8"].filter((v, i, a)=> a.indexOf(v) === i);
+    let best = { enc: preferred, text: "", bad: Number.POSITIVE_INFINITY };
+    for (const enc of candidates){
+      try {
+        const text = new TextDecoder(enc).decode(buf);
+        const bad = countReplacementChars(text);
+        if (bad < best.bad){
+          best = { enc, text, bad };
+          if (bad === 0) break;
+        }
+      } catch (e){
+        // ignore unsupported encodings
+      }
+    }
+    return best;
+  }
+
+  function extractAccountsFromSieText(txt){
+    const imported = {};
+    const lines = String(txt || "").split(/\r?\n/);
+    for (const rawLine of lines){
+      const line = rawLine.trim();
+      if (!line || !line.startsWith("#")) continue;
+      if (!line.startsWith("#KONTO")) continue;
+      const t = sieTokens(line);
+      if (t[0] !== "#KONTO" || t.length < 3) continue;
+      const acc = String(t[1] || "").trim();
+      const name = String(t[2] || "").trim();
+      if (acc) imported[acc] = name;
+    }
+    return imported;
+  }
+
+  async function repairAccountNamesFromSieFile(file, preferredEncoding){
+    if (!file) return { updated: 0, added: 0, encoding: "", bad: 0 };
+    const buf = await file.arrayBuffer();
+    const dec = decodeWithBestEncoding(buf, preferredEncoding);
+    const imported = extractAccountsFromSieText(dec.text);
+
+    state.accounts = state.accounts || {};
+    let updated = 0;
+    let added = 0;
+    for (const acc of Object.keys(imported)){
+      const name = imported[acc];
+      if (state.accounts[acc]){
+        if (String(state.accounts[acc].name || "") !== name){
+          state.accounts[acc].name = name;
+          updated++;
+        }
+        if (!state.accounts[acc].type) state.accounts[acc].type = guessTypeFromAccountNo(acc);
+      } else {
+        state.accounts[acc] = { name, type: guessTypeFromAccountNo(acc) };
+        added++;
+      }
+    }
+
+    return { updated, added, encoding: dec.enc, bad: dec.bad };
+  }
+
   function renderAccounts(){
     if (!accountsTbody) return;
     state.accounts = state.accounts || {};
@@ -2520,11 +2666,13 @@ if (!d.features) d.features = { sruEnabled: false };
     }
 
     if (btnFixChars){
-      btnFixChars.addEventListener("click", (e)=>{
+      btnFixChars.addEventListener("click", async (e)=>{
         e.preventDefault();
         state.accounts = state.accounts || {};
         let changed = 0;
         let remainingReplacement = 0;
+        let standardized = 0;
+        let standardizedStd = 0;
         for (const no of Object.keys(state.accounts)){
           const a = state.accounts[no];
           if (!a) continue;
@@ -2536,21 +2684,124 @@ if (!d.features) d.features = { sruEnabled: false };
           }
           if (String(a.name || "").includes("\uFFFD")) remainingReplacement++;
         }
+
+        // If some names still contain U+FFFD and we have a known standardized name
+        // (from our built-in minimal kontoplan), use that as a safe auto-correct.
+        if (remainingReplacement){
+          const std = demoAccounts();
+          for (const no of Object.keys(state.accounts)){
+            const a = state.accounts[no];
+            if (!a || !String(a.name||"").includes("\uFFFD")) continue;
+            if (std[no] && std[no].name){
+              a.name = std[no].name;
+              if (!a.type && std[no].type) a.type = std[no].type;
+              standardized++;
+            }
+          }
+          if (standardized){
+            // re-count after standardization
+            remainingReplacement = 0;
+            for (const no of Object.keys(state.accounts||{})){
+              const a = state.accounts[no];
+              if (a && String(a.name||"").includes("\uFFFD")) remainingReplacement++;
+            }
+          }
+        }
+
+        // If U+FFFD still remains, try user-provided standard list (CSV/JSON)
+        if (remainingReplacement){
+          const stdMap = loadStdAccountsMap();
+          if (stdMap){
+            for (const no of Object.keys(state.accounts)){
+              const a = state.accounts[no];
+              if (!a || !String(a.name||"").includes("\uFFFD")) continue;
+              const stdName = stdMap[String(no)] || stdMap[String(no).trim()];
+              if (stdName){
+                a.name = String(stdName);
+                if (!a.type) a.type = guessTypeFromAccountNo(no);
+                standardizedStd++;
+              }
+            }
+            if (standardizedStd){
+              remainingReplacement = 0;
+              for (const no of Object.keys(state.accounts||{})){
+                const a = state.accounts[no];
+                if (a && String(a.name||"").includes("\uFFFD")) remainingReplacement++;
+              }
+            }
+          }
+        }
+
+        // If U+FFFD remains, the real fix is to decode the ORIGINAL bytes correctly.
+        // We can do that if user has selected the SIE file (Import/Export → Välj SIE-fil).
+        if (remainingReplacement && sieImportFile && sieImportFile.files && sieImportFile.files[0]){
+          try {
+            const res = await repairAccountNamesFromSieFile(
+              sieImportFile.files[0],
+              (sieImportEncoding && sieImportEncoding.value) || "utf-8"
+            );
+            // Re-count after SIE repair
+            remainingReplacement = 0;
+            for (const no of Object.keys(state.accounts||{})){
+              const a = state.accounts[no];
+              if (a && String(a.name||"").includes("\uFFFD")) remainingReplacement++;
+            }
+
+            save();
+            renderAccounts();
+            try { if (typeof renderLines === "function") renderLines(); } catch {}
+
+            const msg = `Uppdaterade ${res.updated} kontonamn${res.added?` (+${res.added} nya konton)`:""} från SIE (${res.encoding}).`;
+            if (remainingReplacement){
+              showToast(msg + ` Obs: ${remainingReplacement} konton innehåller fortfarande "�" (kan kräva annan encoding eller manuell ändring).`, 8000);
+            } else {
+              showToast(msg, 4500);
+            }
+            return;
+          } catch (err){
+            console.error(err);
+            // fall through to normal save + message
+          }
+        }
+
         if (changed){
           save();
           renderAccounts();
           try { if (typeof renderLines === "function") renderLines(); } catch {}
           if (remainingReplacement){
-            showToast(`Fixade tecken i ${changed} konton. Obs: ${remainingReplacement} konton innehåller fortfarande \"�\" och behöver skrivas om manuellt (kontonamn-info är redan förlorad).`, 6500);
+            showToast(`Fixade tecken i ${changed} konton${standardized?` (+${standardized} standardiserade)`:""}${standardizedStd?` (+${standardizedStd} från standardlista)`:""}. För att reparera "�": gå till Import/Export, välj original SIE-fil, och klicka "Fixa ÅÄÖ" igen (appen kan då läsa #KONTO med rätt encoding).`, 8000);
           } else {
-            showToast(`Fixade tecken i ${changed} konton.`, 3500);
+            showToast(`Fixade tecken i ${changed} konton${standardized?` (+${standardized} standardiserade)`:""}${standardizedStd?` (+${standardizedStd} från standardlista)`:""}.`, 3500);
           }
         } else {
           if (remainingReplacement){
-            showToast(`Hittade \"�\" i ${remainingReplacement} konton men kan inte auto-fixa. Skriv om kontonamnet manuellt genom att lägga till kontot igen.`, 6500);
+            showToast(`Hittade "�" i ${remainingReplacement} konton. För att fixa automatiskt: (1) välj original SIE-fil under Import/Export, eller (2) ladda en Standardlista i Kontoplan och klicka "Fixa ÅÄÖ" igen.`, 8000);
           } else {
             showToast("Inga teckenfel hittades.", 2500);
           }
+        }
+      });
+    }
+
+    if (stdAccountsFile){
+      stdAccountsFile.addEventListener("change", async ()=>{
+        const f = stdAccountsFile.files && stdAccountsFile.files[0];
+        if (!f) return;
+        try {
+          const txt = await f.text();
+          const map = parseStdAccountsText(txt);
+          const keys = Object.keys(map);
+          if (!keys.length){
+            showToast("Standardlista: ingen data hittades (CSV/JSON).", 6500);
+            return;
+          }
+          const ok = saveStdAccountsMap(map);
+          showToast(ok ? `Standardlista laddad (${keys.length} konton). Klicka "Fixa ÅÄÖ" för att ersätta konton med "�".` : "Kunde inte spara standardlistan (localStorage).", ok ? 6500 : 8000);
+        } catch (err){
+          console.error(err);
+          showToast("Standardlista: kunde inte läsa filen. Prova CSV (konto;namn) eller JSON.", 8000);
+        } finally {
+          stdAccountsFile.value = "";
         }
       });
     }

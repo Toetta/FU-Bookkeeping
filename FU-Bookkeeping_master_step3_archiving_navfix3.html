@@ -668,29 +668,6 @@
             <button class="btn danger" id="btnWipe">Rensa ALL data</button>
           </div>
           <p class="muted small" style="margin-top:10px;">Tips: ta en backup innan du gör bokslutsverifikationer.</p>
-
-          <div style="height:1px; background:rgba(34,48,68,.8); margin:12px 0;"></div>
-
-          <h2>Fil-synk (Drive-mapp, valfritt)</h2>
-          <div class="row" style="gap:10px; flex-wrap:wrap;">
-            <button class="btn" id="btnConnectFile">Välj befintlig datafil</button>
-            <button class="btn secondary" id="btnCreateFile">Skapa ny datafil</button>
-            <button class="btn secondary" id="btnLoadFromFile" disabled>Läs in</button>
-            <button class="btn secondary" id="btnSaveToFile" disabled>Spara nu</button>
-            <button class="btn danger" id="btnDisconnectFile" disabled>Koppla från</button>
-          </div>
-          <div class="row" style="gap:10px; margin-top:10px; align-items:center;">
-            <label class="muted small" style="display:flex; align-items:center; gap:8px;">
-              <input id="fsAutosave" type="checkbox" /> Autospara till fil
-            </label>
-            <label class="muted small" style="display:flex; align-items:center; gap:8px;">
-              <input id="fsRequireFile" type="checkbox" /> Kräv datafil (ingen bokföring utan fil)
-            </label>
-            <span id="fsStatus" class="status bad">Inte ansluten</span>
-          </div>
-          <p class="muted small" style="margin-top:10px;">
-            Detta använder File System Access API (Chrome/Edge) och fungerar i <b>secure context</b> (HTTPS eller localhost). Välj en fil i en Google Drive-synkad mapp så syncas den av Drive for desktop.
-          </p>
         </div>
 
         <div class="card">
@@ -946,6 +923,29 @@
             </table>
           </div>
         </div>
+
+        <div class="card">
+          <h2>Fil-synk (Drive-mapp, valfritt)</h2>
+          <div class="row" style="gap:10px; flex-wrap:wrap;">
+            <button class="btn" id="btnConnectFile">Välj befintlig datafil</button>
+            <button class="btn secondary" id="btnCreateFile">Skapa ny datafil</button>
+            <button class="btn secondary" id="btnLoadFromFile" disabled>Läs in</button>
+            <button class="btn secondary" id="btnSaveToFile" disabled>Spara nu</button>
+            <button class="btn danger" id="btnDisconnectFile" disabled>Koppla från</button>
+          </div>
+          <div class="row" style="gap:10px; margin-top:10px; align-items:center; flex-wrap:wrap;">
+            <label class="muted small" style="display:flex; align-items:center; gap:8px;">
+              <input id="fsAutosave" type="checkbox" /> Autospara till fil
+            </label>
+            <label class="muted small" style="display:flex; align-items:center; gap:8px;">
+              <input id="fsRequireFile" type="checkbox" /> Kräv datafil (ingen bokföring utan fil)
+            </label>
+            <span id="fsStatus" class="status bad">Inte ansluten</span>
+          </div>
+          <p class="muted small" style="margin-top:10px;">
+            Detta använder File System Access API (Chrome/Edge) och fungerar i <b>secure context</b> (HTTPS eller localhost). Välj en fil i en Google Drive-synkad mapp så syncas den av Drive for desktop.
+          </p>
+        </div>
       </div>
     </section>
       </div>
@@ -992,6 +992,297 @@
     a.click();
     a.remove();
     setTimeout(()=> URL.revokeObjectURL(a.href), 1500);
+  }
+
+  function ymd8ToIso(s){
+    const t = String(s || "").trim();
+    if (!/^\d{8}$/.test(t)) return "";
+    return `${t.slice(0,4)}-${t.slice(4,6)}-${t.slice(6,8)}`;
+  }
+  function isoToYmd8(iso){
+    const t = String(iso || "").trim();
+    if (/^\d{8}$/.test(t)) return t;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t.replaceAll("-", "");
+    return "";
+  }
+  function sieQuote(s){
+    return `"${String(s ?? "").replaceAll('"', "''")}"`;
+  }
+  function sieTokens(line){
+    const out = [];
+    const re = /"([^"]*)"|(\S+)/g;
+    let m;
+    while ((m = re.exec(String(line || ""))) !== null){
+      out.push(m[1] != null ? m[1] : m[2]);
+    }
+    return out;
+  }
+
+  function normalizeImportedState(d){
+    const base = defaultData();
+    const o = (d && typeof d === "object") ? d : base;
+
+    if (!o.company) o.company = base.company;
+    const cdef = base.company;
+    o.company = o.company || {};
+    for (const k of Object.keys(cdef)) if (o.company[k] == null) o.company[k] = cdef[k];
+
+    if (!o.features) o.features = { sruEnabled: false };
+    if (typeof o.features.sruEnabled !== "boolean") o.features.sruEnabled = false;
+
+    if (!o.fileSync) o.fileSync = { autosave: true, requireFile: false };
+    if (typeof o.fileSync.autosave !== "boolean") o.fileSync.autosave = true;
+    if (typeof o.fileSync.requireFile !== "boolean") o.fileSync.requireFile = false;
+
+    if (!Array.isArray(o.fiscalYears)) o.fiscalYears = base.fiscalYears;
+    if (!o.activeYearId) o.activeYearId = o.fiscalYears[0]?.id ?? String(new Date().getFullYear());
+    if (!o.accounts) o.accounts = demoAccounts();
+    if (!Array.isArray(o.vouchers)) o.vouchers = [];
+    if (!o.customers) o.customers = {};
+    if (!o.suppliers) o.suppliers = {};
+    if (!Array.isArray(o.invoices)) o.invoices = [];
+    if (!o.locks || typeof o.locks !== "object") o.locks = {};
+    if (!o.compliance) o.compliance = { immutableVouchers: true };
+    if (!Array.isArray(o.auditLog)) o.auditLog = [];
+    if (!o.sru) o.sru = { enabled:false, periodSuffix:"P4", neMappings: [] };
+    if (typeof o.sru.enabled !== "boolean") o.sru.enabled = false;
+    if (!o.sru.periodSuffix) o.sru.periodSuffix = "P4";
+    if (!Array.isArray(o.sru.neMappings)) o.sru.neMappings = [];
+    return o;
+  }
+
+  function exportBackupJson(){
+    const json = JSON.stringify(state, null, 2) + "\n";
+    downloadText("backup.json", json, "application/json");
+  }
+
+  async function importBackupJsonFile(file){
+    if (!file) return;
+    const txt = await file.text();
+    const d = JSON.parse(txt);
+    state = normalizeImportedState(d);
+    try { fillYearSelectors(); } catch (e){ console.error(e); }
+    save();
+    try { newVoucher(); } catch (e){ console.error(e); }
+    try { newInvoice(); } catch (e){ console.error(e); }
+    try { renderAll(); } catch (e){ console.error(e); }
+    alert("Import klar.");
+  }
+
+  async function wipeAllData(){
+    if (!confirm("Rensa ALL data? Detta kan inte ångras. Ta en backup först.")) return;
+    try { localStorage.removeItem(STORAGE_KEY); } catch (e){ console.error(e); }
+    try { await fsDisconnect(); } catch (e){ /* ignore */ }
+    state = defaultData();
+    try { fillYearSelectors(); } catch (e){ console.error(e); }
+    save();
+    try { newVoucher(); } catch (e){ console.error(e); }
+    try { newInvoice(); } catch (e){ console.error(e); }
+    try { renderAll(); } catch (e){ console.error(e); }
+    alert("All data rensad.");
+  }
+
+  function exportSie4(yearId){
+    const yid = String(yearId || state.activeYearId || "").trim();
+    if (!yid) return alert("Välj år.");
+
+    const fy = (state.fiscalYears||[]).find(y=>String(y.id)===yid) || null;
+    const vs = (state.vouchers||[])
+      .filter(v => String(v.yearId) === yid)
+      .slice()
+      .sort((a,b)=> (a.date+a.series+a.no).localeCompare(b.date+b.series+b.no, "sv"));
+
+    const lines = [];
+    lines.push("#FLAGGA 0");
+    lines.push(`#PROGRAM ${sieQuote("FU-BOOKKEEPING")} ${APP_VERSION}`);
+    lines.push(`#GEN ${isoToYmd8(todayISO())}`);
+    lines.push("#SIETYP 4");
+    if (state.company?.name) lines.push(`#FNAMN ${sieQuote(state.company.name)}`);
+    if (state.company?.orgnr) lines.push(`#ORGNR ${state.company.orgnr}`);
+    if (fy && fy.start && fy.end) lines.push(`#RAR 0 ${isoToYmd8(fy.start)} ${isoToYmd8(fy.end)}`);
+
+    Object.keys(state.accounts||{}).sort((a,b)=>a.localeCompare(b,"sv")).forEach(acc=>{
+      const nm = state.accounts[acc]?.name || "";
+      lines.push(`#KONTO ${acc} ${sieQuote(nm)}`);
+    });
+
+    vs.forEach(v=>{
+      const series = (v.series || "A").trim() || "A";
+      const no = (v.no || "").trim() || "0";
+      const dt = isoToYmd8(v.date || "") || isoToYmd8(todayISO());
+      const txt = v.text || "";
+      const sign = v.sign || "";
+      lines.push(`#VER ${series} ${no} ${dt} ${sieQuote(txt)} ${sieQuote(sign)}`);
+      (v.lines||[]).forEach(l=>{
+        const acc = String(l.account || "").trim();
+        if (!acc) return;
+        const amt = Math.round((Number(l.amount)||0)*100)/100;
+        const amtTxt = (Number.isFinite(amt) ? amt.toFixed(2) : "0.00");
+        const lt = l.text || v.text || "";
+        lines.push(`#TRANS ${acc} {} ${amtTxt} ${dt} ${sieQuote(lt)}`);
+      });
+      lines.push("{");
+      lines.push("}");
+    });
+    lines.push("#END");
+
+    const filename = `SIE4_${yid}.se`;
+    downloadText(filename, lines.join("\n") + "\n", "text/plain");
+  }
+
+  async function importSieFile(file, encoding, wipe){
+    if (!file) return alert("Välj en SIE-fil först.");
+    if (wipe && !confirm("Rensa innan import? (Rekommenderas endast om du vill ersätta allt.)")) return;
+
+    const buf = await file.arrayBuffer();
+    let txt = "";
+    try {
+      txt = new TextDecoder(String(encoding || "utf-8")).decode(buf);
+    } catch (e){
+      console.error(e);
+      txt = new TextDecoder("utf-8").decode(buf);
+    }
+
+    if (wipe){
+      // Keep company defaults but wipe data.
+      const keepCompany = state?.company || defaultData().company;
+      state = defaultData();
+      state.company = { ...state.company, ...keepCompany };
+    }
+
+    state = normalizeImportedState(state);
+
+    const importedAccounts = {};
+    const importedYears = [];
+    const importedVouchers = [];
+
+    let currentYearId = "";
+    let cur = null;
+
+    const flush = ()=>{
+      if (!cur) return;
+      if (!Array.isArray(cur.lines)) cur.lines = [];
+      // skip empty
+      if (!cur.series && !cur.no && !cur.lines.length){ cur = null; return; }
+      if (!cur.id) cur.id = crypto.randomUUID();
+      if (!cur.regDate) cur.regDate = todayISO();
+      if (!cur.sign) cur.sign = state.company?.defaultSign || "";
+      if (!cur.yearId) cur.yearId = currentYearId || (cur.date ? String(cur.date).slice(0,4) : state.activeYearId);
+      importedVouchers.push(cur);
+      cur = null;
+    };
+
+    const lines = String(txt).split(/\r?\n/);
+    for (const rawLine of lines){
+      const line = rawLine.trim();
+      if (!line) continue;
+      if (!line.startsWith("#")) continue;
+
+      const t = sieTokens(line);
+      const tag = t[0];
+
+      if (tag === "#FNAMN" && t[1] != null){
+        state.company = state.company || defaultData().company;
+        state.company.name = String(t.slice(1).join(" ") || "").trim();
+        continue;
+      }
+      if (tag === "#ORGNR" && t[1] != null){
+        state.company = state.company || defaultData().company;
+        state.company.orgnr = String(t[1] || "").trim();
+        continue;
+      }
+
+      if (tag === "#RAR" && t.length >= 4){
+        const start = ymd8ToIso(t[2]);
+        const end = ymd8ToIso(t[3]);
+        const yid = (start ? start.slice(0,4) : "");
+        if (yid){
+          currentYearId = yid;
+          importedYears.push({ id: yid, start: start || `${yid}-01-01`, end: end || `${yid}-12-31` });
+        }
+        continue;
+      }
+
+      if (tag === "#KONTO" && t.length >= 3){
+        const acc = String(t[1] || "").trim();
+        const name = String(t[2] || "").trim();
+        if (acc) importedAccounts[acc] = { name, type: (state.accounts && state.accounts[acc] && state.accounts[acc].type) ? state.accounts[acc].type : "other" };
+        continue;
+      }
+
+      if (tag === "#VER"){
+        flush();
+        const series = String(t[1] || "A").trim() || "A";
+        const no = String(t[2] || "0").trim() || "0";
+        const date = ymd8ToIso(t[3]) || todayISO();
+        const text = (t[4] != null ? String(t[4]) : "").trim();
+        const sign = (t[5] != null ? String(t[5]) : "").trim();
+        const yid = currentYearId || date.slice(0,4);
+        currentYearId = yid;
+        cur = {
+          id: crypto.randomUUID(),
+          yearId: yid,
+          series,
+          no,
+          date,
+          text,
+          regDate: todayISO(),
+          sign,
+          lines: [],
+          correctionOf: null
+        };
+        continue;
+      }
+
+      if (tag === "#TRANS" && cur){
+        const acc = String(t[1] || "").trim();
+        // Find first numeric token after account/optional object token
+        let amt = 0;
+        for (let i = 2; i < t.length; i++){
+          const v = String(t[i] || "");
+          if (v === "{}" || v === "{" || v === "}") continue;
+          const n = Number(v.replace(",", "."));
+          if (Number.isFinite(n)) { amt = n; break; }
+        }
+        const text = (t[t.length-1] != null ? String(t[t.length-1]) : "").trim();
+        if (acc){
+          cur.lines.push({ account: acc, text, amount: Math.round(amt*100)/100 });
+        }
+        continue;
+      }
+    }
+    flush();
+
+    // Merge fiscal years
+    state.fiscalYears = state.fiscalYears || [];
+    importedYears.forEach(y=>{
+      if (!y || !y.id) return;
+      const exists = state.fiscalYears.find(x=>String(x.id)===String(y.id));
+      if (!exists) state.fiscalYears.push(y);
+    });
+    state.fiscalYears.sort((a,b)=>String(a.id).localeCompare(String(b.id),"sv"));
+
+    // Merge accounts
+    state.accounts = state.accounts || {};
+    Object.entries(importedAccounts).forEach(([acc, meta])=>{
+      if (!acc) return;
+      state.accounts[acc] = state.accounts[acc] || { name: meta.name || "", type: meta.type || "other" };
+      if (meta.name) state.accounts[acc].name = meta.name;
+    });
+
+    // Merge vouchers
+    state.vouchers = state.vouchers || [];
+    importedVouchers.forEach(v=> state.vouchers.push(v));
+
+    // Pick active year
+    const active = currentYearId || state.activeYearId || state.fiscalYears[0]?.id;
+    if (active) state.activeYearId = active;
+
+    try { fillYearSelectors(); } catch (e){ console.error(e); }
+    save();
+    try { newVoucher(); } catch (e){ console.error(e); }
+    try { renderAll(); } catch (e){ console.error(e); }
+    alert(`SIE-import klar. Importerade ${Object.keys(importedAccounts).length} konton och ${importedVouchers.length} verifikationer.`);
   }
 
   async function sha256Hex(text){
@@ -1623,6 +1914,10 @@ if (!state.features) state.features = { sruEnabled: false };
   let lastReportTitle = "";
 
   const sieYearSelect = document.getElementById("sieYearSelect");
+  const btnExportSie4 = document.getElementById("btnExportSie4");
+  const btnExportJson = document.getElementById("btnExportJson");
+  const jsonImport = document.getElementById("jsonImport");
+  const btnWipe = document.getElementById("btnWipe");
   // Arkivering
   const archiveYearSelect = document.getElementById("archiveYearSelect");
   const btnMakeArchive = document.getElementById("btnMakeArchive");
@@ -1715,6 +2010,7 @@ if (!state.features) state.features = { sruEnabled: false };
 
     if (companyNameEl) companyNameEl.textContent = state.company.name || "FU-BOOKKEEPING";
     renderLogoPreview();
+    try { updateFsUI(); } catch (e){ console.error(e); }
   }
 
   function saveSettings(){
@@ -3735,6 +4031,56 @@ if (invDue) invDue.value = addDays(todayISO(), (state.company.payDays||30));
 wireInvoiceEvents();
 newInvoice();
 renderAll();
+
+// --- Import/Export wiring ---
+if (btnExportJson) btnExportJson.addEventListener("click", (e)=>{ e.preventDefault(); exportBackupJson(); });
+if (jsonImport) jsonImport.addEventListener("change", async (e)=>{
+  const f = jsonImport.files && jsonImport.files[0];
+  if (!f) return;
+  try { await importBackupJsonFile(f); }
+  catch(err){ console.error(err); alert("Kunde inte importera JSON. Se konsolen."); }
+  finally { jsonImport.value = ""; }
+});
+if (btnWipe) btnWipe.addEventListener("click", async (e)=>{ e.preventDefault(); await wipeAllData(); });
+
+if (btnExportSie4) btnExportSie4.addEventListener("click", (e)=>{
+  e.preventDefault();
+  exportSie4((sieYearSelect && sieYearSelect.value) || state.activeYearId);
+});
+if (btnImportSie) btnImportSie.addEventListener("click", async (e)=>{
+  e.preventDefault();
+  const f = sieImportFile && sieImportFile.files && sieImportFile.files[0];
+  try { await importSieFile(f, (sieImportEncoding && sieImportEncoding.value) || "utf-8", !!(sieImportWipe && sieImportWipe.checked)); }
+  catch(err){ console.error(err); alert("Kunde inte importera SIE. Se konsolen."); }
+});
+
+// --- File Sync wiring (UI moved to Settings) ---
+if (btnConnectFile) btnConnectFile.addEventListener("click", async (e)=>{ e.preventDefault(); await fsConnectExisting(); });
+if (btnCreateFile) btnCreateFile.addEventListener("click", async (e)=>{ e.preventDefault(); await fsCreateNew(); });
+if (btnLoadFromFile) btnLoadFromFile.addEventListener("click", async (e)=>{
+  e.preventDefault();
+  try { await fsLoadState(); fillYearSelectors(); renderAll(); alert("Laddade data från fil."); }
+  catch(err){ console.error(err); alert("Kunde inte läsa från fil. Se konsolen."); }
+});
+if (btnSaveToFile) btnSaveToFile.addEventListener("click", async (e)=>{
+  e.preventDefault();
+  try { await fsWriteState(); alert("Sparade till fil."); }
+  catch(err){ console.error(err); alert("Kunde inte spara till fil. Se konsolen."); }
+});
+if (btnDisconnectFile) btnDisconnectFile.addEventListener("click", async (e)=>{ e.preventDefault(); await fsDisconnect(); });
+
+if (fsAutosave) fsAutosave.addEventListener("change", ()=>{ state.fileSync = state.fileSync || { autosave:true, requireFile:false }; state.fileSync.autosave = !!fsAutosave.checked; save(); updateFsUI(); });
+if (fsRequireFile) fsRequireFile.addEventListener("change", ()=>{ state.fileSync = state.fileSync || { autosave:true, requireFile:false }; state.fileSync.requireFile = !!fsRequireFile.checked; save(); updateFsUI(); });
+
+// Restore file handle if previously connected
+idbGet("dataFileHandle").then(h=>{
+  if (h){
+    fsHandle = h;
+    fsLastError = null;
+    updateFsUI();
+  }
+}).catch(()=>{});
+try { updateFsUI(); } catch (e){ /* ignore */ }
 
 
   // --- Arkivering ---

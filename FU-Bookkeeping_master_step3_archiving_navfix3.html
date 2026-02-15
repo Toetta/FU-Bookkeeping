@@ -1935,6 +1935,9 @@ if (!d.features) d.features = { sruEnabled: false };
     if (!state.fileSync) state.fileSync = { autosave: true, requireFile: false };
     if (typeof state.fileSync.requireFile !== "boolean") state.fileSync.requireFile = false;
 
+    // Auto-repair corrupted kontonamn via standardlista (utan SIE)
+    try { if (typeof applyStdAccountsMapRepair === "function") applyStdAccountsMapRepair({ onlyReplacement: true }); } catch (e){ console.error(e); }
+
     save();
   }
 
@@ -2497,6 +2500,32 @@ if (!d.features) d.features = { sruEnabled: false };
     return out;
   }
 
+  function applyStdAccountsMapRepair(opts){
+    const onlyReplacement = (opts && typeof opts.onlyReplacement === "boolean") ? opts.onlyReplacement : true;
+    const stdMap = loadStdAccountsMap();
+    if (!stdMap) return { updated: 0 };
+
+    state.accounts = state.accounts || {};
+    let updated = 0;
+    for (const no of Object.keys(state.accounts)){
+      const a = state.accounts[no];
+      if (!a) continue;
+      const curName = String(a.name || "");
+      if (onlyReplacement && !curName.includes("\uFFFD")) continue;
+
+      const stdName = stdMap[String(no)] || stdMap[String(no).trim()];
+      if (!stdName) continue;
+
+      const nextName = String(stdName);
+      if (curName !== nextName){
+        a.name = nextName;
+        updated++;
+      }
+      if (!a.type) a.type = guessTypeFromAccountNo(no);
+    }
+    return { updated };
+  }
+
   function countReplacementChars(s){
     // U+FFFD replacement character means decoding already lost information.
     return (String(s ?? "").match(/\uFFFD/g) || []).length;
@@ -2796,7 +2825,18 @@ if (!d.features) d.features = { sruEnabled: false };
             return;
           }
           const ok = saveStdAccountsMap(map);
-          showToast(ok ? `Standardlista laddad (${keys.length} konton). Klicka "Fixa ÅÄÖ" för att ersätta konton med "�".` : "Kunde inte spara standardlistan (localStorage).", ok ? 6500 : 8000);
+          if (!ok){
+            showToast("Kunde inte spara standardlistan (localStorage).", 8000);
+            return;
+          }
+
+          const r = applyStdAccountsMapRepair({ onlyReplacement: true });
+          if (r.updated){
+            save();
+            showToast(`Standardlista laddad (${keys.length} konton). Reparerade ${r.updated} konton med "�".`, 8000);
+          } else {
+            showToast(`Standardlista laddad (${keys.length} konton). Inga konton med "�" matchade listan.`, 8000);
+          }
         } catch (err){
           console.error(err);
           showToast("Standardlista: kunde inte läsa filen. Prova CSV (konto;namn) eller JSON.", 8000);
@@ -4802,6 +4842,17 @@ try { if (typeof renderVouchers === "function") renderVouchers(); } catch (e){ c
 
 // Accounts wiring
 try { if (typeof wireAccountEvents === "function") wireAccountEvents(); } catch (e){ console.error(e); }
+
+// Auto-repair already-saved corrupted kontonamn from standardlista (utan SIE)
+try {
+  if (typeof applyStdAccountsMapRepair === "function"){
+    const r = applyStdAccountsMapRepair({ onlyReplacement: true });
+    if (r && r.updated){
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e){ console.error(e); }
+    }
+  }
+} catch (e){ console.error(e); }
+
 try { if (typeof renderAccounts === "function") renderAccounts(); } catch (e){ console.error(e); }
 
 // Invoices init

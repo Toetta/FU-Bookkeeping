@@ -2089,12 +2089,12 @@ if (!state.features) state.features = { sruEnabled: false };
     });
 
     // Lazy renders
-    if (tabKey === "reports") safeUiCall(renderReports);
-    if (tabKey === "accounts") safeUiCall(renderAccounts);
-    if (tabKey === "invoices") safeUiCall(renderInvoices);
-    if (tabKey === "customers") safeUiCall(renderCustomers);
-    if (tabKey === "suppliers") safeUiCall(renderSuppliers);
-    if (tabKey === "settings") safeUiCall(renderSettings);
+    if (tabKey === "reports") safeUiCall(typeof renderReports === "function" ? renderReports : null);
+    if (tabKey === "accounts") safeUiCall(typeof renderAccounts === "function" ? renderAccounts : null);
+    if (tabKey === "invoices") safeUiCall(typeof renderInvoices === "function" ? renderInvoices : null);
+    if (tabKey === "customers") safeUiCall(typeof renderCustomers === "function" ? renderCustomers : null);
+    if (tabKey === "suppliers") safeUiCall(typeof renderSuppliers === "function" ? renderSuppliers : null);
+    if (tabKey === "settings") safeUiCall(typeof renderSettings === "function" ? renderSettings : null);
   }
 
   if (sidebar){
@@ -4030,7 +4030,7 @@ if (invDue) invDue.value = addDays(todayISO(), (state.company.payDays||30));
 
 wireInvoiceEvents();
 newInvoice();
-renderAll();
+try { if (typeof renderAll === "function") renderAll(); } catch (e){ console.error(e); }
 
 // --- Import/Export wiring ---
 if (btnExportJson) btnExportJson.addEventListener("click", (e)=>{ e.preventDefault(); exportBackupJson(); });
@@ -4059,7 +4059,12 @@ if (btnConnectFile) btnConnectFile.addEventListener("click", async (e)=>{ e.prev
 if (btnCreateFile) btnCreateFile.addEventListener("click", async (e)=>{ e.preventDefault(); await fsCreateNew(); });
 if (btnLoadFromFile) btnLoadFromFile.addEventListener("click", async (e)=>{
   e.preventDefault();
-  try { await fsLoadState(); fillYearSelectors(); renderAll(); alert("Laddade data från fil."); }
+  try {
+    await fsLoadState();
+    fillYearSelectors();
+    try { if (typeof renderAll === "function") renderAll(); } catch (e){ console.error(e); }
+    alert("Laddade data från fil.");
+  }
   catch(err){ console.error(err); alert("Kunde inte läsa från fil. Se konsolen."); }
 });
 if (btnSaveToFile) btnSaveToFile.addEventListener("click", async (e)=>{

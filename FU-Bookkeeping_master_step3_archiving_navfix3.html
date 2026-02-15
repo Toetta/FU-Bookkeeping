@@ -113,6 +113,45 @@
     }
     .badge.lock b{ color:var(--text); }
 
+    /* In-app toast (replaces browser alert for success messages) */
+    .toast{
+      position:fixed;
+      top:12px;
+      left:50%;
+      transform:translateX(-50%);
+      z-index:9999;
+      max-width:min(520px, calc(100vw - 24px));
+      background:rgba(17,24,38,.98);
+      color:var(--text);
+      border:1px solid var(--line);
+      border-radius:14px;
+      padding:10px 12px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.25);
+      text-align:center;
+      font-size:13px;
+    }
+
+    /* In-app confirm modal (replaces browser confirm dialogs) */
+    .modal-backdrop{
+      position:fixed;
+      inset:0;
+      z-index:9998;
+      background:rgba(0,0,0,.55);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:12px;
+    }
+    .modal{
+      width:min(520px, calc(100vw - 24px));
+      background:rgba(17,24,38,.98);
+      border:1px solid var(--line);
+      border-radius:16px;
+      padding:14px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.25);
+    }
+    .modal .actions{ display:flex; justify-content:flex-end; gap:10px; margin-top:12px; flex-wrap:wrap; }
+
   </style>
 </head>
 <body>
@@ -962,6 +1001,19 @@
   </div>
 </main>
 
+<div id="appToast" class="toast" hidden role="status" aria-live="polite"></div>
+
+<div id="appConfirm" class="modal-backdrop" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="appConfirmTitle" aria-describedby="appConfirmMessage">
+    <div id="appConfirmTitle" style="font-weight:800; margin-bottom:6px;">Bekräfta</div>
+    <div id="appConfirmMessage" class="muted small"></div>
+    <div class="actions">
+      <button type="button" class="btn secondary" id="appConfirmCancel">Avbryt</button>
+      <button type="button" class="btn danger" id="appConfirmOk">OK</button>
+    </div>
+  </div>
+</div>
+
 <script>
 (function(){
  
@@ -987,6 +1039,85 @@
     } catch { setBoot("JS: fel (konsol)"); }
     try { console.error("Unhandled rejection", ev && ev.reason ? ev.reason : ev); } catch {}
   });
+
+  // In-app toast (used to avoid browser alert header text)
+  const appToast = document.getElementById("appToast");
+  let toastTimer = null;
+  function showToast(message, ms = 2200){
+    if (!appToast) return;
+    if (toastTimer) { clearTimeout(toastTimer); toastTimer = null; }
+    appToast.textContent = String(message ?? "");
+    appToast.hidden = false;
+    toastTimer = setTimeout(() => {
+      appToast.hidden = true;
+    }, ms);
+  }
+
+  // In-app confirm (replaces browser confirm dialogs)
+  const appConfirm = document.getElementById("appConfirm");
+  const appConfirmMessage = document.getElementById("appConfirmMessage");
+  const appConfirmOk = document.getElementById("appConfirmOk");
+  const appConfirmCancel = document.getElementById("appConfirmCancel");
+  let confirmResolve = null;
+  let confirmKeyHandler = null;
+
+  function hideConfirm(result){
+    if (!appConfirm || !confirmResolve) return;
+    try { appConfirm.hidden = true; } catch {}
+    try { if (confirmKeyHandler) document.removeEventListener("keydown", confirmKeyHandler, true); } catch {}
+    const r = confirmResolve;
+    confirmResolve = null;
+    confirmKeyHandler = null;
+    try { r(!!result); } catch {}
+  }
+
+  function confirmAsync(message, options = {}){
+    return new Promise((resolve)=>{
+      const msg = String(message ?? "");
+      if (!appConfirm || !appConfirmMessage || !appConfirmOk || !appConfirmCancel){
+        resolve(!!window.confirm(msg));
+        return;
+      }
+
+      // Close any previous pending confirm
+      if (confirmResolve){
+        try { confirmResolve(false); } catch {}
+        confirmResolve = null;
+      }
+
+      appConfirmMessage.textContent = msg;
+      appConfirmOk.textContent = String(options.okText ?? "OK");
+      appConfirmCancel.textContent = String(options.cancelText ?? "Avbryt");
+
+      const okKind = String(options.okKind ?? "danger");
+      appConfirmOk.className = "btn" + (okKind === "danger" ? " danger" : (okKind === "secondary" ? " secondary" : ""));
+      appConfirmCancel.className = "btn secondary";
+
+      appConfirm.hidden = false;
+      confirmResolve = resolve;
+
+      confirmKeyHandler = (e)=>{
+        if (e.key === "Escape"){
+          e.preventDefault();
+          hideConfirm(false);
+          return;
+        }
+        if (e.key === "Enter"){
+          e.preventDefault();
+          hideConfirm(true);
+        }
+      };
+      document.addEventListener("keydown", confirmKeyHandler, true);
+
+      setTimeout(()=>{
+        try { appConfirmOk.focus(); } catch {}
+      }, 0);
+    });
+  }
+
+  if (appConfirmOk) appConfirmOk.addEventListener("click", ()=> hideConfirm(true));
+  if (appConfirmCancel) appConfirmCancel.addEventListener("click", ()=> hideConfirm(false));
+  if (appConfirm) appConfirm.addEventListener("click", (e)=>{ if (e.target === appConfirm) hideConfirm(false); });
 
 
   // --- Utilities ---
@@ -1088,11 +1219,11 @@
     try { newVoucher(); } catch (e){ console.error(e); }
     try { newInvoice(); } catch (e){ console.error(e); }
     try { renderAll(); } catch (e){ console.error(e); }
-    alert("Import klar.");
+    showToast("Import klar.", 3000);
   }
 
   async function wipeAllData(){
-    if (!confirm("Rensa ALL data? Detta kan inte ångras. Ta en backup först.")) return;
+    if (!(await confirmAsync("Rensa ALL data? Detta kan inte ångras. Ta en backup först."))) return;
     try { localStorage.removeItem(STORAGE_KEY); } catch (e){ console.error(e); }
     try { await fsDisconnect(); } catch (e){ /* ignore */ }
     state = defaultData();
@@ -1101,12 +1232,12 @@
     try { newVoucher(); } catch (e){ console.error(e); }
     try { newInvoice(); } catch (e){ console.error(e); }
     try { renderAll(); } catch (e){ console.error(e); }
-    alert("All data rensad.");
+    showToast("All data rensad.", 3500);
   }
 
   function exportSie4(yearId){
     const yid = String(yearId || state.activeYearId || "").trim();
-    if (!yid) return alert("Välj år.");
+    if (!yid) return showToast("Välj år.", 3500);
 
     const fy = (state.fiscalYears||[]).find(y=>String(y.id)===yid) || null;
     const vs = (state.vouchers||[])
@@ -1153,8 +1284,8 @@
   }
 
   async function importSieFile(file, encoding, wipe){
-    if (!file) return alert("Välj en SIE-fil först.");
-    if (wipe && !confirm("Rensa innan import? (Rekommenderas endast om du vill ersätta allt.)")) return;
+    if (!file) return showToast("Välj en SIE-fil först.", 3500);
+    if (wipe && !(await confirmAsync("Rensa innan import? (Rekommenderas endast om du vill ersätta allt.)"))) return;
 
     const buf = await file.arrayBuffer();
     let txt = "";
@@ -1304,7 +1435,7 @@
     save();
     try { newVoucher(); } catch (e){ console.error(e); }
     try { renderAll(); } catch (e){ console.error(e); }
-    alert(`SIE-import klar. Importerade ${Object.keys(importedAccounts).length} konton och ${importedVouchers.length} verifikationer.`);
+    showToast(`SIE-import klar. Importerade ${Object.keys(importedAccounts).length} konton och ${importedVouchers.length} verifikationer.`, 5500);
   }
 
   async function sha256Hex(text){
@@ -1363,7 +1494,7 @@
   }
 
   async function makeArchive(yearId){
-    if (!yearId) return alert("Välj räkenskapsår.");
+    if (!yearId) return showToast("Välj räkenskapsår.", 3500);
     const obj = archiveBuildObject(yearId);
     const json = JSON.stringify(obj, null, 2) + "\n";
     const sha = await sha256Hex(json);
@@ -1376,7 +1507,7 @@
 
   async function verifyArchive(){
     const fJson = archiveImportJson && archiveImportJson.files ? archiveImportJson.files[0] : null;
-    if (!fJson) return alert("Välj en arkiv-JSON först.");
+    if (!fJson) return showToast("Välj en arkiv-JSON först.", 3500);
     const txt = await fJson.text();
     let shaProvided = "";
     const fSha = archiveImportSha && archiveImportSha.files ? archiveImportSha.files[0] : null;
@@ -1399,7 +1530,7 @@
         ? `<span class="status ok">OK</span> SHA-256: <span class="kbd">${shaCalc}</span>${meta}`
         : `<span class="status bad">FEL</span> Beräknad SHA-256: <span class="kbd">${shaCalc}</span> · Filens SHA: <span class="kbd">${shaProvided}</span>${meta}`;
     } else {
-      alert(ok ? "Arkiv OK" : "Arkiv FEL (checksum matchar inte)");
+      showToast(ok ? "Arkiv OK" : "Arkiv FEL (checksum matchar inte)", 5500);
     }
   }
 
@@ -1461,14 +1592,14 @@
       <title>${title}</title>
       <style>
         body{ font-family: system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; padding:24px; color:#111; background:#fff; }
-        h1,h2{ margin:0 0 10px 0; }
+          div.addEventListener("click", async (e)=>{
         .muted{ color:#555; }
         .card{ border:1px solid #ddd; border-radius:12px; padding:12px; margin:0 0 12px 0; background:#fff; }
         table{ width:100%; border-collapse:collapse; margin-top:10px; }
         th,td{ border-bottom:1px solid #ddd; padding:6px 6px; text-align:left; vertical-align:top; }
         th{ font-size:12px; color:#333; }
         td{ font-size:12px; }
-        .right{ text-align:right; }
+            if (act==="del") await deleteInvoice(id);
         .row{ display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:flex-start; }
         @media print{
           body{ padding:0; }
@@ -1478,7 +1609,7 @@
       </style>
     </head><body>${bodyHtml}<script>window.onload=()=>window.print();<\/script></body></html>`;
     const w = window.open("", "_blank");
-    if (!w) return alert("Popup blockerad. Tillåt popup för att skriva ut.");
+    if (!w) return showToast("Popup blockerad. Tillåt popup för att skriva ut.", 6000);
     w.document.open();
     w.document.write(doc);
     w.document.close();
@@ -1630,14 +1761,14 @@ if (!d.features) d.features = { sruEnabled: false };
           state.company.logoDataUrl = "";
           localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
           persisted = true;
-          alert("Kunde inte spara p.g.a. lagringsutrymme. Logotypen var troligen för stor och togs bort – försök med en mindre bild.");
+          showToast("Kunde inte spara p.g.a. lagringsutrymme. Logotypen var troligen för stor och togs bort – försök med en mindre bild.", 8000);
         } catch (e2){
           console.error(e2);
           state.company.logoDataUrl = prev;
-          alert("Kunde inte spara data till webbläsarens lagring. Se konsolen för detaljer.");
+          showToast("Kunde inte spara data till webbläsarens lagring. Se konsolen för detaljer.", 8000);
         }
       } else {
-        alert("Kunde inte spara data till webbläsarens lagring. Se konsolen för detaljer.");
+        showToast("Kunde inte spara data till webbläsarens lagring. Se konsolen för detaljer.", 8000);
       }
     }
 
@@ -1792,7 +1923,7 @@ if (!state.features) state.features = { sruEnabled: false };
   }
 
   async function fsConnectExisting(){
-    if (!fsApiSupported()) return alert("Fil-synk kräver Chrome/Edge och secure context (HTTPS eller localhost)." );
+    if (!fsApiSupported()) return showToast("Fil-synk kräver Chrome/Edge och secure context (HTTPS eller localhost).", 6500);
     try {
       const picked = await window.showOpenFilePicker({
         multiple: false,
@@ -1817,12 +1948,12 @@ if (!state.features) state.features = { sruEnabled: false };
       if (e && e.name === "AbortError") return;
       fsLastError = e;
       updateFsUI();
-      alert("Kunde inte välja fil. Är du på HTTPS/localhost och i Chrome/Edge?");
+      showToast("Kunde inte välja fil. Är du på HTTPS/localhost och i Chrome/Edge?", 6500);
     }
   }
 
   async function fsCreateNew(){
-    if (!fsApiSupported()) return alert("Fil-synk kräver Chrome/Edge och secure context (HTTPS eller localhost)." );
+    if (!fsApiSupported()) return showToast("Fil-synk kräver Chrome/Edge och secure context (HTTPS eller localhost).", 6500);
     try {
       const handle = await window.showSaveFilePicker({
         suggestedName: "bokforing.json",
@@ -1849,7 +1980,7 @@ if (!state.features) state.features = { sruEnabled: false };
       if (e && e.name === "AbortError") return;
       fsLastError = e;
       updateFsUI();
-      alert("Kunde inte skapa fil. Är du på HTTPS/localhost och i Chrome/Edge?");
+      showToast("Kunde inte skapa fil. Är du på HTTPS/localhost och i Chrome/Edge?", 6500);
     }
   }
 
@@ -2076,7 +2207,7 @@ if (!state.features) state.features = { sruEnabled: false };
 
     if (companyNameEl) companyNameEl.textContent = state.company.name || "FU-BOOKKEEPING";
     const ok = save();
-    if (ok) alert("Inställningar sparade.");
+    if (ok) showToast("Dina inställningar är sparade");
   }
 
   const fyStart = document.getElementById("fyStart");
@@ -2480,14 +2611,14 @@ if (!state.features) state.features = { sruEnabled: false };
               </div>
             </div>
           `;
-          div.addEventListener("click", (e)=>{
+          div.addEventListener("click", async (e)=>{
             const b = e.target.closest("button");
             if (!b) return;
             const id = b.dataset.id;
             const act = b.dataset.act;
             if (act==="edit") loadInvoiceToEditor(id);
             if (act==="print") printInvoice(id);
-            if (act==="del") deleteInvoice(id);
+            if (act==="del") await deleteInvoice(id);
           });
           invoiceList.appendChild(div);
         });
@@ -2520,8 +2651,8 @@ if (!state.features) state.features = { sruEnabled: false };
     updateInvoiceTotals();
   }
 
-  function deleteInvoice(id){
-    if (!confirm("Ta bort fakturan?")) return;
+  async function deleteInvoice(id){
+    if (!(await confirmAsync("Ta bort fakturan?"))) return;
     state.invoices = (state.invoices||[]).filter(i=>i.id!==id);
     save();
     renderInvoices();
@@ -2633,7 +2764,7 @@ if (!state.features) state.features = { sruEnabled: false };
       </body></html>`;
 
     const w = window.open("", "_blank");
-    if (!w) return alert("Popup blockerad. Tillåt popup för att skriva ut.");
+    if (!w) return showToast("Popup blockerad. Tillåt popup för att skriva ut.", 6000);
     w.document.open();
     w.document.write(html);
     w.document.close();
@@ -2684,7 +2815,7 @@ if (!state.features) state.features = { sruEnabled: false };
 
     state.vouchers.sort((a,b)=> (a.yearId+b.series+a.no+a.date).localeCompare(b.yearId+b.series+b.no+b.date, "sv"));
     save();
-    alert("Skapade verifikation (serie F). Kontrollera konton och moms innan du använder skarpt.");
+    showToast("Skapade verifikation (serie F). Kontrollera konton och moms innan du använder skarpt.", 6500);
   }
 
   function openCustomerDialog(){
@@ -2722,7 +2853,7 @@ if (!state.features) state.features = { sruEnabled: false };
             <button class="btn danger" data-del="${id}">Ta bort</button>
           </div>
         </div>`;
-      div.addEventListener("click", (e)=>{
+      div.addEventListener("click", async (e)=>{
         const b = e.target.closest("button");
         if (!b) return;
         if (b.dataset.pick){
@@ -2732,7 +2863,7 @@ if (!state.features) state.features = { sruEnabled: false };
           closeCustomerDialog();
         }
         if (b.dataset.del){
-          if (!confirm("Ta bort kunden?")) return;
+          if (!(await confirmAsync("Ta bort kunden?"))) return;
           delete state.customers[b.dataset.del];
           if (invCustomerId === b.dataset.del) invCustomerId = null;
           save();
@@ -2747,7 +2878,7 @@ if (!state.features) state.features = { sruEnabled: false };
 
   function saveCustomerAndPick(){
     const name = (custName.value||"").trim();
-    if (!name) return alert("Ange kundnamn.");
+    if (!name) return showToast("Ange kundnamn.", 3500);
     const c = {
       name,
       addr: (custAddr.value||"").trim(),
@@ -2784,7 +2915,7 @@ if (!state.features) state.features = { sruEnabled: false };
 
   function saveCustomerFromRegistry(){
     const name = (custRegName?.value || "").trim();
-    if (!name) return alert("Ange kundnamn.");
+    if (!name) return showToast("Ange kundnamn.", 3500);
     const c = {
       name,
       addr: (custRegAddr?.value || "").trim(),
@@ -2802,12 +2933,12 @@ if (!state.features) state.features = { sruEnabled: false };
     loadCustomerToEditor(id);
   }
 
-  function deleteCustomer(id){
+  async function deleteCustomer(id){
     const used = (state.invoices||[]).some(inv => inv.customerId === id);
     const msg = used
       ? "Kunden används i minst en faktura. Ta bort ändå? (Fakturor kommer visa '(kund)')"
       : "Ta bort kunden?";
-    if (!confirm(msg)) return;
+    if (!(await confirmAsync(msg))) return;
 
     delete state.customers[id];
     if (invCustomerId === id) invCustomerId = null;
@@ -2850,13 +2981,13 @@ if (!state.features) state.features = { sruEnabled: false };
           </div>
         </div>
       `;
-      div.addEventListener("click", (e)=>{
+      div.addEventListener("click", async (e)=>{
         const b = e.target.closest("button");
         if (!b) return;
         const act = b.dataset.act;
         const cid = b.dataset.id;
         if (act==="edit"){ loadCustomerToEditor(cid); }
-        if (act==="del"){ deleteCustomer(cid); }
+        if (act==="del"){ await deleteCustomer(cid); }
       });
       customersList.appendChild(div);
     });
@@ -2885,7 +3016,7 @@ if (!state.features) state.features = { sruEnabled: false };
 
   function saveSupplierFromRegistry(){
     const name = (supRegName?.value || "").trim();
-    if (!name) return alert("Ange leverantörsnamn.");
+    if (!name) return showToast("Ange leverantörsnamn.", 3500);
     const s = {
       name,
       addr: (supRegAddr?.value || "").trim(),
@@ -2901,8 +3032,8 @@ if (!state.features) state.features = { sruEnabled: false };
     loadSupplierToEditor(id);
   }
 
-  function deleteSupplier(id){
-    if (!confirm("Ta bort leverantören?")) return;
+  async function deleteSupplier(id){
+    if (!(await confirmAsync("Ta bort leverantören?"))) return;
     delete state.suppliers[id];
     save();
     renderSuppliers();
@@ -2941,13 +3072,13 @@ if (!state.features) state.features = { sruEnabled: false };
           </div>
         </div>
       `;
-      div.addEventListener("click", (e)=>{
+      div.addEventListener("click", async (e)=>{
         const b = e.target.closest("button");
         if (!b) return;
         const act = b.dataset.act;
         const sid = b.dataset.id;
         if (act==="edit"){ loadSupplierToEditor(sid); }
-        if (act==="del"){ deleteSupplier(sid); }
+        if (act==="del"){ await deleteSupplier(sid); }
       });
       suppliersList.appendChild(div);
     });
@@ -2956,7 +3087,7 @@ if (!state.features) state.features = { sruEnabled: false };
 
   function wireInvoiceEvents(){
     if (btnInvNew) btnInvNew.addEventListener("click", newInvoice);
-    if (btnInvClear) btnInvClear.addEventListener("click", ()=>{ if (!confirm("Rensa fakturan?")) return; newInvoice(); });
+    if (btnInvClear) btnInvClear.addEventListener("click", async ()=>{ if (!(await confirmAsync("Rensa fakturan?"))) return; newInvoice(); });
     if (btnInvAddItem) btnInvAddItem.addEventListener("click", ()=>{ invLines.push({ kind: "item", desc: "", qty: "1", price: "", vat: "25" });
  renderInvoiceLines(); updateInvoiceTotals(); });
     if (btnInvAddComment) btnInvAddComment.addEventListener("click", ()=>{ invLines.push({kind:"comment", desc:""}); renderInvoiceLines(); updateInvoiceTotals(); });
@@ -2968,7 +3099,7 @@ if (!state.features) state.features = { sruEnabled: false };
       const tmp = { id: tmpId, yearId: invoiceYearId(), no: (invNo.value||"").trim()||"Utkast", date: invDate.value||todayISO(), due: invDue.value||addDays(invDate.value||todayISO(), (state.company.payDays||30)), customerId: invCustomerId, ref: invRef.value||"", lines: invLines.map(l=>({kind:l.kind, desc:l.desc||"", qty:parseMoney(l.qty), price:parseMoney(l.price), vat:parseMoney(l.vat)})) };
       // temporarily render without storing
       const c = state.customers?.[tmp.customerId];
-      if (!c) return alert("Välj kund först.");
+      if (!c) return showToast("Välj kund först.", 3500);
       // reuse printInvoice by pushing temp into state briefly
       const exists = (state.invoices||[]).find(x=>x.id===tmpId);
       if (!exists){
@@ -2980,7 +3111,7 @@ if (!state.features) state.features = { sruEnabled: false };
         printInvoice(tmpId);
       }
     });
-    if (btnInvToVoucher) btnInvToVoucher.addEventListener("click", ()=>{ if (!confirm("Skapa en verifikation för fakturan (serie F)?")) return; createVoucherFromInvoice(); });
+    if (btnInvToVoucher) btnInvToVoucher.addEventListener("click", async ()=>{ if (!(await confirmAsync("Skapa en verifikation för fakturan (serie F)?"))) return; createVoucherFromInvoice(); });
     if (btnInvRefresh) btnInvRefresh.addEventListener("click", renderInvoices);
     if (invYearSelect) invYearSelect.addEventListener("change", renderInvoices);
 
@@ -3165,13 +3296,13 @@ if (!state.features) state.features = { sruEnabled: false };
   }
 
   function saveVoucher(){
-    if (voucherEditorReadOnly) return alert("Detta är en sparad verifikation i visningsläge. Använd Korrigera för att skapa en rättelseverifikation.");
+    if (voucherEditorReadOnly) return showToast("Detta är en sparad verifikation i visningsläge. Använd Korrigera för att skapa en rättelseverifikation.", 6500);
     const yearId = yearSelect.value || state.activeYearId;
     const date = vDate.value || todayISO();
     if (editingVoucherId){
       const orig = state.vouchers.find(x=>x.id===editingVoucherId);
       if (orig && isLockedVoucher(orig)){
-        alert("Den här verifikationen ligger i låst period och kan inte ändras. Skapa en rättningsverifikation i stället.");
+        showToast("Den här verifikationen ligger i låst period och kan inte ändras. Skapa en rättningsverifikation i stället.", 6500);
         return;
       }
     }
@@ -3185,7 +3316,7 @@ if (!state.features) state.features = { sruEnabled: false };
     // Validate balancing
     const sum = lines.reduce((s,l)=> s + l.amount, 0);
     if (Math.abs(sum) > 0.00001){
-      alert("Verifikationen är inte i balans. Kontrollera debet/kredit.");
+      showToast("Verifikationen är inte i balans. Kontrollera debet/kredit.", 5000);
       return;
     }
 
@@ -3219,7 +3350,7 @@ if (!state.features) state.features = { sruEnabled: false };
     viewingVoucherId = v.id;
     voucherEditorReadOnly = true;
     if (isLockedVoucher(v)){
-      alert("Verifikationen ligger i låst period. Du kan inte ändra originalet – jag skapar en rättningsverifikation som hänvisar till den.");
+      showToast("Verifikationen ligger i låst period. Du kan inte ändra originalet – jag skapar en rättningsverifikation som hänvisar till den.", 6500);
       createCorrectionVoucher(v.id);
       return;
     }
@@ -3241,10 +3372,10 @@ if (!state.features) state.features = { sruEnabled: false };
     updateBalanceBadge();
   }
 
-  function deleteVoucher(id){
+  async function deleteVoucher(id){
     const v = state.vouchers.find(x=>x.id===id);
-    if (v && isLockedVoucher(v)) return alert("Den här verifikationen ligger i låst period och kan inte tas bort.");
-    if (!confirm("Ta bort verifikationen?")) return;
+    if (v && isLockedVoucher(v)) return showToast("Den här verifikationen ligger i låst period och kan inte tas bort.", 6500);
+    if (!(await confirmAsync("Ta bort verifikationen?"))) return;
     state.vouchers = state.vouchers.filter(v => v.id !== id);
     save();
   }
@@ -3296,7 +3427,7 @@ if (!state.features) state.features = { sruEnabled: false };
 
     renderLines();
     updateBalanceBadge();
-    alert("Rättningsverifikation skapad som utkast. Justera vid behov och spara.");
+    showToast("Rättningsverifikation skapad som utkast. Justera vid behov och spara.", 5500);
   }
 
   // --- Calculations / Reports ---
@@ -3757,7 +3888,7 @@ if (!state.features) state.features = { sruEnabled: false };
       <script>window.onload=()=>window.print();<\/script>
       </body></html>`;
     const w = window.open("", "_blank");
-    if (!w) return alert("Popup blockerad. Tillåt popup för att skriva ut.");
+    if (!w) return showToast("Popup blockerad. Tillåt popup för att skriva ut.", 6000);
     w.document.open();
     w.document.write(html);
     w.document.close();
@@ -3821,7 +3952,7 @@ if (!state.features) state.features = { sruEnabled: false };
 
   function exportLastReport(kind){
     if (!lastReportData || !Array.isArray(lastReportData.columns) || !Array.isArray(lastReportData.rows)){
-      return alert("Ingen rapport att exportera ännu. Generera en rapport först.");
+      return showToast("Ingen rapport att exportera ännu. Generera en rapport först.", 4500);
     }
     const title = lastReportData.title || lastReportTitle || "Rapport";
     const base = safeFilename(title);
@@ -3980,7 +4111,7 @@ if (rptYearSelect){
       catch(err){
         console.error(err);
         const msg = (err && (err.message || err.name)) ? String(err.message || err.name) : "(okänt fel)";
-        alert(`Kunde inte spara inställningar: ${msg}. Se konsolen.`);
+        showToast(`Kunde inte spara inställningar: ${msg}. Se konsolen.`, 8000);
       }
     });
   }
@@ -4009,7 +4140,7 @@ if (rptYearSelect){
       };
       reader.onerror = (err) => {
         console.error(err);
-        alert("Kunde inte läsa logotypfilen.");
+        showToast("Kunde inte läsa logotypfilen.", 6500);
       };
       reader.readAsDataURL(f);
     });
@@ -4018,13 +4149,13 @@ if (rptYearSelect){
     btnSetLock.addEventListener("click", (e)=>{
       e.preventDefault();
       const yid = lockYear ? lockYear.value : state.activeYearId;
-      if (!yid) return alert("Välj år.");
+      if (!yid) return showToast("Välj år.", 3500);
       const until = (lockUntil?.value || "").trim();
-      if (!until) return alert("Ange ett datum att låsa t.o.m.");
+      if (!until) return showToast("Ange ett datum att låsa t.o.m.", 4500);
       state.locks = state.locks || {};
       state.locks[yid] = until;
       save();
-      alert(`Låst t.o.m ${until} för år ${yid}.`);
+      showToast(`Låst t.o.m ${until} för år ${yid}.`, 4500);
     });
   }
   if (btnClearLock){
@@ -4036,7 +4167,7 @@ if (rptYearSelect){
       delete state.locks[yid];
       save();
       if (lockUntil) lockUntil.value = "";
-      alert(`Tog bort lås för år ${yid}.`);
+      showToast(`Tog bort lås för år ${yid}.`, 4500);
     });
   }
 
@@ -4068,7 +4199,7 @@ if (jsonImport) jsonImport.addEventListener("change", async (e)=>{
   const f = jsonImport.files && jsonImport.files[0];
   if (!f) return;
   try { await importBackupJsonFile(f); }
-  catch(err){ console.error(err); alert("Kunde inte importera JSON. Se konsolen."); }
+  catch(err){ console.error(err); showToast("Kunde inte importera JSON. Se konsolen.", 8000); }
   finally { jsonImport.value = ""; }
 });
 if (btnWipe) btnWipe.addEventListener("click", async (e)=>{ e.preventDefault(); await wipeAllData(); });
@@ -4081,7 +4212,7 @@ if (btnImportSie) btnImportSie.addEventListener("click", async (e)=>{
   e.preventDefault();
   const f = sieImportFile && sieImportFile.files && sieImportFile.files[0];
   try { await importSieFile(f, (sieImportEncoding && sieImportEncoding.value) || "utf-8", !!(sieImportWipe && sieImportWipe.checked)); }
-  catch(err){ console.error(err); alert("Kunde inte importera SIE. Se konsolen."); }
+  catch(err){ console.error(err); showToast("Kunde inte importera SIE. Se konsolen.", 8000); }
 });
 
 // --- File Sync wiring (UI moved to Settings) ---
@@ -4093,14 +4224,14 @@ if (btnLoadFromFile) btnLoadFromFile.addEventListener("click", async (e)=>{
     await fsLoadState();
     fillYearSelectors();
     try { if (typeof renderAll === "function") renderAll(); } catch (e){ console.error(e); }
-    alert("Laddade data från fil.");
+    showToast("Laddade data från fil.", 3500);
   }
-  catch(err){ console.error(err); alert("Kunde inte läsa från fil. Se konsolen."); }
+  catch(err){ console.error(err); showToast("Kunde inte läsa från fil. Se konsolen.", 8000); }
 });
 if (btnSaveToFile) btnSaveToFile.addEventListener("click", async (e)=>{
   e.preventDefault();
-  try { await fsWriteState(); alert("Sparade till fil."); }
-  catch(err){ console.error(err); alert("Kunde inte spara till fil. Se konsolen."); }
+  try { await fsWriteState(); showToast("Sparade till fil.", 3000); }
+  catch(err){ console.error(err); showToast("Kunde inte spara till fil. Se konsolen.", 8000); }
 });
 if (btnDisconnectFile) btnDisconnectFile.addEventListener("click", async (e)=>{ e.preventDefault(); await fsDisconnect(); });
 
@@ -4123,14 +4254,14 @@ try { updateFsUI(); } catch (e){ /* ignore */ }
     btnMakeArchive.addEventListener("click", async (e)=>{
       e.preventDefault();
       try { await makeArchive((archiveYearSelect && archiveYearSelect.value) || state.activeYearId); }
-      catch(err){ console.error(err); alert("Kunde inte skapa arkiv. Se konsolen för detaljer."); }
+      catch(err){ console.error(err); showToast("Kunde inte skapa arkiv. Se konsolen för detaljer.", 8000); }
     });
   }
   if (btnVerifyArchive){
     btnVerifyArchive.addEventListener("click", async (e)=>{
       e.preventDefault();
       try { await verifyArchive(); }
-      catch(err){ console.error(err); alert("Kunde inte verifiera arkiv. Se konsolen för detaljer."); }
+      catch(err){ console.error(err); showToast("Kunde inte verifiera arkiv. Se konsolen för detaljer.", 8000); }
     });
   }
 

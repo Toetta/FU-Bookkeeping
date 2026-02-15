@@ -780,6 +780,14 @@
                   <label>Plusgiro (valfritt)</label>
                   <input id="sPg" placeholder="123456-7" />
                 </div>
+                <div class="field" style="min-width:220px;">
+                  <label>Swish (telefon, valfritt)</label>
+                  <input id="sSwish" inputmode="tel" placeholder="t.ex. 0701234567" />
+                </div>
+                <div class="field" style="min-width:260px; flex:1;">
+                  <label>Bankkonto (kontonr, valfritt)</label>
+                  <input id="sBankAccount" placeholder="t.ex. 1234-5, 1234567890" />
+                </div>
                 <div class="field" style="min-width:260px; flex:1;">
                   <label>IBAN (valfritt)</label>
                   <input id="sIban" placeholder="SE..." />
@@ -1528,7 +1536,7 @@
     const now = new Date();
     const y = now.getFullYear();
     return {
-      company: { name: "FU-BOOKKEEPING", orgnr: "", currency: "SEK", defaultSign: "", addr:"", zip:"", city:"", country:"", email:"", phone:"", web:"", vat:"", payDays:30, bankgiro:"", plusgiro:"", iban:"", swift:"", invoiceNote:"", invoiceFooter:"", logoDataUrl:"" },
+      company: { name: "FU-BOOKKEEPING", orgnr: "", currency: "SEK", defaultSign: "", addr:"", zip:"", city:"", country:"", email:"", phone:"", web:"", vat:"", payDays:30, bankgiro:"", plusgiro:"", swishPhone:"", bankAccountNo:"", iban:"", swift:"", invoiceNote:"", invoiceFooter:"", logoDataUrl:"" },
       features: { sruEnabled: false },
       fileSync: { autosave: true, requireFile: false },
       fiscalYears: [
@@ -1972,6 +1980,8 @@ if (!state.features) state.features = { sruEnabled: false };
   const sPayDays = document.getElementById("sPayDays");
   const sBg = document.getElementById("sBg");
   const sPg = document.getElementById("sPg");
+  const sSwish = document.getElementById("sSwish");
+  const sBankAccount = document.getElementById("sBankAccount");
   const sIban = document.getElementById("sIban");
   const sSwift = document.getElementById("sSwift");
   const sInvNote = document.getElementById("sInvNote");
@@ -2014,6 +2024,8 @@ if (!state.features) state.features = { sruEnabled: false };
 
     if (sBg) sBg.value = state.company.bankgiro || "";
     if (sPg) sPg.value = state.company.plusgiro || "";
+    if (sSwish) sSwish.value = state.company.swishPhone || "";
+    if (sBankAccount) sBankAccount.value = state.company.bankAccountNo || "";
     if (sIban) sIban.value = state.company.iban || "";
     if (sSwift) sSwift.value = state.company.swift || "";
 
@@ -2052,6 +2064,8 @@ if (!state.features) state.features = { sruEnabled: false };
 
     state.company.bankgiro = (sBg?.value || "").trim();
     state.company.plusgiro = (sPg?.value || "").trim();
+    state.company.swishPhone = (sSwish?.value || "").trim();
+    state.company.bankAccountNo = (sBankAccount?.value || "").trim();
     state.company.iban = (sIban?.value || "").trim();
     state.company.swift = (sSwift?.value || "").trim();
 
@@ -2598,6 +2612,8 @@ if (!state.features) state.features = { sruEnabled: false };
           <div style="font-weight:800; margin-bottom:6px;">Betalningsuppgifter</div>
           ${state.company.bankgiro?`<div class="kv"><span>Bankgiro</span><span>${escapeHtml(state.company.bankgiro)}</span></div>`:""}
           ${state.company.plusgiro?`<div class="kv"><span>Plusgiro</span><span>${escapeHtml(state.company.plusgiro)}</span></div>`:""}
+          ${state.company.swishPhone?`<div class="kv"><span>Swish</span><span>${escapeHtml(state.company.swishPhone)}</span></div>`:""}
+          ${state.company.bankAccountNo?`<div class="kv"><span>Bankkonto</span><span>${escapeHtml(state.company.bankAccountNo)}</span></div>`:""}
           ${state.company.iban?`<div class="kv"><span>IBAN</span><span>${escapeHtml(state.company.iban)}</span></div>`:""}
           ${state.company.swift?`<div class="kv"><span>SWIFT/BIC</span><span>${escapeHtml(state.company.swift)}</span></div>`:""}
           <div class="kv"><span>Referens/OCR</span><span>${escapeHtml(inv.no)}</span></div>

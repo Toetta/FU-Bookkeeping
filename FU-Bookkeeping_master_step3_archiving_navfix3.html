@@ -8,6 +8,7 @@
     html{ font-size: clamp(14px, 1.05vw, 16px); }
     :root{ --bg:#0b0f14; --card:#111826; --muted:#94a3b8; --text:#e5e7eb; --line:#223044; --ok:#22c55e; --bad:#ef4444; --accent:#60a5fa; }
     *{ box-sizing:border-box; }
+    *[hidden]{ display:none !important; }
     body{ margin:0; font-family: system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; background:linear-gradient(180deg,#0b0f14,#070a0f); color:var(--text); }
     /* Header/nav: force-disable any lingering backdrop-filter (it can break clicks in some setups) */
     header{
@@ -1062,9 +1063,13 @@
   let confirmKeyHandler = null;
 
   function hideConfirm(result){
-    if (!appConfirm || !confirmResolve) return;
+    if (!appConfirm) return;
     try { appConfirm.hidden = true; } catch {}
     try { if (confirmKeyHandler) document.removeEventListener("keydown", confirmKeyHandler, true); } catch {}
+    if (!confirmResolve){
+      confirmKeyHandler = null;
+      return;
+    }
     const r = confirmResolve;
     confirmResolve = null;
     confirmKeyHandler = null;

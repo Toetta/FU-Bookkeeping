@@ -2074,6 +2074,9 @@ if (!d.features) d.features = { sruEnabled: false };
   const aType = document.getElementById("aType");
   const accountsTbody = document.getElementById("accountsTbody");
   const accountSearch = document.getElementById("accountSearch");
+  const btnAddAccount = document.getElementById("btnAddAccount");
+  const btnResetDemo = document.getElementById("btnResetDemo");
+  const btnFixChars = document.getElementById("btnFixChars");
   // Reports (Rapportgenerator)
   const rptYearSelect = document.getElementById("rptYearSelect");
   const rptFrom = document.getElementById("rptFrom");
@@ -2365,6 +2368,187 @@ if (!d.features) d.features = { sruEnabled: false };
     if (first === "3") return "income";
     if (["4","5","6","7","8"].includes(first)) return "expense";
     return "other";
+  }
+
+  function accountTypeLabel(t){
+    if (t === "asset") return "Tillgång";
+    if (t === "liability") return "EK/skuld";
+    if (t === "income") return "Intäkt";
+    if (t === "expense") return "Kostnad";
+    return "Övrigt";
+  }
+
+  function normalizeAccountNo(no){
+    return String(no || "").trim();
+  }
+
+  function fixMojibake(s){
+    // Common UTF-8-as-Latin1 sequences
+    return String(s ?? "")
+      .replaceAll("Ã¥", "å")
+      .replaceAll("Ã¤", "ä")
+      .replaceAll("Ã¶", "ö")
+      .replaceAll("Ã…", "Å")
+      .replaceAll("Ã„", "Ä")
+      .replaceAll("Ã–", "Ö")
+      .replaceAll("â€“", "–")
+      .replaceAll("â€”", "—")
+      .replaceAll("â€", "“")
+      .replaceAll("â€\u009d", "”")
+      .replaceAll("â€\u0099", "’")
+      .replaceAll("â€\u0098", "‘")
+      .replaceAll("â€¢", "•")
+      .replaceAll("Â ", " ");
+  }
+
+  function renderAccounts(){
+    if (!accountsTbody) return;
+    state.accounts = state.accounts || {};
+
+    const q = (accountSearch && accountSearch.value ? String(accountSearch.value) : "").trim().toLowerCase();
+    const rows = Object.keys(state.accounts)
+      .map(no => ({ no, meta: state.accounts[no] || {} }))
+      .filter(r => {
+        const name = String(r.meta.name || "").toLowerCase();
+        if (!q) return true;
+        return String(r.no).toLowerCase().includes(q) || name.includes(q);
+      })
+      .sort((a,b)=> String(a.no).localeCompare(String(b.no), "sv"));
+
+    accountsTbody.innerHTML = "";
+    if (!rows.length){
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.colSpan = 4;
+      td.className = "muted small";
+      td.textContent = q ? "Inga matchande konton." : "Inga konton ännu. Lägg till ett konto eller återställ demo-kontoplan.";
+      tr.appendChild(td);
+      accountsTbody.appendChild(tr);
+      return;
+    }
+
+    rows.forEach(r=>{
+      const meta = r.meta || {};
+      const tr = document.createElement("tr");
+
+      const tdNo = document.createElement("td");
+      tdNo.textContent = String(r.no);
+
+      const tdName = document.createElement("td");
+      tdName.textContent = String(meta.name || "");
+
+      const tdType = document.createElement("td");
+      tdType.textContent = accountTypeLabel(meta.type || guessTypeFromAccountNo(r.no));
+
+      const tdAct = document.createElement("td");
+      const btnDel = document.createElement("button");
+      btnDel.type = "button";
+      btnDel.className = "btn danger";
+      btnDel.textContent = "Ta bort";
+      btnDel.dataset.act = "del";
+      btnDel.dataset.no = String(r.no);
+      tdAct.appendChild(btnDel);
+
+      tr.appendChild(tdNo);
+      tr.appendChild(tdName);
+      tr.appendChild(tdType);
+      tr.appendChild(tdAct);
+      accountsTbody.appendChild(tr);
+    });
+  }
+
+  let accountsWired = false;
+  function wireAccountEvents(){
+    if (accountsWired) return;
+    accountsWired = true;
+
+    if (btnAddAccount){
+      btnAddAccount.addEventListener("click", (e)=>{
+        e.preventDefault();
+        const no = normalizeAccountNo(aNo && aNo.value);
+        const name = String(aName && aName.value ? aName.value : "").trim();
+        if (!no) return showToast("Ange kontonummer.", 3500);
+        if (!name) return showToast("Ange kontonamn.", 3500);
+
+        state.accounts = state.accounts || {};
+        const type = (aType && aType.value) ? aType.value : guessTypeFromAccountNo(no);
+        state.accounts[no] = { name, type };
+        save();
+        renderAccounts();
+
+        // Refresh voucher editor account selects if visible
+        try { if (typeof renderLines === "function") renderLines(); } catch {}
+
+        if (aNo) aNo.value = "";
+        if (aName) aName.value = "";
+        if (aType) aType.value = guessTypeFromAccountNo(no);
+        if (aNo) aNo.focus();
+      });
+    }
+
+    if (accountSearch){
+      accountSearch.addEventListener("input", ()=> renderAccounts());
+    }
+
+    if (btnResetDemo){
+      btnResetDemo.addEventListener("click", async (e)=>{
+        e.preventDefault();
+        const ok = await confirmAsync("Återställ demo-kontoplan? Detta skriver över din nuvarande kontoplan.", { okText:"Återställ", cancelText:"Avbryt", okKind:"danger" });
+        if (!ok) return;
+        state.accounts = demoAccounts();
+        save();
+        renderAccounts();
+        try { if (typeof renderLines === "function") renderLines(); } catch {}
+        showToast("Demo-kontoplan återställd.", 3500);
+      });
+    }
+
+    if (btnFixChars){
+      btnFixChars.addEventListener("click", (e)=>{
+        e.preventDefault();
+        state.accounts = state.accounts || {};
+        let changed = 0;
+        for (const no of Object.keys(state.accounts)){
+          const a = state.accounts[no];
+          if (!a) continue;
+          const prev = String(a.name || "");
+          const next = fixMojibake(prev);
+          if (next !== prev){
+            a.name = next;
+            changed++;
+          }
+        }
+        if (changed){
+          save();
+          renderAccounts();
+          try { if (typeof renderLines === "function") renderLines(); } catch {}
+          showToast(`Fixade tecken i ${changed} konton.`, 3500);
+        } else {
+          showToast("Inga teckenfel hittades.", 2500);
+        }
+      });
+    }
+
+    if (accountsTbody){
+      accountsTbody.addEventListener("click", async (e)=>{
+        const b = e.target && e.target.closest ? e.target.closest("button[data-act]") : null;
+        if (!b) return;
+        const act = b.dataset.act;
+        const no = b.dataset.no;
+        if (act !== "del" || !no) return;
+
+        // Warn if used in vouchers
+        const used = (state.vouchers || []).some(v => (v.lines || []).some(l => String(l.account) === String(no)));
+        const msg = used
+          ? `Kontot ${no} används i verifikationer. Ta bort ändå? (Det kommer visas som "okänt konto" i historik.)`
+          : `Ta bort konto ${no}?`;
+        if (!(await confirmAsync(msg, { okText:"Ta bort", cancelText:"Avbryt", okKind:"danger" }))) return;
+        delete state.accounts[no];
+        save();
+        renderAccounts();
+        try { if (typeof renderLines === "function") renderLines(); } catch {}
+      });
+    }
   }
 
   // --- Invoice helpers ---
@@ -4338,6 +4522,10 @@ try { if (typeof newVoucher === "function") newVoucher(); } catch (e){ console.e
 // Voucher wiring
 try { if (typeof wireVoucherEvents === "function") wireVoucherEvents(); } catch (e){ console.error(e); }
 try { if (typeof renderVouchers === "function") renderVouchers(); } catch (e){ console.error(e); }
+
+// Accounts wiring
+try { if (typeof wireAccountEvents === "function") wireAccountEvents(); } catch (e){ console.error(e); }
+try { if (typeof renderAccounts === "function") renderAccounts(); } catch (e){ console.error(e); }
 
 // Invoices init
 state.customers = state.customers || {};

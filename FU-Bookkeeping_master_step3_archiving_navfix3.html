@@ -1638,8 +1638,91 @@ if (!state.features) state.features = { sruEnabled: false };
   const sInvFooter = document.getElementById("sInvFooter");
   const sSruEnabled = document.getElementById("sSruEnabled");
   const sLogo = document.getElementById("sLogo");
+  const btnSaveSettings = document.getElementById("btnSaveSettings");
   const btnRemoveLogo = document.getElementById("btnRemoveLogo");
   const logoPreview = document.getElementById("logoPreview");
+
+  function renderLogoPreview(){
+    if (!logoPreview) return;
+    const url = state?.company?.logoDataUrl;
+    if (!url){
+      logoPreview.textContent = "Ingen logotyp vald.";
+      return;
+    }
+    logoPreview.innerHTML = `<img alt="Logotyp" src="${url}" style="max-height:48px; max-width:180px; vertical-align:middle;" />`;
+  }
+
+  function renderSettings(){
+    state.company = state.company || defaultData().company;
+    state.features = state.features || { sruEnabled: false };
+
+    if (sCompany) sCompany.value = state.company.name || "";
+    if (sOrgnr) sOrgnr.value = state.company.orgnr || "";
+    if (sCurrency) sCurrency.value = state.company.currency || "SEK";
+    if (sSign) sSign.value = state.company.defaultSign || "";
+
+    if (sAddr) sAddr.value = state.company.addr || "";
+    if (sZip) sZip.value = state.company.zip || "";
+    if (sCity) sCity.value = state.company.city || "";
+    if (sCountry) sCountry.value = state.company.country || "";
+
+    if (sEmail) sEmail.value = state.company.email || "";
+    if (sPhone) sPhone.value = state.company.phone || "";
+    if (sWeb) sWeb.value = state.company.web || "";
+    if (sVat) sVat.value = state.company.vat || "";
+    if (sPayDays) sPayDays.value = String(state.company.payDays ?? 30);
+
+    if (sBg) sBg.value = state.company.bankgiro || "";
+    if (sPg) sPg.value = state.company.plusgiro || "";
+    if (sIban) sIban.value = state.company.iban || "";
+    if (sSwift) sSwift.value = state.company.swift || "";
+
+    if (sInvNote) sInvNote.value = state.company.invoiceNote || "";
+    if (sInvFooter) sInvFooter.value = state.company.invoiceFooter || "";
+
+    if (sSruEnabled) sSruEnabled.checked = !!state.features.sruEnabled;
+
+    if (companyNameEl) companyNameEl.textContent = state.company.name || "FU-BOOKKEEPING";
+    renderLogoPreview();
+  }
+
+  function saveSettings(){
+    state.company = state.company || defaultData().company;
+    state.features = state.features || { sruEnabled: false };
+
+    const payDaysRaw = (sPayDays?.value || "").trim();
+    const payDays = parseInt(payDaysRaw, 10);
+
+    state.company.name = (sCompany?.value || "").trim();
+    state.company.orgnr = (sOrgnr?.value || "").trim();
+    state.company.currency = (sCurrency?.value || "SEK").trim() || "SEK";
+    state.company.defaultSign = (sSign?.value || "").trim();
+
+    state.company.addr = (sAddr?.value || "").trim();
+    state.company.zip = (sZip?.value || "").trim();
+    state.company.city = (sCity?.value || "").trim();
+    state.company.country = (sCountry?.value || "").trim();
+
+    state.company.email = (sEmail?.value || "").trim();
+    state.company.phone = (sPhone?.value || "").trim();
+    state.company.web = (sWeb?.value || "").trim();
+    state.company.vat = (sVat?.value || "").trim();
+    state.company.payDays = Number.isFinite(payDays) && payDays > 0 ? payDays : 30;
+
+    state.company.bankgiro = (sBg?.value || "").trim();
+    state.company.plusgiro = (sPg?.value || "").trim();
+    state.company.iban = (sIban?.value || "").trim();
+    state.company.swift = (sSwift?.value || "").trim();
+
+    state.company.invoiceNote = (sInvNote?.value || "").trim();
+    state.company.invoiceFooter = (sInvFooter?.value || "").trim();
+
+    state.features.sruEnabled = !!(sSruEnabled && sSruEnabled.checked);
+
+    if (companyNameEl) companyNameEl.textContent = state.company.name || "FU-BOOKKEEPING";
+    save();
+    alert("Inställningar sparade.");
+  }
 
   const fyStart = document.getElementById("fyStart");
   const fyEnd = document.getElementById("fyEnd");
@@ -3530,6 +3613,45 @@ if (rptYearSelect){
   // --- Period lock wiring ---
   if (lockYear && lockUntil){
     lockYear.addEventListener("change", ()=>{ lockUntil.value = lockUntilForYear(lockYear.value); });
+  }
+
+  // --- Settings wiring ---
+  if (btnSaveSettings){
+    btnSaveSettings.addEventListener("click", (e)=>{
+      e.preventDefault();
+      try { saveSettings(); }
+      catch(err){ console.error(err); alert("Kunde inte spara inställningar. Se konsolen."); }
+    });
+  }
+
+  if (btnRemoveLogo){
+    btnRemoveLogo.addEventListener("click", (e)=>{
+      e.preventDefault();
+      state.company = state.company || defaultData().company;
+      state.company.logoDataUrl = "";
+      if (sLogo) sLogo.value = "";
+      save();
+      renderLogoPreview();
+    });
+  }
+
+  if (sLogo){
+    sLogo.addEventListener("change", ()=>{
+      const f = sLogo.files && sLogo.files[0];
+      if (!f) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        state.company = state.company || defaultData().company;
+        state.company.logoDataUrl = String(reader.result || "");
+        save();
+        renderLogoPreview();
+      };
+      reader.onerror = (err) => {
+        console.error(err);
+        alert("Kunde inte läsa logotypfilen.");
+      };
+      reader.readAsDataURL(f);
+    });
   }
   if (btnSetLock){
     btnSetLock.addEventListener("click", (e)=>{

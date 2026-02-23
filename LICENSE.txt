@@ -1,0 +1,83 @@
+FU-BookKeeping
+Proprietary License Agreement
+
+Copyright © 2026 Innovatio Brutalis AB.
+All Rights Reserved.
+
+Primary Intellectual Property Owner:
+Innovatio Brutalis AB
+
+Original Author and System Architect:
+Malkus Arlemark
+
+--------------------------------------------------------------------
+
+1. Ownership
+
+All intellectual property rights in and to FU-BookKeeping, including but not limited to:
+- Source code
+- Architecture
+- System design
+- Data models
+- UI/UX design
+- Documentation
+- Workflows
+- Branding
+- Associated materials
+
+are the exclusive property of Innovatio Brutalis AB.
+
+Malkus Arlemark is acknowledged as the original author and system architect.  
+All rights are assigned to and owned by Innovatio Brutalis AB.
+
+--------------------------------------------------------------------
+
+2. License Grant
+
+No license is granted to use, copy, modify, distribute, sublicense, publish, or commercially exploit this software without explicit prior written permission from Innovatio Brutalis AB.
+
+This repository is provided for reference and evaluation purposes only.
+
+--------------------------------------------------------------------
+
+3. Restrictions
+
+You may NOT:
+
+- Copy or redistribute the software in whole or in part
+- Modify or create derivative works
+- Use the software in production environments
+- Commercially exploit any portion of the system
+- Reverse engineer or extract system design concepts
+- Remove copyright notices
+
+--------------------------------------------------------------------
+
+4. Explicit Prohibition of AI/ML Usage
+
+This software and its contents may NOT be used for training, fine-tuning, benchmarking, evaluating, or improving any artificial intelligence (AI), machine learning (ML), large language model (LLM), neural network, or automated code generation system without explicit prior written permission from Innovatio Brutalis AB.
+
+The use of this repository, in whole or in part, as training data for AI systems is strictly prohibited.
+
+--------------------------------------------------------------------
+
+5. Jurisdiction and Governing Law
+
+This agreement and any dispute arising from or related to this software shall be governed by and construed in accordance with the laws of Sweden.
+
+Any disputes shall be subject to the exclusive jurisdiction of the Swedish courts.
+
+--------------------------------------------------------------------
+
+6. Enforcement
+
+Unauthorized reproduction, redistribution, modification, or commercial use may result in civil and criminal liability under applicable intellectual property law.
+
+--------------------------------------------------------------------
+
+For licensing inquiries, commercial usage requests, or partnership discussions:
+
+Innovatio Brutalis AB
+Contact: info@innovatiobrutalis.se (replace with actual email if needed)
+
+--------------------------------------------------------------------

@@ -1,5 +1,26 @@
 # FU-BookKeeping
 
+---
+
+## ⚖ Legal Notice & Intellectual Property
+
+© 2026 Innovatio Brutalis AB. All Rights Reserved.
+
+FU-BookKeeping and all associated materials are the exclusive intellectual property of **Innovatio Brutalis AB**.
+
+Original system architecture and implementation by **Malkus Arlemark**.
+
+This software is governed by Swedish law.  
+Any disputes arising from this project shall be subject to the exclusive jurisdiction of Swedish courts.
+
+This repository and its contents may NOT be used for training, fine-tuning, benchmarking, or improving artificial intelligence (AI), machine learning (ML), large language models (LLMs), or automated code generation systems without explicit prior written permission from Innovatio Brutalis AB.
+
+For licensing inquiries: info@innovatio-brutalis.se
+
+See the separate LICENSE file for full legal terms.
+
+---
+
 > A browser-native, privacy-first bookkeeping system built with pure HTML, CSS and JavaScript.  
 > Designed for multi-company usage, bank imports, multi-currency handling and secure local data management — without backend dependencies.
 
@@ -214,3 +235,29 @@ It is not certified accounting software.
 
 Malkus Arlemark  
 System design & implementation
+
+
+---
+
+## License & Intellectual Property
+
+© 2026 Malkus Arlemark. All Rights Reserved.
+
+This project, including its source code, architecture, design, workflows, documentation, and branding, is protected by copyright law.
+
+No part of this software may be copied, modified, distributed, sublicensed, published, or used commercially without explicit written permission from the author.
+
+Unauthorized reproduction or redistribution of this project, in whole or in part, is strictly prohibited.
+
+
+This software and its contents may NOT be used for training, fine-tuning, or improving any artificial intelligence (AI), machine learning (ML), large language model (LLM), or automated code generation system without explicit written permission from the author.
+
+The use of this repository, in whole or in part, as training data for AI systems is strictly prohibited.
+
+
+For licensing inquiries, contact the author directly.
+
+
+
+---
+

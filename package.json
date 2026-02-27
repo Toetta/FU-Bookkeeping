@@ -1,0 +1,23 @@
+{
+  "name": "fu-bookkeeping-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "description": "FU-Bookkeeping mobile wrapper (Capacitor) with file open/save via document picker.",
+  "scripts": {
+    "build": "node scripts/build.js",
+    "cap:add:ios": "npx cap add ios",
+    "cap:add:android": "npx cap add android",
+    "cap:sync": "npx cap sync",
+    "cap:open:ios": "npx cap open ios",
+    "cap:open:android": "npx cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.0.0",
+    "@capacitor/cli": "^8.1.0",
+    "@capacitor/core": "^6.0.0",
+    "@capacitor/ios": "^6.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

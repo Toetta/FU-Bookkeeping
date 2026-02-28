@@ -309,7 +309,7 @@
       <span class="pill" id="bootPill">JS: laddar…</span>
       <span class="pill" id="storagePill">Lagring: localStorage (offline)</span>
       <span class="pill" id="backupPill">Backup: –</span>
-      <span class="pill" id="revPill">v0.2.19</span>
+      <span class="pill" id="revPill">v0.2.20</span>
     </div>
   </div>
 </header>
@@ -1391,6 +1391,40 @@
                 <span class="muted small">Visas alltid i menyn, men är låst om du inte aktiverar här.</span>
               </div>
 
+              <div style="height:1px; background:rgba(34,48,68,.8); margin:12px 0;"></div>
+              <h2>Webshop-synk (tillägg)</h2>
+              <div class="muted small" style="margin-bottom:10px;">
+                Importera verifikationer som ligger i kö på din webshop via <b>/api/fu/pull</b> och kvittera med <b>/api/fu/ack</b>.
+              </div>
+              <div class="row" style="gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px;">
+                <label class="muted small" style="display:flex; align-items:center; gap:8px;">
+                  <input id="wsEnabled" type="checkbox" />
+                  Aktivera webshop-synk för detta företag
+                </label>
+              </div>
+              <div class="row" style="gap:10px; align-items:end; flex-wrap:wrap; margin-bottom:10px;">
+                <div class="field" style="min-width:260px; flex:1;">
+                  <label>API base URL</label>
+                  <input id="wsApiBaseUrl" placeholder="https://innovatio-brutalis.com" />
+                </div>
+                <div class="field" style="min-width:240px; flex:1;">
+                  <label>X-FU-Key</label>
+                  <input id="wsApiKey" type="password" placeholder="hemlig nyckel" />
+                </div>
+              </div>
+              <div class="row" style="gap:10px; align-items:end; flex-wrap:wrap;">
+                <div class="field" style="min-width:200px;">
+                  <label>Verifikationsserie</label>
+                  <input id="wsSeries" placeholder="W" />
+                </div>
+                <div class="field" style="min-width:200px;">
+                  <label>Max per import</label>
+                  <input id="wsLimit" inputmode="numeric" placeholder="1" />
+                </div>
+                <button class="btn secondary" type="button" id="btnWsImport">Import</button>
+              </div>
+              <div id="wsStatus" class="muted small" style="margin-top:8px;"></div>
+
             <div class="row" style="justify-content:flex-end;">
               <button class="btn" id="btnSaveSettings">Spara</button>
             </div>
@@ -1728,8 +1762,8 @@
  
 
   const APP_VERSION = "1.3.0"; // bump when adding new data fields
-  const APP_SEMVER = "0.2.19";  // user-facing revision
-  const APP_GIT_REV = "86fcf6d";      // injected by tools/stamp-fu-version.mjs (optional)
+  const APP_SEMVER = "0.2.20";  // user-facing revision
+  const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE";
 
   let localStorageOk = true;
@@ -3512,7 +3546,7 @@ cur = {
     const now = new Date();
     const y = now.getFullYear();
     return {
-      company: { name: "FU-BOOKKEEPING", orgnr: "", currency: "SEK", defaultSign: "", addr:"", zip:"", city:"", country:"", email:"", phone:"", web:"", vat:"", payDays:30, bankgiro:"", plusgiro:"", swishPhone:"", bankAccountNo:"", iban:"", swift:"", invoiceNote:"", invoiceFooter:"", logoDataUrl:"" },
+      company: { name: "FU-BOOKKEEPING", orgnr: "", currency: "SEK", defaultSign: "", addr:"", zip:"", city:"", country:"", email:"", phone:"", web:"", vat:"", payDays:30, bankgiro:"", plusgiro:"", swishPhone:"", bankAccountNo:"", iban:"", swift:"", invoiceNote:"", invoiceFooter:"", logoDataUrl:"", webshopSync: { enabled: false, apiBaseUrl: "https://innovatio-brutalis.com", apiKey: "", series: "W", pullLimit: 1 } },
       features: { sruEnabled: false },
       fileSync: { autosave: true, requireFile: false },
       fiscalYears: [
@@ -4204,6 +4238,294 @@ if (!d.features) d.features = { sruEnabled: false };
   const btnRemoveLogo = document.getElementById("btnRemoveLogo");
   const logoPreview = document.getElementById("logoPreview");
 
+  // Webshop sync add-on (Settings)
+  const wsEnabled = document.getElementById("wsEnabled");
+  const wsApiBaseUrl = document.getElementById("wsApiBaseUrl");
+  const wsApiKey = document.getElementById("wsApiKey");
+  const wsSeries = document.getElementById("wsSeries");
+  const wsLimit = document.getElementById("wsLimit");
+  const btnWsImport = document.getElementById("btnWsImport");
+  const wsStatus = document.getElementById("wsStatus");
+
+  function webshopSyncDefaults(){
+    return { enabled: false, apiBaseUrl: "https://innovatio-brutalis.com", apiKey: "", series: "W", pullLimit: 1 };
+  }
+
+  function normalizeWebshopSync(cfg){
+    const d = webshopSyncDefaults();
+    const c = (cfg && typeof cfg === "object") ? cfg : {};
+    const pullLimitRaw = Number(c.pullLimit);
+    const pullLimit = Number.isFinite(pullLimitRaw) ? Math.min(50, Math.max(1, Math.round(pullLimitRaw))) : d.pullLimit;
+    return {
+      enabled: !!c.enabled,
+      apiBaseUrl: String(c.apiBaseUrl || d.apiBaseUrl || "").trim(),
+      apiKey: String(c.apiKey || "").trim(),
+      series: (String(c.series || d.series).trim() || d.series).slice(0, 3),
+      pullLimit,
+    };
+  }
+
+  function setWebshopStatus(text){
+    if (!wsStatus) return;
+    wsStatus.textContent = String(text || "");
+  }
+
+  function webshopImportedKey(companyId){
+    const id = String(companyId || "").trim();
+    return id ? `FU_WS_IMPORTED_PAYLOADS_V1:${id}` : "";
+  }
+
+  function loadWebshopImported(companyId){
+    const key = webshopImportedKey(companyId);
+    if (!key) return { ids: [], map: {} };
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return { ids: [], map: {} };
+      const obj = JSON.parse(raw);
+      const ids = Array.isArray(obj && obj.ids) ? obj.ids.map(x=>String(x||"").trim()).filter(Boolean) : [];
+      const map = (obj && obj.map && typeof obj.map === "object") ? obj.map : {};
+      const outMap = {};
+      for (const pid of ids){
+        const v = map && (pid in map) ? map[pid] : null;
+        outMap[pid] = v == null ? null : String(v);
+      }
+      return { ids, map: outMap };
+    } catch {
+      return { ids: [], map: {} };
+    }
+  }
+
+  function saveWebshopImported(companyId, data){
+    const key = webshopImportedKey(companyId);
+    if (!key) return false;
+    try {
+      const ids = Array.isArray(data && data.ids) ? data.ids.map(x=>String(x||"").trim()).filter(Boolean) : [];
+      const map = (data && data.map && typeof data.map === "object") ? data.map : {};
+      localStorage.setItem(key, JSON.stringify({ ids, map }));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function isWebshopPayloadImported(companyId, payloadId){
+    const pid = String(payloadId || "").trim();
+    if (!pid) return false;
+    const data = loadWebshopImported(companyId);
+    return !!(data.map && Object.prototype.hasOwnProperty.call(data.map, pid));
+  }
+
+  function getImportedVoucherId(companyId, payloadId){
+    const pid = String(payloadId || "").trim();
+    if (!pid) return null;
+    const data = loadWebshopImported(companyId);
+    const v = data.map && Object.prototype.hasOwnProperty.call(data.map, pid) ? data.map[pid] : null;
+    return v == null ? null : String(v);
+  }
+
+  function markWebshopPayloadImported(companyId, payloadId, voucherId){
+    const pid = String(payloadId || "").trim();
+    if (!pid) return false;
+
+    const data = loadWebshopImported(companyId);
+    data.map = data.map && typeof data.map === "object" ? data.map : {};
+    data.ids = Array.isArray(data.ids) ? data.ids : [];
+
+    if (!Object.prototype.hasOwnProperty.call(data.map, pid)) data.ids.push(pid);
+    data.map[pid] = voucherId == null ? null : String(voucherId);
+
+    const MAX = 800;
+    while (data.ids.length > MAX){
+      const drop = String(data.ids.shift() || "").trim();
+      if (drop) delete data.map[drop];
+    }
+    return saveWebshopImported(companyId, data);
+  }
+
+  function getYearIdForDate(dateIso){
+    const d = String(dateIso || "").slice(0,10);
+    const fys = Array.isArray(state.fiscalYears) ? state.fiscalYears : [];
+    const found = fys.find(fy => fy && fy.start && fy.end && fy.start <= d && d <= fy.end);
+    if (found && found.id) return String(found.id);
+    if (state && state.activeYearId) return String(state.activeYearId);
+    return d ? d.slice(0,4) : String(new Date().getFullYear());
+  }
+
+  function ensureVoucherSeries(series){
+    return (String(series || "W").trim() || "W");
+  }
+
+  function voucherFromWebshopPayload(payloadObj, { series } = {}){
+    const p = payloadObj && typeof payloadObj === "object" ? payloadObj : null;
+    if (!p) throw new Error("Saknar payload");
+    if (!Array.isArray(p.lines) || !p.lines.length) throw new Error("Payload saknar rader");
+
+    const date = String(p.date || todayISO()).slice(0,10);
+    const yearId = getYearIdForDate(date);
+    const seriesNorm = ensureVoucherSeries(series || "W");
+    const no = nextVerno(yearId, seriesNorm);
+
+    const text = clampText(String(p.lines[0]?.text || ((p.kind === "refund" ? "Refund" : "Order") + " " + (p.order_number || ""))).trim());
+    const sign = clampText((state.company.defaultSign || "").trim());
+    const regDate = todayISO();
+
+    const lines = p.lines.map((l) => {
+      const acc = String(l?.account ?? "").trim();
+      const debit = Number(l?.debit || 0);
+      const credit = Number(l?.credit || 0);
+      const amt = Math.round((debit - credit) * 100) / 100;
+      return { account: acc, text: clampText(String(l?.text || text)), amount: amt };
+    }).filter(l => l.account);
+
+    // Auto-add missing accounts referenced by the import.
+    // Keep this conservative: only add accounts that actually appear in the imported voucher lines.
+    try {
+      state.accounts = state.accounts || {};
+      const nameByNo = {
+        "1580": "Fordran kortbetalningar (Stripe)",
+        "1581": "Fordran kortbetalningar (Klarna)",
+        "1930": "Företagskonto/bank",
+        "6045": "Kortavgifter",
+        "6570": "Bankkostnader",
+        "2611": "Utgående moms 25 %",
+        "3011": "Försäljning varor 25 %",
+        "3520": "Fakturerade frakter",
+      };
+      const added = [];
+      for (const ln of lines){
+        const no = normalizeAccountNo(ln.account);
+        if (!no) continue;
+        if (state.accounts[no]) continue;
+        state.accounts[no] = { name: nameByNo[no] || `Import (webshop) ${no}`, type: guessTypeFromAccountNo(no) };
+        added.push(no);
+      }
+      if (added.length){
+        try { appendAudit({ action:"account.auto_add", entityType:"account", entityId: added.join(","), yearId, details:{ source:"webshop", accounts: added } }); } catch {}
+      }
+    } catch (e){ console.error(e); }
+
+    const sum = lines.reduce((s,l)=> s + (Number(l.amount)||0), 0);
+    if (Math.abs(sum) > 0.00001) throw new Error("Verifikationen är inte i balans");
+
+    const v = {
+      id: crypto.randomUUID(),
+      yearId,
+      series: seriesNorm,
+      no,
+      date,
+      text,
+      regDate,
+      sign,
+      lines,
+      correctionOf: null,
+      status: "active",
+      importedFrom: { source: String(p.source || "webshop"), kind: String(p.kind || ""), order_id: String(p.order_id || ""), order_number: String(p.order_number || "") }
+    };
+
+    state.vouchers = state.vouchers || [];
+    state.vouchers.push(v);
+    state.vouchers.sort((a,b)=> (a.yearId+b.series+a.no+a.date).localeCompare(b.yearId+a.series+b.no+b.date, "sv"));
+    return v;
+  }
+
+  async function webshopPull({ apiBaseUrl, apiKey, pullLimit }){
+    const base = String(apiBaseUrl || "").replace(/\/+$/g, "");
+    const url = `${base}/api/fu/pull?limit=${encodeURIComponent(String(pullLimit || 20))}`;
+    const res = await fetch(url, {
+      method: "GET",
+      headers: { "X-FU-Key": String(apiKey || "") }
+    });
+    const data = await res.json().catch(()=> null);
+    if (!res.ok) throw new Error((data && data.error) ? String(data.error) : `HTTP ${res.status}`);
+    if (!data || data.ok !== true) throw new Error((data && data.error) ? String(data.error) : "Okänt fel");
+    return Array.isArray(data.payloads) ? data.payloads : [];
+  }
+
+  async function webshopAck({ apiBaseUrl, apiKey, id, ok, voucher_id, error }){
+    const base = String(apiBaseUrl || "").replace(/\/+$/g, "");
+    const url = `${base}/api/fu/ack`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "X-FU-Key": String(apiKey || ""),
+      },
+      body: JSON.stringify({ id, ok: !!ok, voucher_id: voucher_id ?? null, error: error ?? null }),
+    });
+    const data = await res.json().catch(()=> null);
+    if (!res.ok) throw new Error((data && data.error) ? String(data.error) : `HTTP ${res.status}`);
+    return data;
+  }
+
+  async function runWebshopImportFromUi(){
+    const companyId = (typeof CompanyManager !== "undefined" && CompanyManager && CompanyManager.getActiveCompanyId) ? CompanyManager.getActiveCompanyId() : null;
+    if (!companyId) return showToast("Välj ett företag innan import.", 5500);
+
+    state.company = state.company || defaultData().company;
+    const cfgFromState = normalizeWebshopSync(state.company.webshopSync);
+
+    const cfg = normalizeWebshopSync({
+      enabled: wsEnabled ? wsEnabled.checked : cfgFromState.enabled,
+      apiBaseUrl: wsApiBaseUrl ? wsApiBaseUrl.value : cfgFromState.apiBaseUrl,
+      apiKey: wsApiKey ? wsApiKey.value : cfgFromState.apiKey,
+      series: wsSeries ? wsSeries.value : cfgFromState.series,
+      pullLimit: wsLimit ? wsLimit.value : cfgFromState.pullLimit,
+    });
+
+    if (!cfg.enabled) return showToast("Webshop-synk är inte aktiverad för detta företag.", 5500);
+    if (!cfg.apiBaseUrl) return showToast("Ange API base URL.", 5500);
+    if (!cfg.apiKey) return showToast("Ange X-FU-Key.", 5500);
+
+    const runLabel = new Date().toLocaleString("sv-SE");
+    setWebshopStatus(`Senast: ${runLabel} · Hämtar kö…`);
+    const payloads = await webshopPull({ apiBaseUrl: cfg.apiBaseUrl, apiKey: cfg.apiKey, pullLimit: cfg.pullLimit });
+    if (!payloads.length){
+      setWebshopStatus(`Senast: ${runLabel} · Inget att importera.`);
+      showToast("Inga nya händelser i kö.", 3500);
+      return;
+    }
+
+    let okCount = 0;
+    let errCount = 0;
+    let skipCount = 0;
+
+    for (const item of payloads){
+      const payloadId = String(item?.id || "");
+      const p = item?.payload;
+      if (!payloadId){
+        errCount++;
+        continue;
+      }
+
+      // Idempotent-ish: never create duplicates if the same payload is pulled twice.
+      if (isWebshopPayloadImported(companyId, payloadId)){
+        const prevVoucherId = getImportedVoucherId(companyId, payloadId);
+        try { await webshopAck({ apiBaseUrl: cfg.apiBaseUrl, apiKey: cfg.apiKey, id: payloadId, ok: true, voucher_id: prevVoucherId ?? null }); } catch (_) {}
+        skipCount++;
+        continue;
+      }
+      try {
+        const v = voucherFromWebshopPayload(p, { series: cfg.series });
+        const voucher_id = `${v.series}${v.no}`;
+        markWebshopPayloadImported(companyId, payloadId, voucher_id);
+        try {
+          appendAudit({ action:"voucher.import", actor: v.sign || undefined, entityType:"voucher", entityId: v.id, yearId: v.yearId, details:{ source:"webshop", payloadId, voucher_id, order_id: item?.order_id || null, kind: item?.kind || null } });
+        } catch {}
+        save({ renderAll: false });
+        await webshopAck({ apiBaseUrl: cfg.apiBaseUrl, apiKey: cfg.apiKey, id: payloadId, ok: true, voucher_id });
+        okCount++;
+      } catch (e){
+        const msg = String((e && e.message) ? e.message : e);
+        try { await webshopAck({ apiBaseUrl: cfg.apiBaseUrl, apiKey: cfg.apiKey, id: payloadId, ok: false, error: msg }); } catch (_) {}
+        errCount++;
+      }
+    }
+
+    try { renderVouchers(); } catch {}
+    setWebshopStatus(`Senast: ${runLabel} · OK: ${okCount}, hoppade: ${skipCount}, fel: ${errCount}.`);
+    showToast(`Webshop-import klar. OK: ${okCount}, hoppade: ${skipCount}, fel: ${errCount}.`, 5500);
+  }
+
   function renderLogoPreview(){
     if (!logoPreview) return;
     const url = state && state.company && state.company.logoDataUrl ? String(state.company.logoDataUrl) : "";
@@ -4245,6 +4567,15 @@ if (!d.features) d.features = { sruEnabled: false };
 
     state.company.invoiceNote = (sInvNote?.value || "").trim();
     state.company.invoiceFooter = (sInvFooter?.value || "").trim();
+
+    // Webshop sync add-on (per company)
+    state.company.webshopSync = normalizeWebshopSync({
+      enabled: !!(wsEnabled && wsEnabled.checked),
+      apiBaseUrl: (wsApiBaseUrl?.value || "").trim(),
+      apiKey: (wsApiKey?.value || "").trim(),
+      series: (wsSeries?.value || "W").trim(),
+      pullLimit: parseInt(String(wsLimit?.value || "").trim(), 10),
+    });
 
     state.features.sruEnabled = !!(sSruEnabled && sSruEnabled.checked);
 
@@ -4406,6 +4737,15 @@ if (!d.features) d.features = { sruEnabled: false };
 
     if (sInvNote) sInvNote.value = c.invoiceNote || "";
     if (sInvFooter) sInvFooter.value = c.invoiceFooter || "";
+
+    // Webshop sync add-on
+    const ws = normalizeWebshopSync(c.webshopSync);
+    if (wsEnabled) wsEnabled.checked = !!ws.enabled;
+    if (wsApiBaseUrl) wsApiBaseUrl.value = ws.apiBaseUrl || "";
+    if (wsApiKey) wsApiKey.value = ws.apiKey || "";
+    if (wsSeries) wsSeries.value = ws.series || "W";
+    if (wsLimit) wsLimit.value = String(ws.pullLimit ?? 1);
+    setWebshopStatus("");
 
     if (sSruEnabled) sSruEnabled.checked = !!(state.features && state.features.sruEnabled);
 
@@ -11315,6 +11655,24 @@ if (rptYearSelect){
         console.error(err);
         const msg = (err && (err.message || err.name)) ? String(err.message || err.name) : "(okänt fel)";
         showToast(`Kunde inte spara inställningar: ${msg}. Se konsolen.`, 8000);
+      }
+    });
+  }
+
+  if (btnWsImport){
+    btnWsImport.addEventListener("click", async (e)=>{
+      e.preventDefault();
+      const prev = btnWsImport.disabled;
+      btnWsImport.disabled = true;
+      try {
+        await runWebshopImportFromUi();
+      } catch (err){
+        console.error(err);
+        const msg = String((err && (err.message || err.name)) ? (err.message || err.name) : err);
+        setWebshopStatus("Fel: " + msg);
+        showToast(`Webshop-import misslyckades: ${msg}`, 9000);
+      } finally {
+        btnWsImport.disabled = prev;
       }
     });
   }

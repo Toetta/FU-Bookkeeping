@@ -309,7 +309,7 @@
       <span class="pill" id="bootPill">JS: laddar…</span>
       <span class="pill" id="storagePill">Lagring: localStorage (offline)</span>
       <span class="pill" id="backupPill">Backup: –</span>
-      <span class="pill" id="revPill">v0.2.20</span>
+      <span class="pill" id="revPill">v0.2.21</span>
     </div>
   </div>
 </header>
@@ -1762,9 +1762,10 @@
  
 
   const APP_VERSION = "1.3.0"; // bump when adding new data fields
-  const APP_SEMVER = "0.2.20";  // user-facing revision
+  const APP_SEMVER = "0.2.21";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
-  const STORAGE_KEY = "FU_BOOKKEEPING_STATE";
+  const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
+  const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
 
   let localStorageOk = true;
 
@@ -2438,7 +2439,27 @@ function updateBackupUI(){
 
   async function wipeAllData(){
     if (!(await confirmAsync("Rensa ALL data? Detta kan inte ångras. Ta en backup först."))) return;
-    try { localStorage.removeItem(STORAGE_KEY); } catch (e){ console.error(e); }
+    try {
+      // Legacy single-company key
+      try { localStorage.removeItem(STORAGE_KEY); } catch {}
+      // Per-company keys
+      try {
+        const ks = [];
+        for (let i = 0; i < localStorage.length; i++){
+          const k = localStorage.key(i);
+          if (!k) continue;
+          if (String(k).startsWith(STORAGE_KEY_PREFIX)) ks.push(k);
+          if (String(k).startsWith("FU_WS_IMPORTED_PAYLOADS_V1:")) ks.push(k);
+        }
+        ks.forEach(k=>{ try { localStorage.removeItem(k); } catch {} });
+      } catch {}
+
+      // Registry + migration flags
+      try { localStorage.removeItem(COMPANY_REGISTRY_KEY); } catch {}
+      try { localStorage.removeItem(COMPANY_REGISTRY_MIGRATED_FLAG); } catch {}
+    } catch (e){
+      console.error(e);
+    }
     try { await fsDisconnect(); } catch (e){ /* ignore */ }
     state = defaultData();
     try { fillYearSelectors(); } catch (e){ console.error(e); }
@@ -3593,10 +3614,104 @@ cur = {
       
   }
 
+  function getActiveCompanyIdForStorage(){
+    try {
+      if (typeof CompanyManager !== "undefined" && CompanyManager && typeof CompanyManager.getActiveCompanyId === "function"){
+        return CompanyManager.getActiveCompanyId();
+      }
+    } catch {}
+    try {
+      const r = companyLoadRegistry();
+      return (r && r.activeCompanyId) ? String(r.activeCompanyId) : null;
+    } catch {}
+    return null;
+  }
+
+  function storageKeyForCompany(companyId){
+    const id = String(companyId || "").trim();
+    return id ? (STORAGE_KEY_PREFIX + id) : STORAGE_KEY;
+  }
+
+  function storageKeyForActiveCompany(){
+    return storageKeyForCompany(getActiveCompanyIdForStorage());
+  }
+
+  function ensureLocalCompanyRegistry(nameHint, orgnrHint){
+    // Ensures there is at least one company in the registry so the dropdown isn't empty
+    // when using localStorage-only mode.
+    let r = null;
+    try { r = companyLoadRegistry(); } catch {}
+    if (!r) r = companyEmptyRegistry();
+    if (!r.companies || typeof r.companies !== "object") r.companies = {};
+
+    // Keep an existing valid active company
+    if (r.activeCompanyId && r.companies[r.activeCompanyId]) return String(r.activeCompanyId);
+
+    // If there are companies but none active, pick the first
+    const ids = Object.keys(r.companies || {});
+    if (ids.length){
+      r.activeCompanyId = ids[0];
+      try { companySaveRegistry(r); } catch {}
+      return String(r.activeCompanyId);
+    }
+
+    // Create a single local company entry
+    const id = "c_local";
+    r.companies[id] = {
+      id,
+      name: String(nameHint || "").trim() || "Företag 1",
+      orgnr: String(orgnrHint || "").trim(),
+      createdAtISO: nowISO(),
+      lastOpenedISO: nowISO(),
+      lastBackupDate: null,
+      colorTag: null,
+    };
+    r.activeCompanyId = id;
+    try { companySaveRegistry(r); } catch {}
+    return id;
+  }
+
   function load(){
     let raw = "";
     try {
-      raw = localStorage.getItem(STORAGE_KEY) || "";
+      // Determine which company we should load for.
+      let activeId = getActiveCompanyIdForStorage();
+
+      // If there is no company yet, create a local one so the app is usable without a JSON file.
+      if (!activeId){
+        // If legacy state exists, try to pull name/orgnr from it.
+        try {
+          const legacyRaw = localStorage.getItem(STORAGE_KEY) || "";
+          if (legacyRaw){
+            try {
+              const legacyObj = JSON.parse(legacyRaw);
+              const n = legacyObj && legacyObj.company && legacyObj.company.name ? String(legacyObj.company.name).trim() : "";
+              const o = legacyObj && legacyObj.company && legacyObj.company.orgnr ? String(legacyObj.company.orgnr).trim() : "";
+              activeId = ensureLocalCompanyRegistry(n, o);
+            } catch {
+              activeId = ensureLocalCompanyRegistry("", "");
+            }
+          } else {
+            activeId = ensureLocalCompanyRegistry("", "");
+          }
+        } catch {
+          activeId = ensureLocalCompanyRegistry("", "");
+        }
+      }
+
+      const key = storageKeyForCompany(activeId);
+      raw = localStorage.getItem(key) || "";
+
+      // One-time migration: if per-company key is missing but legacy key exists, copy it.
+      if (!raw){
+        const legacyRaw = localStorage.getItem(STORAGE_KEY) || "";
+        if (legacyRaw && key !== STORAGE_KEY){
+          try { localStorage.setItem(key, legacyRaw); } catch {}
+          raw = legacyRaw;
+        } else {
+          raw = legacyRaw;
+        }
+      }
       localStorageOk = true;
     } catch (e){
       console.error(e);
@@ -3662,7 +3777,7 @@ if (!d.features) d.features = { sruEnabled: false };
 
     let persisted = false;
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      localStorage.setItem(storageKeyForActiveCompany(), JSON.stringify(state));
       persisted = true;
     } catch (e){
       console.error(e);
@@ -3674,7 +3789,7 @@ if (!d.features) d.features = { sruEnabled: false };
         const prev = state.company.logoDataUrl;
         try {
           state.company.logoDataUrl = "";
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+          localStorage.setItem(storageKeyForActiveCompany(), JSON.stringify(state));
           persisted = true;
           showToast("Kunde inte spara p.g.a. lagringsutrymme. Logotypen var troligen för stor och togs bort – försök med en mindre bild.", 8000);
         } catch (e2){
@@ -3683,7 +3798,7 @@ if (!d.features) d.features = { sruEnabled: false };
           // Try one more pass by pruning large optional fields (e.g. bankimport raw rows)
           try {
             if (pruneForStorage()){
-              localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+              localStorage.setItem(storageKeyForActiveCompany(), JSON.stringify(state));
               persisted = true;
               showToast("Kunde inte spara p.g.a. lagringsutrymme. Rensade rådata från importerade bankrader för att få plats.", 9000);
             } else {
@@ -3699,7 +3814,7 @@ if (!d.features) d.features = { sruEnabled: false };
         if (isQuotaError(e)){
           try {
             if (pruneForStorage()){
-              localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+              localStorage.setItem(storageKeyForActiveCompany(), JSON.stringify(state));
               persisted = true;
               showToast("Kunde inte spara p.g.a. lagringsutrymme. Rensade rådata från importerade bankrader för att få plats.", 9000);
             } else {
@@ -3728,7 +3843,7 @@ if (!d.features) d.features = { sruEnabled: false };
   // När användaren väljer en NY datafil ska inget gammalt ligga kvar lokalt och riskera att blandas ihop.
   // Detta körs automatiskt innan filen laddas/ansluts.
   async function wipeLocalDataForNewDataFile(){
-    try { localStorage.removeItem(STORAGE_KEY); } catch (e){ /* ignore */ }
+    try { localStorage.removeItem(storageKeyForActiveCompany()); } catch (e){ /* ignore */ }
     // Reset in-memory state (UI kommer ändå att uppdateras av fil-inläsningen)
     try { state = defaultData(); } catch (e){ /* ignore */ }
 
@@ -3802,7 +3917,9 @@ if (!d.features) d.features = { sruEnabled: false };
         storagePill.textContent = `Lagring: ${cn} · datafil (${name})`;
         setPillState(storagePill, fsLastError ? "bad" : "ok");
       } else {
-        storagePill.textContent = localStorageOk ? "Lagring: localStorage (offline)" : "Lagring: localStorage blockerad";
+        const cn = hasCompany ? (CompanyManager.activeCompanyDisplayName() || "Företag") : "";
+        const base = localStorageOk ? "localStorage (offline)" : "localStorage blockerad";
+        storagePill.textContent = cn ? `Lagring: ${cn} · ${base}` : `Lagring: ${base}`;
         // Offline storage is considered an error state in this app.
         setPillState(storagePill, "bad");
       }
@@ -3830,8 +3947,8 @@ if (!d.features) d.features = { sruEnabled: false };
     const requireFile = !!(state.fileSync && state.fileSync.requireFile);
 
     if (!fsApiSupported()){
-      setFsStatus("bad", requireFile ? "Kräver HTTPS/localhost + Chrome/Edge (fil krävs)" : "Kräver HTTPS/localhost + Chrome/Edge");
-      setEditingLocked(true);
+      setFsStatus("bad", requireFile ? "Kräver HTTPS/localhost + Chrome/Edge (fil krävs)" : "Fil-synk stöds ej (localStorage används)" );
+      setEditingLocked(!!requireFile);
       return;
     }
 
@@ -3843,7 +3960,7 @@ if (!d.features) d.features = { sruEnabled: false };
 
     if (!connected){
       setFsStatus("bad", requireFile ? "Inte ansluten · kräver datafil" : "Inte ansluten");
-      setEditingLocked(true);
+      setEditingLocked(!!requireFile);
       return;
     }
 
@@ -4578,6 +4695,18 @@ if (!d.features) d.features = { sruEnabled: false };
     });
 
     state.features.sruEnabled = !!(sSruEnabled && sSruEnabled.checked);
+
+    // Keep multi-company registry metadata updated (so the company selector reflects settings)
+    try {
+      if (typeof CompanyManager !== "undefined" && CompanyManager && CompanyManager.hasActiveCompany && CompanyManager.hasActiveCompany()){
+        CompanyManager.updateActiveCompanyMeta({
+          name: state.company.name ? String(state.company.name).trim() : "(namnlöst företag)",
+          orgnr: state.company.orgnr ? String(state.company.orgnr).trim() : "",
+          lastOpenedISO: nowISO(),
+        });
+        CompanyManager.updateCompanySelectUI();
+      }
+    } catch {}
 
     if (companyNameEl) companyNameEl.textContent = state.company.name || "FU-BOOKKEEPING";
     const ok = save();
@@ -11756,7 +11885,7 @@ try {
   if (typeof applyStdAccountsMapRepair === "function"){
     const r = applyStdAccountsMapRepair({ onlyReplacement: true });
     if (r && r.updated){
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e){ console.error(e); }
+      try { localStorage.setItem(storageKeyForActiveCompany(), JSON.stringify(state)); } catch (e){ console.error(e); }
     }
   }
 } catch (e){ console.error(e); }
@@ -11880,20 +12009,30 @@ if (companySelect) companySelect.addEventListener("change", async ()=>{
     await maybeSilentAutosaveToFile("switch-company");
     await CompanyManager.setActiveCompany(targetId);
 
-    // Clear local state to avoid mixing companies if load fails
-    try { await wipeLocalDataForNewDataFile(); } catch {}
-
-    if (!fsHandle){
-      showToast("Företaget saknar kopplad datafil.", 4500);
-      return;
-    }
-
-    try {
-      await fsLoadState();
-      showToast("Bytte företag.", 2500);
-    } catch (e){
-      console.error(e);
-      showToast("Kunde inte ladda företagets datafil. Se konsolen.", 7000);
+    const requireFile = !!(state && state.fileSync && state.fileSync.requireFile);
+    if (fsHandle){
+      try {
+        await fsLoadState();
+        showToast("Bytte företag.", 2500);
+      } catch (e){
+        console.error(e);
+        showToast("Kunde inte ladda företagets datafil. Se konsolen.", 7000);
+      }
+    } else {
+      if (requireFile){
+        showToast("Företaget saknar kopplad datafil (fil krävs).", 6500);
+      }
+      // Load localStorage state for this company.
+      try {
+        state = normalizeImportedState(load());
+        try { updateFsUI(); } catch {}
+        try { updateBackupUI(); } catch {}
+        try { renderAll(); } catch {}
+        showToast("Bytte företag.", 2500);
+      } catch (e){
+        console.error(e);
+        showToast("Kunde inte ladda företagets localStorage-data.", 7000);
+      }
     }
   } catch (e){
     console.error(e);

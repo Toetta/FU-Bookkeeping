@@ -309,7 +309,7 @@
       <span class="pill" id="bootPill">JS: laddar…</span>
       <span class="pill" id="storagePill">Lagring: localStorage (offline)</span>
       <span class="pill" id="backupPill">Backup: –</span>
-      <span class="pill" id="revPill">v0.2.24</span>
+      <span class="pill" id="revPill">v0.2.25</span>
     </div>
   </div>
 </header>
@@ -1416,19 +1416,20 @@
                 </div>
               </div>
               <div id="wsKeyHelp" class="muted small" hidden style="margin-top:-6px; margin-bottom:10px;">
-                <div style="font-weight:800; margin-bottom:6px;">Så får du en X-FU-Key (steg för steg)</div>
-                <ol style="margin:0; padding-left:18px; display:grid; gap:6px;">
-                  <li><b>Du behöver tillgång till backend</b> som kör <span class="kbd">/api/fu/pull</span> och <span class="kbd">/api/fu/ack</span> på din domän (t.ex. <span class="kbd">https://innovatio-brutalis.com</span>).</li>
-                  <li><b>Skapa en hemlig nyckel</b> (slumpad sträng). Exempel:
-                    <div class="kbd" style="margin-top:4px;">openssl rand -hex 32</div>
-                  </li>
-                  <li><b>Spara nyckeln som en secret i backend</b> (Cloudflare Pages/Functions):
-                    <div class="kbd" style="margin-top:4px;">Cloudflare Dashboard → Pages → (projekt) → Settings → Variables &amp; Secrets → Add secret</div>
-                  </li>
-                  <li><b>Välj samma nyckel här</b> för detta företag (fältet <b>X-FU-Key</b>) och klicka <b>Spara</b>.</li>
-                  <li><b>Testa</b> genom att klicka <b>Import</b>. Om nyckeln är fel får du normalt <span class="kbd">401/403</span> eller ett felmeddelande i statusraden.</li>
-                </ol>
-                <div style="margin-top:8px;">Om du inte har tillgång till backend: be den som driver servern att skapa/rota fram nyckeln och ge dig den.</div>
+                <div style="font-weight:800; margin-bottom:6px;">Hjälp: X-FU-Key (enkelt)</div>
+                <div style="display:grid; gap:8px;">
+                  <div><b>X-FU-Key</b> är en <b>hemlig nyckel</b> (som ett lösenord) som du får av den som sköter webshop-synken. Du kan inte “hämta” den från FU – den måste delas ut till dig.</div>
+                  <div style="font-weight:800;">Gör så här (slutanvändare)</div>
+                  <ol style="margin:0; padding-left:18px; display:grid; gap:6px;">
+                    <li>Låt <b>API base URL</b> stå kvar om den redan är rätt (oftast <span class="kbd">https://innovatio-brutalis.com</span>), annars fyll i den URL du fått.</li>
+                    <li>Klistra in din <b>X-FU-Key</b>.</li>
+                    <li>Klicka <b>Spara</b>.</li>
+                    <li>Klicka <b>Import</b> för att hämta verifikationer från kön.</li>
+                  </ol>
+                  <div>Funkar det inte? Dubbelkolla URL + nyckel. Vid fel får du ofta <span class="kbd">401/403</span> (fel nyckel) eller annat fel i statusraden.</div>
+                  <div style="font-weight:800; margin-top:4px;">För den som driftar backend (admin)</div>
+                  <div>Det måste finnas en backend på din domän som erbjuder <span class="kbd">/api/fu/pull</span> och <span class="kbd">/api/fu/ack</span>, och den måste validera headern <span class="kbd">X-FU-Key</span>. Dela sedan nyckeln till användarna som ska importera.</div>
+                </div>
               </div>
               <div class="row" style="gap:10px; align-items:end; flex-wrap:wrap;">
                 <div class="field" style="min-width:200px;">
@@ -1780,7 +1781,7 @@
  
 
   const APP_VERSION = "1.3.0"; // bump when adding new data fields
-  const APP_SEMVER = "0.2.24";  // user-facing revision
+  const APP_SEMVER = "0.2.25";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -4901,6 +4902,7 @@ if (!d.features) d.features = { sruEnabled: false };
     try {
       if (wsKeyHelp) wsKeyHelp.hidden = true;
       if (btnWsKeyHelp) btnWsKeyHelp.setAttribute("aria-expanded", "false");
+      if (btnWsKeyHelp) btnWsKeyHelp.textContent = "Hjälp";
     } catch {}
 
     if (sSruEnabled) sSruEnabled.checked = !!(state.features && state.features.sruEnabled);
@@ -11840,6 +11842,7 @@ if (rptYearSelect){
       const nextHidden = !wsKeyHelp.hidden ? true : false;
       wsKeyHelp.hidden = nextHidden;
       try { btnWsKeyHelp.setAttribute("aria-expanded", nextHidden ? "false" : "true"); } catch {}
+      try { btnWsKeyHelp.textContent = nextHidden ? "Hjälp" : "Dölj"; } catch {}
     });
   }
 

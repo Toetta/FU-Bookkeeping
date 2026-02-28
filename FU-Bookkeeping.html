@@ -309,7 +309,7 @@
       <span class="pill" id="bootPill">JS: laddar…</span>
       <span class="pill" id="storagePill">Lagring: localStorage (offline)</span>
       <span class="pill" id="backupPill">Backup: –</span>
-      <span class="pill" id="revPill">v0.2.22</span>
+      <span class="pill" id="revPill">v0.2.23</span>
     </div>
   </div>
 </header>
@@ -1762,7 +1762,7 @@
  
 
   const APP_VERSION = "1.3.0"; // bump when adding new data fields
-  const APP_SEMVER = "0.2.22";  // user-facing revision
+  const APP_SEMVER = "0.2.23";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -3947,7 +3947,7 @@ if (!d.features) d.features = { sruEnabled: false };
     const requireFile = !!(state.fileSync && state.fileSync.requireFile);
 
     if (!fsApiSupported()){
-      setFsStatus("bad", requireFile ? "Kräver HTTPS/localhost + Chrome/Edge (fil krävs)" : "Fil-synk stöds ej (localStorage används)" );
+      setFsStatus("bad", requireFile ? "Låst · fil krävs (HTTPS + Chrome/Edge)" : "Fil-synk stöds ej (localStorage används)" );
       setEditingLocked(!!requireFile);
       return;
     }
@@ -3959,7 +3959,7 @@ if (!d.features) d.features = { sruEnabled: false };
     }
 
     if (!connected){
-      setFsStatus("bad", requireFile ? "Inte ansluten · kräver datafil" : "Inte ansluten");
+      setFsStatus("bad", requireFile ? "Låst · fil krävs" : "Inte ansluten (localStorage används)");
       setEditingLocked(!!requireFile);
       return;
     }

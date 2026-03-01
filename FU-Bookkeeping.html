@@ -1569,6 +1569,7 @@
                   <div class="row" style="justify-content:flex-end; margin-top:8px;">
                     <button class="btn secondary" type="button" id="btnWsSaveKeyMgr" title="Sparar nyckeln i webbläsarens lösenordshanterare (Chrome/Edge, HTTPS)">Spara i lösenordshanteraren</button>
                   </div>
+                  <div id="wsCredIdPreview" class="muted small" style="margin-top:6px; text-align:right;"></div>
                 </div>
               </div>
               <div id="wsKeyHelp" class="muted small" hidden style="margin-top:-6px; margin-bottom:10px;">
@@ -4673,6 +4674,7 @@ if (!d.features) d.features = { sruEnabled: false };
   const wsApiBaseUrl = document.getElementById("wsApiBaseUrl");
   const wsApiKey = document.getElementById("wsApiKey");
   const btnWsSaveKeyMgr = document.getElementById("btnWsSaveKeyMgr");
+  const wsCredIdPreview = document.getElementById("wsCredIdPreview");
   const btnWsKeyHelp = document.getElementById("btnWsKeyHelp");
   const wsKeyHelp = document.getElementById("wsKeyHelp");
   const wsSeries = document.getElementById("wsSeries");
@@ -4938,6 +4940,30 @@ if (!d.features) d.features = { sruEnabled: false };
     // Prefer org.nr when available; it stays stable even if the local company id changes.
     const stableId = org ? org : cid;
     return host ? `ws:${stableId}@${host}` : `ws:${stableId}`;
+  }
+
+  function updateWsCredIdPreview(){
+    if (!wsCredIdPreview) return;
+    try {
+      const companyId = (typeof CompanyManager !== "undefined" && CompanyManager && CompanyManager.getActiveCompanyId) ? CompanyManager.getActiveCompanyId() : null;
+      const apiBaseUrl = wsApiBaseUrl ? String(wsApiBaseUrl.value || "").trim() : "";
+      const orgnr = sOrgnr ? String(sOrgnr.value || "").trim() : (state && state.company && state.company.orgnr ? String(state.company.orgnr).trim() : "");
+
+      if (!companyId){
+        wsCredIdPreview.textContent = "Sparas som: – (välj företag)";
+        return;
+      }
+      if (!apiBaseUrl){
+        wsCredIdPreview.textContent = "";
+        return;
+      }
+
+      const id = wsCredentialIdFromConfig({ companyId, orgnr, apiBaseUrl });
+      const hint = orgnr ? "" : " (tips: fyll i org.nr för stabilt id)";
+      wsCredIdPreview.textContent = `Sparas som: ${id}${hint}`;
+    } catch {
+      wsCredIdPreview.textContent = "";
+    }
   }
 
   async function storePasswordCredential({ id, password, name } = {}){
@@ -5360,6 +5386,7 @@ if (!d.features) d.features = { sruEnabled: false };
     if (wsSeries) wsSeries.value = ws.series || "W";
     if (wsLimit) wsLimit.value = String(ws.pullLimit ?? 1);
     setWebshopStatus("");
+    try { updateWsCredIdPreview(); } catch {}
 
     // Help is per-session UI state; keep collapsed by default.
     try {
@@ -12597,6 +12624,8 @@ if (companySelect) companySelect.addEventListener("change", async ()=>{
         showToast("Kunde inte ladda företagets localStorage-data.", 7000);
       }
     }
+
+    try { updateWsCredIdPreview(); } catch {}
   } catch (e){
     console.error(e);
   }
@@ -12633,6 +12662,10 @@ if (btnDisconnectFile) btnDisconnectFile.addEventListener("click", async (e)=>{ 
 
 if (fsAutosave) fsAutosave.addEventListener("change", ()=>{ state.fileSync = state.fileSync || { autosave:true, requireFile:false }; state.fileSync.autosave = !!fsAutosave.checked; save(); updateFsUI(); });
 if (fsRequireFile) fsRequireFile.addEventListener("change", ()=>{ state.fileSync = state.fileSync || { autosave:true, requireFile:false }; state.fileSync.requireFile = !!fsRequireFile.checked; save(); updateFsUI(); });
+
+// Webshop key password-manager: live preview of computed username
+if (wsApiBaseUrl) wsApiBaseUrl.addEventListener("input", ()=>{ try { updateWsCredIdPreview(); } catch {} });
+if (sOrgnr) sOrgnr.addEventListener("input", ()=>{ try { updateWsCredIdPreview(); } catch {} });
 
 // Init company registry + restore active company handles (and attempt silent auto-load)
 (async ()=>{

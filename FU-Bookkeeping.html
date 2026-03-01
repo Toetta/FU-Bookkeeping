@@ -375,6 +375,7 @@
           </button>
           <div class="navFlyout" id="nav-admin" role="menu">
             <button type="button" class="tab" data-tab="settings">Inställningar</button>
+            <button type="button" class="tab" id="btnWsQuickImport">Webshop: Import</button>
           </div>
         </div>
       </aside>
@@ -4414,6 +4415,7 @@ if (!d.features) d.features = { sruEnabled: false };
   const wsLimit = document.getElementById("wsLimit");
   const btnWsTest = document.getElementById("btnWsTest");
   const btnWsImport = document.getElementById("btnWsImport");
+  const btnWsQuickImport = document.getElementById("btnWsQuickImport");
   const wsStatus = document.getElementById("wsStatus");
 
   function webshopSyncDefaults(){
@@ -11890,6 +11892,16 @@ if (rptYearSelect){
   if (btnSaveSettings){
     btnSaveSettings.addEventListener("click", (e)=>{
       e.preventDefault();
+
+  if (btnWsQuickImport) btnWsQuickImport.addEventListener("click", async (e)=>{
+    try { if (e && e.preventDefault) e.preventDefault(); } catch {}
+    try {
+      await runWebshopImportFromUi();
+    } catch (err) {
+      console.error(err);
+      showToast("Kunde inte importera. Se konsolen.", 8000);
+    }
+  });
       try { saveSettings(); }
       catch(err){
         console.error(err);

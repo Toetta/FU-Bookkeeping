@@ -362,11 +362,20 @@
 </div>
 
 <script>
-  // Only show splash on the custom domain(s); bypass on github.io/local file.
+  // Splash screen: show on any non-local hostname (works on both custom domains and github.io).
+  // Bypass on file:// and localhost, and allow ?nosplash=1 for quick bypass.
   (function(){
     try {
       var h = String(location.hostname || "").toLowerCase();
-      var show = (h === "fu-bookkeeping.se" || h === "www.fu-bookkeeping.se");
+      var isLocal = (!h || h === "localhost" || h === "127.0.0.1");
+      var isFile = (String(location.protocol || "").toLowerCase() === "file:");
+      var nosplash = false;
+      try {
+        var sp = new URLSearchParams(String(location.search || ""));
+        nosplash = sp.has("nosplash") && sp.get("nosplash") !== "0";
+      } catch (e2) {}
+
+      var show = !(isLocal || isFile || nosplash);
       if (!show){
         document.body.classList.remove("splashActive");
         var s = document.getElementById("splash");

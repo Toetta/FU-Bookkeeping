@@ -2155,6 +2155,51 @@ Tack!</div>
   const todayISO = () => new Date().toISOString().slice(0,10);
   const clampText = (s, max=120) => String(s ?? "").slice(0,max);
 
+  // --- Polyfills ---
+  // crypto.randomUUID() is only available in secure contexts (HTTPS) in many browsers.
+  // When running on http:// (e.g. before TLS is fully provisioned) we polyfill it.
+  (function ensureRandomUUID(){
+    try {
+      const c = (typeof window !== "undefined" && window.crypto) ? window.crypto : null;
+      if (!c || typeof c.randomUUID === "function") return;
+
+      function bytesToUuidV4(bytes){
+        const hex = Array.from(bytes, (b)=> b.toString(16).padStart(2, "0")).join("");
+        return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20,32)}`;
+      }
+
+      function weakUuidV4(){
+        function randomHex(len){
+          let out = "";
+          while (out.length < len){
+            out += Math.floor(Math.random() * 0x100000000).toString(16).padStart(8, "0");
+          }
+          return out.slice(0, len);
+        }
+        const p1 = randomHex(8);
+        const p2 = randomHex(4);
+        const p3 = "4" + randomHex(3);
+        const p4 = (8 + Math.floor(Math.random() * 4)).toString(16) + randomHex(3);
+        const p5 = randomHex(12);
+        return `${p1}-${p2}-${p3}-${p4}-${p5}`;
+      }
+
+      c.randomUUID = function(){
+        try {
+          if (typeof c.getRandomValues === "function"){
+            const bytes = new Uint8Array(16);
+            c.getRandomValues(bytes);
+            // RFC 4122 v4
+            bytes[6] = (bytes[6] & 0x0f) | 0x40;
+            bytes[8] = (bytes[8] & 0x3f) | 0x80;
+            return bytesToUuidV4(bytes);
+          }
+        } catch (e) {}
+        return weakUuidV4();
+      };
+    } catch (e) {}
+  })();
+
   function escapeHtml(s){
     return String(s ?? "")
       .replaceAll("&", "&amp;")

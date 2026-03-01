@@ -1565,7 +1565,10 @@
                     <span>X-FU-Key</span>
                     <button class="btn secondary" type="button" id="btnWsKeyHelp" aria-expanded="false" aria-controls="wsKeyHelp" style="padding:6px 10px; border-radius:999px;">Hjälp</button>
                   </label>
-                  <input id="wsApiKey" type="password" placeholder="hemlig nyckel" />
+                  <input id="wsApiKey" type="password" placeholder="hemlig nyckel" autocomplete="current-password" inputmode="text" />
+                  <div class="row" style="justify-content:flex-end; margin-top:8px;">
+                    <button class="btn secondary" type="button" id="btnWsSaveKeyMgr" title="Sparar nyckeln i webbläsarens lösenordshanterare (Chrome/Edge, HTTPS)">Spara i lösenordshanteraren</button>
+                  </div>
                 </div>
               </div>
               <div id="wsKeyHelp" class="muted small" hidden style="margin-top:-6px; margin-bottom:10px;">
@@ -4669,6 +4672,7 @@ if (!d.features) d.features = { sruEnabled: false };
   const wsEnabled = document.getElementById("wsEnabled");
   const wsApiBaseUrl = document.getElementById("wsApiBaseUrl");
   const wsApiKey = document.getElementById("wsApiKey");
+  const btnWsSaveKeyMgr = document.getElementById("btnWsSaveKeyMgr");
   const btnWsKeyHelp = document.getElementById("btnWsKeyHelp");
   const wsKeyHelp = document.getElementById("wsKeyHelp");
   const wsSeries = document.getElementById("wsSeries");
@@ -4914,6 +4918,76 @@ if (!d.features) d.features = { sruEnabled: false };
     return true;
   }
 
+  const __wsKeyStoreAttempted = Object.create(null);
+
+  function wsCredentialIdFromConfig({ companyId, apiBaseUrl } = {}){
+    const cid = String(companyId || "").trim() || "fu";
+    const base = stripTrailingSlashes(String(apiBaseUrl || "").trim());
+    try {
+      const u = new URL(base);
+      return `ws:${cid}@${u.host}`;
+    } catch {
+      return base ? `ws:${cid}@${base.replace(/^https?:\/\//i, "")}` : `ws:${cid}`;
+    }
+  }
+
+  async function storePasswordCredential({ id, password, name } = {}){
+    const pwd = String(password || "");
+    const uid = String(id || "").trim();
+    if (!uid) throw new Error("Saknar id");
+    if (!pwd) throw new Error("Nyckeln är tom");
+
+    // Password manager integration requires secure contexts in practice.
+    if (!window.isSecureContext) throw new Error("Kräver HTTPS (secure context)");
+    if (!navigator.credentials || typeof navigator.credentials.store !== "function") throw new Error("Lösenordshanterare stöds ej här");
+
+    let cred = null;
+    if (window.PasswordCredential){
+      try {
+        // Some browsers support the dictionary constructor.
+        cred = new PasswordCredential({ id: uid, password: pwd, name: String(name || "") });
+      } catch {
+        cred = null;
+      }
+      if (!cred){
+        try {
+          // Fallback: create from a form (widely supported in Chromium).
+          const form = document.createElement("form");
+          const u = document.createElement("input");
+          u.name = "username";
+          u.autocomplete = "username";
+          u.value = uid;
+          const p = document.createElement("input");
+          p.name = "password";
+          p.type = "password";
+          p.autocomplete = "current-password";
+          p.value = pwd;
+          form.appendChild(u);
+          form.appendChild(p);
+          cred = new PasswordCredential(form);
+        } catch {
+          cred = null;
+        }
+      }
+    }
+
+    if (!cred) throw new Error("Kunde inte skapa credential");
+    await navigator.credentials.store(cred);
+    return true;
+  }
+
+  async function maybeStoreWebshopKeyInPasswordManager({ companyId, apiBaseUrl, apiKey, companyName, reason } = {}){
+    const key = `${String(companyId || "")}\n${String(apiBaseUrl || "")}\n${String(apiKey || "")}`;
+    if (__wsKeyStoreAttempted[key]) return false;
+    __wsKeyStoreAttempted[key] = true;
+
+    const id = wsCredentialIdFromConfig({ companyId, apiBaseUrl });
+    const nm = companyName ? `FU Webshop (${String(companyName).trim()})` : "FU Webshop";
+    await storePasswordCredential({ id, password: apiKey, name: nm });
+    console.info("[Webshop] stored key in password manager", reason || "");
+    return true;
+  }
+
   function explainWebshopFetchError(err){
     const raw = String((err && (err.message || err.name)) ? (err.message || err.name) : err);
     const msg = raw || "Okänt fel";
@@ -5099,6 +5173,19 @@ if (!d.features) d.features = { sruEnabled: false };
     if (companyNameEl) companyNameEl.textContent = state.company.name || "FU-BOOKKEEPING";
     const ok = save();
     if (ok) showToast("Dina inställningar är sparade");
+
+    // Best-effort: also store the X-FU-Key in the browser password manager
+    // (requires HTTPS + Chromium, may prompt user). Never block saving.
+    try {
+      const ws = normalizeWebshopSync(state.company.webshopSync);
+      const companyId = (typeof CompanyManager !== "undefined" && CompanyManager && CompanyManager.getActiveCompanyId) ? CompanyManager.getActiveCompanyId() : null;
+      if (ws.enabled && ws.apiKey && companyId){
+        const cname = state.company && state.company.name ? String(state.company.name).trim() : "";
+        maybeStoreWebshopKeyInPasswordManager({ companyId, apiBaseUrl: ws.apiBaseUrl, apiKey: ws.apiKey, companyName: cname, reason: "saveSettings" })
+          .then(()=>{ showToast("Nyckeln kan nu sparas i lösenordshanteraren (om webbläsaren frågar).", 4500); })
+          .catch(()=>{ /* ignore */ });
+      }
+    } catch {}
   }
 
   const fyStart = document.getElementById("fyStart");
@@ -12225,6 +12312,37 @@ if (rptYearSelect){
         showToast(`Test misslyckades: ${msg}`, 9000);
       } finally {
         btnWsTest.disabled = prev;
+      }
+    });
+  }
+
+  if (btnWsSaveKeyMgr){
+    btnWsSaveKeyMgr.addEventListener("click", async (e)=>{
+      e.preventDefault();
+      try {
+        const companyId = (typeof CompanyManager !== "undefined" && CompanyManager && CompanyManager.getActiveCompanyId) ? CompanyManager.getActiveCompanyId() : null;
+        if (!companyId) return showToast("Välj ett företag först.", 5500);
+
+        state.company = state.company || defaultData().company;
+        const cfgFromState = normalizeWebshopSync(state.company.webshopSync);
+        const cfg = normalizeWebshopSync({
+          enabled: wsEnabled ? wsEnabled.checked : cfgFromState.enabled,
+          apiBaseUrl: wsApiBaseUrl ? wsApiBaseUrl.value : cfgFromState.apiBaseUrl,
+          apiKey: wsApiKey ? wsApiKey.value : cfgFromState.apiKey,
+          series: wsSeries ? wsSeries.value : cfgFromState.series,
+          pullLimit: wsLimit ? wsLimit.value : cfgFromState.pullLimit,
+        });
+
+        if (!cfg.apiBaseUrl) return showToast("Ange serveradress först.", 5500);
+        if (!cfg.apiKey) return showToast("Ange X-FU-Key först.", 5500);
+
+        const cname = state.company && state.company.name ? String(state.company.name).trim() : "";
+        await maybeStoreWebshopKeyInPasswordManager({ companyId, apiBaseUrl: cfg.apiBaseUrl, apiKey: cfg.apiKey, companyName: cname, reason: "btnWsSaveKeyMgr" });
+        showToast("Försökte spara nyckeln i lösenordshanteraren (se ev. prompt).", 5500);
+      } catch (err){
+        console.error(err);
+        const msg = String((err && (err.message || err.name)) ? (err.message || err.name) : err);
+        showToast(`Kunde inte spara i lösenordshanteraren: ${msg}`, 9000);
       }
     });
   }

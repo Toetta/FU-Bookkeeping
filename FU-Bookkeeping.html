@@ -309,7 +309,7 @@
       <span class="pill" id="bootPill">JS: laddar…</span>
       <span class="pill" id="storagePill">Lagring: localStorage (offline)</span>
       <span class="pill" id="backupPill">Backup: –</span>
-      <span class="pill" id="revPill">v0.2.31</span>
+      <span class="pill" id="revPill">v0.2.32</span>
     </div>
   </div>
 </header>
@@ -1468,6 +1468,7 @@ Tack!</div>
                   <label>Max per import</label>
                   <input id="wsLimit" inputmode="numeric" placeholder="1" />
                 </div>
+                <button class="btn secondary" type="button" id="btnWsTest">Testa</button>
                 <button class="btn secondary" type="button" id="btnWsImport">Import</button>
               </div>
               <div id="wsStatus" class="muted small" style="margin-top:8px;"></div>
@@ -4411,6 +4412,7 @@ if (!d.features) d.features = { sruEnabled: false };
   const wsKeyHelp = document.getElementById("wsKeyHelp");
   const wsSeries = document.getElementById("wsSeries");
   const wsLimit = document.getElementById("wsLimit");
+  const btnWsTest = document.getElementById("btnWsTest");
   const btnWsImport = document.getElementById("btnWsImport");
   const wsStatus = document.getElementById("wsStatus");
 
@@ -4622,6 +4624,38 @@ if (!d.features) d.features = { sruEnabled: false };
     const data = await res.json().catch(()=> null);
     if (!res.ok) throw new Error((data && data.error) ? String(data.error) : `HTTP ${res.status}`);
     return data;
+  }
+
+  async function runWebshopTestFromUi(){
+    const companyId = (typeof CompanyManager !== "undefined" && CompanyManager && CompanyManager.getActiveCompanyId) ? CompanyManager.getActiveCompanyId() : null;
+    if (!companyId) return showToast("Välj ett företag innan test.", 5500);
+
+    state.company = state.company || defaultData().company;
+    const cfgFromState = normalizeWebshopSync(state.company.webshopSync);
+
+    const cfg = normalizeWebshopSync({
+      enabled: wsEnabled ? wsEnabled.checked : cfgFromState.enabled,
+      apiBaseUrl: wsApiBaseUrl ? wsApiBaseUrl.value : cfgFromState.apiBaseUrl,
+      apiKey: wsApiKey ? wsApiKey.value : cfgFromState.apiKey,
+      series: wsSeries ? wsSeries.value : cfgFromState.series,
+      pullLimit: wsLimit ? wsLimit.value : cfgFromState.pullLimit,
+    });
+
+    if (!cfg.apiBaseUrl) return showToast("Ange API base URL.", 5500);
+    if (!cfg.apiKey) return showToast("Ange X-FU-Key.", 5500);
+
+    const runLabel = new Date().toLocaleString("sv-SE");
+    setWebshopStatus(`Senast: ${runLabel} · Testar nyckel…`);
+
+    // Auth-only test: pull 1 item (does not import/ack).
+    const payloads = await webshopPull({ apiBaseUrl: cfg.apiBaseUrl, apiKey: cfg.apiKey, pullLimit: 1 });
+    if (!payloads.length){
+      setWebshopStatus(`Senast: ${runLabel} · Test OK. Inget i kö.`);
+      showToast("Test OK (ingen kö just nu).", 3500);
+      return;
+    }
+    setWebshopStatus(`Senast: ${runLabel} · Test OK. Kö: ${payloads.length}.`);
+    showToast(`Test OK. Kö: ${payloads.length}.`, 3500);
   }
 
   async function runWebshopImportFromUi(){
@@ -11859,6 +11893,24 @@ if (rptYearSelect){
         showToast(`Webshop-import misslyckades: ${msg}`, 9000);
       } finally {
         btnWsImport.disabled = prev;
+      }
+    });
+  }
+
+  if (btnWsTest){
+    btnWsTest.addEventListener("click", async (e)=>{
+      e.preventDefault();
+      const prev = btnWsTest.disabled;
+      btnWsTest.disabled = true;
+      try {
+        await runWebshopTestFromUi();
+      } catch (err){
+        console.error(err);
+        const msg = String((err && (err.message || err.name)) ? (err.message || err.name) : err);
+        setWebshopStatus("Test misslyckades: " + msg);
+        showToast(`Test misslyckades: ${msg}`, 9000);
+      } finally {
+        btnWsTest.disabled = prev;
       }
     });
   }

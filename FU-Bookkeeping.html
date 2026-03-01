@@ -1405,7 +1405,7 @@
               <div class="row" style="gap:10px; align-items:end; flex-wrap:wrap; margin-bottom:10px;">
                 <div class="field" style="min-width:260px; flex:1;">
                   <label>Serveradress</label>
-                  <input id="wsApiBaseUrl" placeholder="https://innovatio-brutalis.com" />
+                  <input id="wsApiBaseUrl" placeholder="https://api.innovatio-brutalis.se" />
                   <div class="muted small" style="margin-top:6px;">Lämna standard om du använder Innovatio.</div>
                 </div>
                 <div class="field" style="min-width:240px; flex:1;">
@@ -1424,7 +1424,7 @@
                   <div style="font-weight:800;">Hur får jag min X-FU-Key? (slutanvändare)</div>
                   <ol style="margin:0; padding-left:18px; display:grid; gap:6px;">
                     <li>Be den som driftar webshop-synken (admin/IT) om en <b>X-FU-Key</b> för <b>detta företag</b>.</li>
-                    <li>Be även om rätt <b>Serveradress</b> (URL). Om ni kör Innovatio är den ofta <span class="kbd">https://innovatio-brutalis.com</span>.</li>
+                    <li>Be även om rätt <b>Serveradress</b> (URL). Om ni kör Innovatio är den ofta <span class="kbd">https://api.innovatio-brutalis.se</span>.</li>
                     <li>Klistra in nyckeln här och klicka <b>Spara</b>.</li>
                     <li>Klicka <b>Import</b>.</li>
                   </ol>
@@ -3615,7 +3615,7 @@ cur = {
     const now = new Date();
     const y = now.getFullYear();
     return {
-      company: { name: "FU-BOOKKEEPING", orgnr: "", currency: "SEK", defaultSign: "", addr:"", zip:"", city:"", country:"", email:"", phone:"", web:"", vat:"", payDays:30, bankgiro:"", plusgiro:"", swishPhone:"", bankAccountNo:"", iban:"", swift:"", invoiceNote:"", invoiceFooter:"", logoDataUrl:"", webshopSync: { enabled: false, apiBaseUrl: "https://innovatio-brutalis.com", apiKey: "", series: "W", pullLimit: 1 } },
+      company: { name: "FU-BOOKKEEPING", orgnr: "", currency: "SEK", defaultSign: "", addr:"", zip:"", city:"", country:"", email:"", phone:"", web:"", vat:"", payDays:30, bankgiro:"", plusgiro:"", swishPhone:"", bankAccountNo:"", iban:"", swift:"", invoiceNote:"", invoiceFooter:"", logoDataUrl:"", webshopSync: { enabled: false, apiBaseUrl: "https://api.innovatio-brutalis.se", apiKey: "", series: "W", pullLimit: 1 } },
       features: { sruEnabled: false },
       fileSync: { autosave: true, requireFile: true },
       fiscalYears: [
@@ -4417,7 +4417,7 @@ if (!d.features) d.features = { sruEnabled: false };
   const wsStatus = document.getElementById("wsStatus");
 
   function webshopSyncDefaults(){
-    return { enabled: false, apiBaseUrl: "https://innovatio-brutalis.com", apiKey: "", series: "W", pullLimit: 1 };
+    return { enabled: false, apiBaseUrl: "https://api.innovatio-brutalis.se", apiKey: "", series: "W", pullLimit: 1 };
   }
 
   function normalizeWebshopSync(cfg){

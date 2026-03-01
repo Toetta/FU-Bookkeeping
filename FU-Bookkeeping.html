@@ -11892,6 +11892,14 @@ if (rptYearSelect){
   if (btnSaveSettings){
     btnSaveSettings.addEventListener("click", (e)=>{
       e.preventDefault();
+      try { saveSettings(); }
+      catch(err){
+        console.error(err);
+        const msg = (err && (err.message || err.name)) ? String(err.message || err.name) : "(okänt fel)";
+        showToast(`Kunde inte spara inställningar: ${msg}. Se konsolen.`, 8000);
+      }
+    });
+  }
 
   if (btnWsQuickImport) btnWsQuickImport.addEventListener("click", async (e)=>{
     try { if (e && e.preventDefault) e.preventDefault(); } catch {}
@@ -11902,14 +11910,6 @@ if (rptYearSelect){
       showToast("Kunde inte importera. Se konsolen.", 8000);
     }
   });
-      try { saveSettings(); }
-      catch(err){
-        console.error(err);
-        const msg = (err && (err.message || err.name)) ? String(err.message || err.name) : "(okänt fel)";
-        showToast(`Kunde inte spara inställningar: ${msg}. Se konsolen.`, 8000);
-      }
-    });
-  }
 
   if (btnWsImport){
     btnWsImport.addEventListener("click", async (e)=>{

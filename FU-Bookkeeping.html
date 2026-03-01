@@ -4920,15 +4920,24 @@ if (!d.features) d.features = { sruEnabled: false };
 
   const __wsKeyStoreAttempted = Object.create(null);
 
-  function wsCredentialIdFromConfig({ companyId, apiBaseUrl } = {}){
+  function wsCredentialIdFromConfig({ companyId, orgnr, apiBaseUrl } = {}){
     const cid = String(companyId || "").trim() || "fu";
+    const on = String(orgnr || "").trim();
+    const org = on ? on.replace(/[^0-9\-]/g, "") : "";
+
     const base = stripTrailingSlashes(String(apiBaseUrl || "").trim());
+    let host = "";
     try {
       const u = new URL(base);
-      return `ws:${cid}@${u.host}`;
+      host = String(u.host || "");
     } catch {
-      return base ? `ws:${cid}@${base.replace(/^https?:\/\//i, "")}` : `ws:${cid}`;
+      host = base ? String(base).replace(/^https?:\/\//i, "") : "";
     }
+    host = String(host || "").split("/")[0].trim();
+
+    // Prefer org.nr when available; it stays stable even if the local company id changes.
+    const stableId = org ? org : cid;
+    return host ? `ws:${stableId}@${host}` : `ws:${stableId}`;
   }
 
   async function storePasswordCredential({ id, password, name } = {}){
@@ -4976,13 +4985,13 @@ if (!d.features) d.features = { sruEnabled: false };
     return true;
   }
 
-  async function maybeStoreWebshopKeyInPasswordManager({ companyId, apiBaseUrl, apiKey, companyName, reason } = {}){
+  async function maybeStoreWebshopKeyInPasswordManager({ companyId, orgnr, apiBaseUrl, apiKey, companyName, reason } = {}){
     const key = `${String(companyId || "")}\n${String(apiBaseUrl || "")}\n${String(apiKey || "")}`;
     if (__wsKeyStoreAttempted[key]) return false;
     __wsKeyStoreAttempted[key] = true;
 
-    const id = wsCredentialIdFromConfig({ companyId, apiBaseUrl });
-    const nm = companyName ? `FU Webshop (${String(companyName).trim()})` : "FU Webshop";
+    const id = wsCredentialIdFromConfig({ companyId, orgnr, apiBaseUrl });
+    const nm = companyName ? `FU Webshop (${String(companyName).trim()}${orgnr ? ` · ${String(orgnr).trim()}` : ""})` : "FU Webshop";
     await storePasswordCredential({ id, password: apiKey, name: nm });
     console.info("[Webshop] stored key in password manager", reason || "");
     return true;
@@ -5181,7 +5190,8 @@ if (!d.features) d.features = { sruEnabled: false };
       const companyId = (typeof CompanyManager !== "undefined" && CompanyManager && CompanyManager.getActiveCompanyId) ? CompanyManager.getActiveCompanyId() : null;
       if (ws.enabled && ws.apiKey && companyId){
         const cname = state.company && state.company.name ? String(state.company.name).trim() : "";
-        maybeStoreWebshopKeyInPasswordManager({ companyId, apiBaseUrl: ws.apiBaseUrl, apiKey: ws.apiKey, companyName: cname, reason: "saveSettings" })
+        const orgnr = state.company && state.company.orgnr ? String(state.company.orgnr).trim() : "";
+        maybeStoreWebshopKeyInPasswordManager({ companyId, orgnr, apiBaseUrl: ws.apiBaseUrl, apiKey: ws.apiKey, companyName: cname, reason: "saveSettings" })
           .then(()=>{ showToast("Nyckeln kan nu sparas i lösenordshanteraren (om webbläsaren frågar).", 4500); })
           .catch(()=>{ /* ignore */ });
       }
@@ -12337,7 +12347,8 @@ if (rptYearSelect){
         if (!cfg.apiKey) return showToast("Ange X-FU-Key först.", 5500);
 
         const cname = state.company && state.company.name ? String(state.company.name).trim() : "";
-        await maybeStoreWebshopKeyInPasswordManager({ companyId, apiBaseUrl: cfg.apiBaseUrl, apiKey: cfg.apiKey, companyName: cname, reason: "btnWsSaveKeyMgr" });
+        const orgnr = state.company && state.company.orgnr ? String(state.company.orgnr).trim() : "";
+        await maybeStoreWebshopKeyInPasswordManager({ companyId, orgnr, apiBaseUrl: cfg.apiBaseUrl, apiKey: cfg.apiKey, companyName: cname, reason: "btnWsSaveKeyMgr" });
         showToast("Försökte spara nyckeln i lösenordshanteraren (se ev. prompt).", 5500);
       } catch (err){
         console.error(err);

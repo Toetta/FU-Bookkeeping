@@ -4914,6 +4914,28 @@ if (!d.features) d.features = { sruEnabled: false };
     return true;
   }
 
+  function explainWebshopFetchError(err){
+    const raw = String((err && (err.message || err.name)) ? (err.message || err.name) : err);
+    const msg = raw || "Okänt fel";
+
+    // Browser fetch throws TypeError("Failed to fetch") for CORS, DNS, TLS, blocked requests etc.
+    const isFailedToFetch = /failed to fetch/i.test(msg) || (err && err.name === "TypeError" && /failed to fetch/i.test(String(err.message || "")));
+    if (!isFailedToFetch) return msg;
+
+    const origin = (()=>{
+      try { return String(location.origin || ""); } catch { return ""; }
+    })();
+
+    const httpsHint = (()=>{
+      try {
+        const proto = String(location.protocol || "").toLowerCase();
+        return proto === "http:" ? " Du kör på HTTP; testa HTTPS (secure context) om möjligt." : "";
+      } catch { return ""; }
+    })();
+
+    return `Failed to fetch. Trolig orsak: CORS/origin-block. Tillåt origin ${origin || "(okänd)"} i backenden (CORS_ALLOW_ORIGINS) och tillåt headers X-FU-Key, Content-Type samt metoder GET/POST/OPTIONS.${httpsHint}`;
+  }
+
   async function runWebshopTestFromUi(){
     const companyId = (typeof CompanyManager !== "undefined" && CompanyManager && CompanyManager.getActiveCompanyId) ? CompanyManager.getActiveCompanyId() : null;
     if (!companyId) return showToast("Välj ett företag innan test.", 5500);
@@ -12180,7 +12202,7 @@ if (rptYearSelect){
         await runWebshopImportFromUi();
       } catch (err){
         console.error(err);
-        const msg = String((err && (err.message || err.name)) ? (err.message || err.name) : err);
+        const msg = explainWebshopFetchError(err);
         setWebshopStatus("Fel: " + msg);
         showToast(`Webshop-import misslyckades: ${msg}`, 9000);
       } finally {
@@ -12198,7 +12220,7 @@ if (rptYearSelect){
         await runWebshopTestFromUi();
       } catch (err){
         console.error(err);
-        const msg = String((err && (err.message || err.name)) ? (err.message || err.name) : err);
+        const msg = explainWebshopFetchError(err);
         setWebshopStatus("Test misslyckades: " + msg);
         showToast(`Test misslyckades: ${msg}`, 9000);
       } finally {

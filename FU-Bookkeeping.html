@@ -4626,6 +4626,26 @@ if (!d.features) d.features = { sruEnabled: false };
     return data;
   }
 
+  async function webshopProbeAuth({ apiBaseUrl, apiKey }){
+    const base = String(apiBaseUrl || "").replace(/\/+$\/g, "");
+    const url = `${base}/api/fu/ack`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "X-FU-Key": String(apiKey || ""),
+      },
+      body: JSON.stringify({ id: "__fu_probe__", ok: false, voucher_id: null, error: "auth-probe" }),
+    });
+
+    // If we reach this endpoint and get anything other than 401/403,
+    // we know the key + CORS are working. We intentionally avoid /pull
+    // since it can consume queued payloads.
+    if (res.status === 401 || res.status === 403) throw new Error("Forbidden");
+    if (res.status === 404) throw new Error("HTTP 404");
+    return true;
+  }
+
   async function runWebshopTestFromUi(){
     const companyId = (typeof CompanyManager !== "undefined" && CompanyManager && CompanyManager.getActiveCompanyId) ? CompanyManager.getActiveCompanyId() : null;
     if (!companyId) return showToast("Välj ett företag innan test.", 5500);
@@ -4647,15 +4667,9 @@ if (!d.features) d.features = { sruEnabled: false };
     const runLabel = new Date().toLocaleString("sv-SE");
     setWebshopStatus(`Senast: ${runLabel} · Testar nyckel…`);
 
-    // Auth-only test: pull 1 item (does not import/ack).
-    const payloads = await webshopPull({ apiBaseUrl: cfg.apiBaseUrl, apiKey: cfg.apiKey, pullLimit: 1 });
-    if (!payloads.length){
-      setWebshopStatus(`Senast: ${runLabel} · Test OK. Inget i kö.`);
-      showToast("Test OK (ingen kö just nu).", 3500);
-      return;
-    }
-    setWebshopStatus(`Senast: ${runLabel} · Test OK. Kö: ${payloads.length}.`);
-    showToast(`Test OK. Kö: ${payloads.length}.`, 3500);
+    await webshopProbeAuth({ apiBaseUrl: cfg.apiBaseUrl, apiKey: cfg.apiKey });
+    setWebshopStatus(`Senast: ${runLabel} · Test OK. Nyckel giltig.`);
+    showToast("Test OK (nyckel giltig).", 3500);
   }
 
   async function runWebshopImportFromUi(){

@@ -306,6 +306,33 @@
     }
     .modal .actions{ display:flex; justify-content:flex-end; gap:10px; margin-top:12px; flex-wrap:wrap; }
 
+    /* Splash screen (shown before app starts on custom domains) */
+    body.splashActive header,
+    body.splashActive main{ display:none; }
+    .splashBackdrop{
+      position:fixed;
+      inset:0;
+      z-index:10000;
+      background:linear-gradient(180deg,var(--bg),var(--bg2));
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:16px;
+    }
+    .splashCard{
+      width:min(720px, calc(100vw - 24px));
+      border:1px solid var(--line);
+      border-radius:18px;
+      background:rgba(var(--card-rgb),.94);
+      box-shadow: 0 10px 30px rgba(0,0,0,.25);
+      padding:16px;
+    }
+    .splashTop{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+    .splashLogo{ height:72px; width:auto; object-fit:contain; }
+    .splashTitle{ font-size:16px; font-weight:800; margin:0; }
+    .splashText{ margin:10px 0 0 0; color:var(--muted); font-size:13px; line-height:1.45; }
+    .splashActions{ display:flex; justify-content:flex-end; gap:10px; margin-top:14px; flex-wrap:wrap; }
+
   </style>
 
   <!-- OCR (offline i webbläsaren: körs lokalt, inga filer laddas upp) -->
@@ -313,7 +340,42 @@
   <script defer src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/legacy/build/pdf.min.js"></script>
 
 </head>
-<body>
+<body class="splashActive">
+
+<div id="splash" class="splashBackdrop" role="dialog" aria-modal="true" aria-label="Starta FU-Bookkeeping">
+  <div class="splashCard">
+    <div class="splashTop">
+      <div class="row" style="gap:10px; align-items:center; margin:0;">
+        <img class="splashLogo" src="FU-BookKeeping.png" alt="FU-BOOKKEEPING" decoding="async" />
+        <div style="display:grid; gap:2px;">
+          <h2 class="splashTitle">FU-Bookkeeping</h2>
+          <div class="muted small">Bokföring offline i webbläsaren</div>
+        </div>
+      </div>
+      <span class="pill">v0.2.32</span>
+    </div>
+    <p class="splashText">Klicka <b>Starta</b> för att öppna bokföringsprogrammet. All data lagras lokalt i din webbläsare.</p>
+    <div class="splashActions">
+      <button type="button" class="btn" id="btnSplashStart">Starta</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Only show splash on the custom domain(s); bypass on github.io/local file.
+  (function(){
+    try {
+      var h = String(location.hostname || "").toLowerCase();
+      var show = (h === "fu-bookkeeping.se" || h === "www.fu-bookkeeping.se");
+      if (!show){
+        document.body.classList.remove("splashActive");
+        var s = document.getElementById("splash");
+        if (s) s.setAttribute("hidden", "");
+      }
+    } catch (e) {}
+  })();
+</script>
+
 <header>
   <div class="wrap">
     <div class="row header-row">
@@ -11922,6 +11984,40 @@ if (rptYearSelect){
       }
     });
   }
+
+  // --- Splash screen wiring ---
+  (function initSplash(){
+    const splash = document.getElementById("splash");
+    const btnSplashStart = document.getElementById("btnSplashStart");
+    if (!splash || !btnSplashStart) return;
+
+    function closeSplash(){
+      try { document.body.classList.remove("splashActive"); } catch {}
+      try { splash.setAttribute("hidden", ""); } catch {}
+      try {
+        const firstNavBtn = document.querySelector(".sidebar .navGroupBtn") || document.querySelector(".sidebar button");
+        if (firstNavBtn && firstNavBtn.focus) firstNavBtn.focus();
+      } catch {}
+    }
+
+    btnSplashStart.addEventListener("click", (e)=>{
+      try { if (e && e.preventDefault) e.preventDefault(); } catch {}
+      closeSplash();
+    });
+
+    document.addEventListener("keydown", (e)=>{
+      if (!document.body.classList.contains("splashActive")) return;
+      const k = (e && e.key) ? String(e.key) : "";
+      if (k === "Enter"){
+        try { e.preventDefault(); } catch {}
+        closeSplash();
+      }
+      if (k === "Escape"){
+        try { e.preventDefault(); } catch {}
+        closeSplash();
+      }
+    });
+  })();
 
   if (btnWsQuickImport) btnWsQuickImport.addEventListener("click", async (e)=>{
     try { if (e && e.preventDefault) e.preventDefault(); } catch {}

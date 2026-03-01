@@ -4598,7 +4598,7 @@ if (!d.features) d.features = { sruEnabled: false };
   }
 
   async function webshopPull({ apiBaseUrl, apiKey, pullLimit }){
-    const base = String(apiBaseUrl || "").replace(/\/+$/g, "");
+    const base = stripTrailingSlashes(apiBaseUrl);
     const url = `${base}/api/fu/pull?limit=${encodeURIComponent(String(pullLimit || 20))}`;
     const res = await fetch(url, {
       method: "GET",
@@ -4610,8 +4610,14 @@ if (!d.features) d.features = { sruEnabled: false };
     return Array.isArray(data.payloads) ? data.payloads : [];
   }
 
+  function stripTrailingSlashes(url){
+    let s = String(url || "");
+    while (s.endsWith("/")) s = s.slice(0, -1);
+    return s;
+  }
+
   async function webshopAck({ apiBaseUrl, apiKey, id, ok, voucher_id, error }){
-    const base = String(apiBaseUrl || "").replace(/\/+$/g, "");
+    const base = stripTrailingSlashes(apiBaseUrl);
     const url = `${base}/api/fu/ack`;
     const res = await fetch(url, {
       method: "POST",
@@ -4627,7 +4633,7 @@ if (!d.features) d.features = { sruEnabled: false };
   }
 
   async function webshopProbeAuth({ apiBaseUrl, apiKey }){
-    const base = String(apiBaseUrl || "").replace(/\/+$\/g, "");
+    const base = stripTrailingSlashes(apiBaseUrl);
     const url = `${base}/api/fu/ack`;
     const res = await fetch(url, {
       method: "POST",

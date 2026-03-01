@@ -365,6 +365,21 @@
   // Splash screen: show on any non-local hostname (works on both custom domains and github.io).
   // Bypass on file:// and localhost, and allow ?nosplash=1 for quick bypass.
   (function(){
+    var splash = document.getElementById("splash");
+    var btnSplashStart = document.getElementById("btnSplashStart");
+
+    function closeSplash(){
+      try { document.body.classList.remove("splashActive"); } catch {}
+      try { if (splash) splash.setAttribute("hidden", ""); } catch {}
+      try {
+        var firstNavBtn = document.querySelector(".sidebar .navGroupBtn") || document.querySelector(".sidebar button");
+        if (firstNavBtn && firstNavBtn.focus) firstNavBtn.focus();
+      } catch {}
+    }
+
+    // Expose for debugging / manual bypass
+    try { window.__fuCloseSplash = closeSplash; } catch {}
+
     try {
       var h = String(location.hostname || "").toLowerCase();
       var isLocal = (!h || h === "localhost" || h === "127.0.0.1");
@@ -377,11 +392,28 @@
 
       var show = !(isLocal || isFile || nosplash);
       if (!show){
-        document.body.classList.remove("splashActive");
-        var s = document.getElementById("splash");
-        if (s) s.setAttribute("hidden", "");
+        closeSplash();
+        return;
       }
     } catch (e) {}
+
+    if (btnSplashStart){
+      btnSplashStart.addEventListener("click", function(e){
+        try { if (e && e.preventDefault) e.preventDefault(); } catch {}
+        closeSplash();
+      });
+    }
+
+    document.addEventListener("keydown", function(e){
+      try {
+        if (!document.body.classList.contains("splashActive")) return;
+        var k = (e && e.key) ? String(e.key) : "";
+        if (k === "Enter" || k === "Escape"){
+          try { e.preventDefault(); } catch {}
+          closeSplash();
+        }
+      } catch (e3) {}
+    });
   })();
 </script>
 
@@ -11993,40 +12025,6 @@ if (rptYearSelect){
       }
     });
   }
-
-  // --- Splash screen wiring ---
-  (function initSplash(){
-    const splash = document.getElementById("splash");
-    const btnSplashStart = document.getElementById("btnSplashStart");
-    if (!splash || !btnSplashStart) return;
-
-    function closeSplash(){
-      try { document.body.classList.remove("splashActive"); } catch {}
-      try { splash.setAttribute("hidden", ""); } catch {}
-      try {
-        const firstNavBtn = document.querySelector(".sidebar .navGroupBtn") || document.querySelector(".sidebar button");
-        if (firstNavBtn && firstNavBtn.focus) firstNavBtn.focus();
-      } catch {}
-    }
-
-    btnSplashStart.addEventListener("click", (e)=>{
-      try { if (e && e.preventDefault) e.preventDefault(); } catch {}
-      closeSplash();
-    });
-
-    document.addEventListener("keydown", (e)=>{
-      if (!document.body.classList.contains("splashActive")) return;
-      const k = (e && e.key) ? String(e.key) : "";
-      if (k === "Enter"){
-        try { e.preventDefault(); } catch {}
-        closeSplash();
-      }
-      if (k === "Escape"){
-        try { e.preventDefault(); } catch {}
-        closeSplash();
-      }
-    });
-  })();
 
   if (btnWsQuickImport) btnWsQuickImport.addEventListener("click", async (e)=>{
     try { if (e && e.preventDefault) e.preventDefault(); } catch {}

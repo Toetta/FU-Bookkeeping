@@ -82,7 +82,26 @@
       border-radius:12px;
       cursor:pointer;
     }
+    .navActionBtn{
+      width:100%;
+      text-align:left;
+      display:flex;
+      align-items:center;
+      justify-content:flex-start;
+      gap:10px;
+      background:transparent;
+      color:var(--muted);
+      border:1px solid var(--line);
+      padding:10px 12px;
+      border-radius:12px;
+      cursor:pointer;
+    }
     .navGroupBtn:focus{
+      outline:none;
+      border-color:rgba(96,165,250,.7);
+      box-shadow:0 0 0 3px rgba(96,165,250,.12);
+    }
+    .navActionBtn:focus{
       outline:none;
       border-color:rgba(96,165,250,.7);
       box-shadow:0 0 0 3px rgba(96,165,250,.12);
@@ -375,8 +394,11 @@
           </button>
           <div class="navFlyout" id="nav-admin" role="menu">
             <button type="button" class="tab" data-tab="settings">Inställningar</button>
-            <button type="button" class="tab" id="btnWsQuickImport">Webshop: Import</button>
           </div>
+        </div>
+
+        <div class="navGroup" data-group="webshop-import">
+          <button type="button" class="navActionBtn" id="btnWsQuickImport">Webshop Import</button>
         </div>
       </aside>
       <div class="content">

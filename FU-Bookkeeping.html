@@ -4751,6 +4751,7 @@ if (!d.features) d.features = { sruEnabled: false };
       const current = normalizeWebshopSync(state.company.webshopSync);
       if (String(current.apiBaseUrl || "") !== base) {
         state.company.webshopSync = { ...current, apiBaseUrl: base };
+        try { if (typeof save === "function") save({ renderAll: false }); } catch (_) {}
       }
     } catch (_) {}
   }
@@ -4933,16 +4934,29 @@ if (!d.features) d.features = { sruEnabled: false };
   }
 
   async function webshopPull({ apiBaseUrl, apiKey, pullLimit }){
-    const base = stripTrailingSlashes(apiBaseUrl);
-    const url = `${base}/api/fu/pull?limit=${encodeURIComponent(String(pullLimit || 20))}`;
-    const res = await fetch(url, {
-      method: "GET",
-      headers: { "X-FU-Key": String(apiKey || "") }
-    });
-    const data = await res.json().catch(()=> null);
-    if (!res.ok) throw new Error((data && data.error) ? String(data.error) : `HTTP ${res.status}`);
-    if (!data || data.ok !== true) throw new Error((data && data.error) ? String(data.error) : "Okänt fel");
-    return Array.isArray(data.payloads) ? data.payloads : [];
+    const candidates = webshopCandidateBaseUrls(apiBaseUrl);
+    let lastError = null;
+    for (let i = 0; i < candidates.length; i++){
+      const base = stripTrailingSlashes(candidates[i]);
+      const url = `${base}/api/fu/pull?limit=${encodeURIComponent(String(pullLimit || 20))}`;
+      try {
+        const res = await fetch(url, {
+          method: "GET",
+          headers: { "X-FU-Key": String(apiKey || "") }
+        });
+        const data = await res.json().catch(()=> null);
+        if (!res.ok) throw new Error((data && data.error) ? String(data.error) : `HTTP ${res.status}`);
+        if (!data || data.ok !== true) throw new Error((data && data.error) ? String(data.error) : "Okänt fel");
+        return {
+          payloads: Array.isArray(data.payloads) ? data.payloads : [],
+          resolvedBaseUrl: base,
+        };
+      } catch (err) {
+        lastError = err;
+        if (!webshopErrorAllowsFallback(err) || i === candidates.length - 1) throw err;
+      }
+    }
+    throw lastError || new Error("Kunde inte ansluta till webshop-synk API.");
   }
 
   function stripTrailingSlashes(url){
@@ -5133,7 +5147,22 @@ if (!d.features) d.features = { sruEnabled: false };
     const runLabel = new Date().toLocaleString("sv-SE");
     setWebshopStatus(`Senast: ${runLabel} · Testar nyckel…`);
 
-    await webshopProbeAuth({ apiBaseUrl: cfg.apiBaseUrl, apiKey: cfg.apiKey });
+    let resolvedBaseUrl = stripTrailingSlashes(cfg.apiBaseUrl);
+    const candidates = webshopCandidateBaseUrls(cfg.apiBaseUrl);
+    let lastError = null;
+    for (let i = 0; i < candidates.length; i++){
+      const base = stripTrailingSlashes(candidates[i]);
+      try {
+        await webshopProbeAuth({ apiBaseUrl: base, apiKey: cfg.apiKey });
+        resolvedBaseUrl = base;
+        applyResolvedWebshopBaseUrl(base);
+        break;
+      } catch (err) {
+        lastError = err;
+        if (!webshopErrorAllowsFallback(err) || i === candidates.length - 1) throw err;
+      }
+    }
+    if (lastError && !resolvedBaseUrl) throw lastError;
     setWebshopStatus(`Senast: ${runLabel} · Test OK. Nyckel giltig.`);
     showToast("Test OK (nyckel giltig).", 3500);
   }
@@ -5159,7 +5188,10 @@ if (!d.features) d.features = { sruEnabled: false };
 
     const runLabel = new Date().toLocaleString("sv-SE");
     setWebshopStatus(`Senast: ${runLabel} · Hämtar kö…`);
-    const payloads = await webshopPull({ apiBaseUrl: cfg.apiBaseUrl, apiKey: cfg.apiKey, pullLimit: cfg.pullLimit });
+    const pullResult = await webshopPull({ apiBaseUrl: cfg.apiBaseUrl, apiKey: cfg.apiKey, pullLimit: cfg.pullLimit });
+    const payloads = Array.isArray(pullResult?.payloads) ? pullResult.payloads : [];
+    const resolvedBaseUrl = stripTrailingSlashes(pullResult?.resolvedBaseUrl || cfg.apiBaseUrl);
+    applyResolvedWebshopBaseUrl(resolvedBaseUrl);
     if (!payloads.length){
       setWebshopStatus(`Senast: ${runLabel} · Inget att importera.`);
       showToast("Inga nya händelser i kö.", 3500);
@@ -5181,7 +5213,7 @@ if (!d.features) d.features = { sruEnabled: false };
       // Idempotent-ish: never create duplicates if the same payload is pulled twice.
       if (isWebshopPayloadImported(companyId, payloadId)){
         const prevVoucherId = getImportedVoucherId(companyId, payloadId);
-        try { await webshopAck({ apiBaseUrl: cfg.apiBaseUrl, apiKey: cfg.apiKey, id: payloadId, ok: true, voucher_id: prevVoucherId ?? null }); } catch (_) {}
+        try { await webshopAck({ apiBaseUrl: resolvedBaseUrl, apiKey: cfg.apiKey, id: payloadId, ok: true, voucher_id: prevVoucherId ?? null }); } catch (_) {}
         skipCount++;
         continue;
       }
@@ -5193,11 +5225,11 @@ if (!d.features) d.features = { sruEnabled: false };
           appendAudit({ action:"voucher.import", actor: v.sign || undefined, entityType:"voucher", entityId: v.id, yearId: v.yearId, details:{ source:"webshop", payloadId, voucher_id, order_id: item?.order_id || null, kind: item?.kind || null } });
         } catch {}
         save({ renderAll: false });
-        await webshopAck({ apiBaseUrl: cfg.apiBaseUrl, apiKey: cfg.apiKey, id: payloadId, ok: true, voucher_id });
+        await webshopAck({ apiBaseUrl: resolvedBaseUrl, apiKey: cfg.apiKey, id: payloadId, ok: true, voucher_id });
         okCount++;
       } catch (e){
         const msg = String((e && e.message) ? e.message : e);
-        try { await webshopAck({ apiBaseUrl: cfg.apiBaseUrl, apiKey: cfg.apiKey, id: payloadId, ok: false, error: msg }); } catch (_) {}
+        try { await webshopAck({ apiBaseUrl: resolvedBaseUrl, apiKey: cfg.apiKey, id: payloadId, ok: false, error: msg }); } catch (_) {}
         errCount++;
       }
     }

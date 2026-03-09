@@ -4718,6 +4718,43 @@ if (!d.features) d.features = { sruEnabled: false };
     return { enabled: false, apiBaseUrl: "https://innovatio-brutalis.pages.dev", apiKey: "", series: "W", pullLimit: 1 };
   }
 
+  const WEBSHOP_SYNC_FALLBACK_URLS = [
+    "https://innovatio-brutalis.pages.dev",
+    "https://innovatio-brutalis.com",
+    "https://api.innovatio-brutalis.se",
+    "https://www.innovatio-brutalis.se",
+  ];
+
+  function webshopCandidateBaseUrls(apiBaseUrl){
+    const seen = new Set();
+    const out = [];
+    for (const raw of [apiBaseUrl, ...WEBSHOP_SYNC_FALLBACK_URLS]){
+      const base = String(raw || "").trim().replace(/\/+$/g, "");
+      if (!base || seen.has(base)) continue;
+      seen.add(base);
+      out.push(base);
+    }
+    return out;
+  }
+
+  function webshopErrorAllowsFallback(err){
+    const msg = String((err && err.message) ? err.message : err || "");
+    return /failed to fetch|networkerror|load failed|http 404|http 5\d\d/i.test(msg);
+  }
+
+  function applyResolvedWebshopBaseUrl(baseUrl){
+    const base = String(baseUrl || "").trim().replace(/\/+$/g, "");
+    if (!base) return;
+    try { if (wsApiBaseUrl) wsApiBaseUrl.value = base; } catch (_) {}
+    try {
+      state.company = state.company || defaultData().company;
+      const current = normalizeWebshopSync(state.company.webshopSync);
+      if (String(current.apiBaseUrl || "") !== base) {
+        state.company.webshopSync = { ...current, apiBaseUrl: base };
+      }
+    } catch (_) {}
+  }
+
   function normalizeWebshopSync(cfg){
     const d = webshopSyncDefaults();
     const c = (cfg && typeof cfg === "object") ? cfg : {};

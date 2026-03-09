@@ -4998,7 +4998,6 @@ if (!d.features) d.features = { sruEnabled: false };
     // we know the key + CORS are working. We intentionally avoid /pull
     // since it can consume queued payloads.
     if (res.status === 401 || res.status === 403) throw new Error("Forbidden");
-    if (res.status === 404) throw new Error("HTTP 404");
     return true;
   }
 

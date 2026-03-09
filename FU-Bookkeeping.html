@@ -495,6 +495,7 @@
           <div class="navFlyout" id="nav-sales" role="menu">
             <button type="button" class="tab" data-tab="invoices">Kundfakturor</button>
             <button type="button" class="tab" data-tab="customers">Kunder</button>
+            <button type="button" class="tab" data-tab="orderstock">Orderstock</button>
           </div>
         </div>
 
@@ -1426,6 +1427,29 @@
           <p class="muted small" style="margin-top:10px;">
             Importen läser #KONTO, #RAR, #VER/#TRANS (objekt ignoreras). Tips: om importen blir konstig, testa att byta teckenkodning (många SIE är PC8/CP437).
           </p>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-orderstock" hidden>
+      <div class="grid">
+        <div class="card">
+          <div class="row" style="justify-content:space-between; gap:10px; align-items:flex-end; margin-bottom:10px; flex-wrap:wrap;">
+            <div>
+              <h2 style="margin-bottom:4px;">Orderstock</h2>
+              <div class="muted small">Visar webshop-order med kund, orderrader, betalstatus, FU-verifikation och utleveransstatus.</div>
+            </div>
+            <div class="row" style="gap:10px; flex-wrap:wrap;">
+              <select id="osViewFilter">
+                <option value="open">Betalda ej utlevererade</option>
+                <option value="fulfilled">Utlevererade</option>
+                <option value="all">Alla</option>
+              </select>
+              <button class="btn secondary" type="button" id="btnOsRefresh">Uppdatera</button>
+            </div>
+          </div>
+          <div id="orderstockStatus" class="muted small" style="margin-bottom:10px;"></div>
+          <div id="orderstockList" class="list"></div>
         </div>
       </div>
     </section>
@@ -4585,6 +4609,7 @@ if (!d.features) d.features = { sruEnabled: false };
     suppliers: document.getElementById("tab-suppliers"),
     supplier_invoices: document.getElementById("tab-supplier_invoices"),
     invoices: document.getElementById("tab-invoices"),
+    orderstock: document.getElementById("tab-orderstock"),
     export: document.getElementById("tab-export"),
     settings: document.getElementById("tab-settings"),
     sru: document.getElementById("tab-sru"),
@@ -4713,6 +4738,10 @@ if (!d.features) d.features = { sruEnabled: false };
   const btnWsImport = document.getElementById("btnWsImport");
   const btnWsQuickImport = document.getElementById("btnWsQuickImport");
   const wsStatus = document.getElementById("wsStatus");
+  const osViewFilter = document.getElementById("osViewFilter");
+  const btnOsRefresh = document.getElementById("btnOsRefresh");
+  const orderstockStatus = document.getElementById("orderstockStatus");
+  const orderstockList = document.getElementById("orderstockList");
 
   function webshopSyncDefaults(){
     return { enabled: false, apiBaseUrl: "https://api.innovatio-brutalis.se", apiKey: "", series: "W", pullLimit: 1 };
@@ -4774,6 +4803,27 @@ if (!d.features) d.features = { sruEnabled: false };
   function setWebshopStatus(text){
     if (!wsStatus) return;
     wsStatus.textContent = String(text || "");
+  }
+
+  function setOrderstockStatus(text){
+    if (!orderstockStatus) return;
+    orderstockStatus.textContent = String(text || "");
+  }
+
+  function formatOrderstockDateTime(value){
+    const s = String(value || "").trim();
+    if (!s) return "-";
+    const d = new Date(s);
+    if (!Number.isFinite(d.getTime())) return s;
+    try {
+      return d.toLocaleString("sv-SE");
+    } catch (_) {
+      return s;
+    }
+  }
+
+  function orderstockBadgeClass(ok){
+    return ok ? "status ok" : "status bad";
   }
 
   function webshopImportedKey(companyId){
@@ -4999,6 +5049,150 @@ if (!d.features) d.features = { sruEnabled: false };
     // since it can consume queued payloads.
     if (res.status === 401 || res.status === 403) throw new Error("Forbidden");
     return true;
+  }
+
+  async function webshopFetchOrderstock({ apiBaseUrl, apiKey, view, limit }){
+    const candidates = webshopCandidateBaseUrls(apiBaseUrl);
+    let lastError = null;
+    for (let i = 0; i < candidates.length; i++){
+      const base = stripTrailingSlashes(candidates[i]);
+      const url = `${base}/api/fu/orders?view=${encodeURIComponent(String(view || "open"))}&limit=${encodeURIComponent(String(limit || 100))}`;
+      try {
+        const res = await fetch(url, {
+          method: "GET",
+          headers: { "X-FU-Key": String(apiKey || "") },
+        });
+        const data = await res.json().catch(()=> null);
+        if (!res.ok) throw new Error((data && data.error) ? String(data.error) : `HTTP ${res.status}`);
+        if (!data || data.ok !== true) throw new Error((data && data.error) ? String(data.error) : "Okänt fel");
+        return {
+          orders: Array.isArray(data.orders) ? data.orders : [],
+          resolvedBaseUrl: base,
+        };
+      } catch (err) {
+        lastError = err;
+        if (!webshopErrorAllowsFallback(err) || i === candidates.length - 1) throw err;
+      }
+    }
+    throw lastError || new Error("Kunde inte hämta orderstock.");
+  }
+
+  async function webshopSetOrderFulfilled({ apiBaseUrl, apiKey, orderId, fulfilled, fulfilledBy, note }){
+    const base = stripTrailingSlashes(apiBaseUrl);
+    const url = `${base}/api/fu/orders/${encodeURIComponent(String(orderId || ""))}/fulfill`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "X-FU-Key": String(apiKey || ""),
+      },
+      body: JSON.stringify({
+        fulfilled: !!fulfilled,
+        fulfilled_by: fulfilledBy || "FU-Bookkeeping",
+        note: note || null,
+      }),
+    });
+    const data = await res.json().catch(()=> null);
+    if (!res.ok) throw new Error((data && data.error) ? String(data.error) : `HTTP ${res.status}`);
+    if (!data || data.ok !== true) throw new Error((data && data.error) ? String(data.error) : "Okänt fel");
+    return data;
+  }
+
+  async function renderOrderstock(){
+    if (!orderstockList) return;
+
+    const companyId = (typeof CompanyManager !== "undefined" && CompanyManager && CompanyManager.getActiveCompanyId) ? CompanyManager.getActiveCompanyId() : null;
+    if (!companyId) {
+      orderstockList.innerHTML = `<div class="card"><div class="muted small">Välj ett företag först.</div></div>`;
+      setOrderstockStatus("");
+      return;
+    }
+
+    state.company = state.company || defaultData().company;
+    const cfgFromState = normalizeWebshopSync(state.company.webshopSync);
+    const cfg = normalizeWebshopSync({
+      enabled: wsEnabled ? wsEnabled.checked : cfgFromState.enabled,
+      apiBaseUrl: wsApiBaseUrl ? wsApiBaseUrl.value : cfgFromState.apiBaseUrl,
+      apiKey: wsApiKey ? wsApiKey.value : cfgFromState.apiKey,
+      series: wsSeries ? wsSeries.value : cfgFromState.series,
+      pullLimit: wsLimit ? wsLimit.value : cfgFromState.pullLimit,
+    });
+
+    if (!cfg.enabled) {
+      orderstockList.innerHTML = `<div class="card"><div class="muted small">Aktivera först Webshop-synk under Inställningar för detta företag.</div></div>`;
+      setOrderstockStatus("");
+      return;
+    }
+    if (!cfg.apiBaseUrl || !cfg.apiKey) {
+      orderstockList.innerHTML = `<div class="card"><div class="muted small">Ange Serveradress och X-FU-Key under Inställningar.</div></div>`;
+      setOrderstockStatus("");
+      return;
+    }
+
+    const view = osViewFilter ? String(osViewFilter.value || "open") : "open";
+    setOrderstockStatus("Hämtar orderstock…");
+    orderstockList.innerHTML = `<div class="card"><div class="muted small">Laddar…</div></div>`;
+
+    const result = await webshopFetchOrderstock({ apiBaseUrl: cfg.apiBaseUrl, apiKey: cfg.apiKey, view, limit: 100 });
+    const orders = Array.isArray(result?.orders) ? result.orders : [];
+    const resolvedBaseUrl = stripTrailingSlashes(result?.resolvedBaseUrl || cfg.apiBaseUrl);
+    applyResolvedWebshopBaseUrl(resolvedBaseUrl);
+    try { if (orderstockList) orderstockList.dataset.baseUrl = resolvedBaseUrl; } catch (_) {}
+
+    if (!orders.length) {
+      orderstockList.innerHTML = `<div class="card"><div class="muted small">Inga order i valt läge.</div></div>`;
+      setOrderstockStatus(`Visar 0 order (${view}).`);
+      return;
+    }
+
+    orderstockList.innerHTML = orders.map((order) => {
+      const fulfilled = String(order?.fulfillment_status || "pending") === "fulfilled";
+      const customerName = String(order?.customer?.full_name || "").trim() || String(order?.email || "-");
+      const customerPhone = String(order?.customer?.phone || "").trim();
+      const lines = Array.isArray(order?.lines) ? order.lines : [];
+      const linesHtml = lines.length
+        ? `<div class="list" style="margin-top:10px; gap:6px;">${lines.map((line) => `
+            <div class="row" style="justify-content:space-between; gap:10px; padding:8px 10px; border:1px solid rgba(34,48,68,.55); border-radius:12px;">
+              <div>
+                <div><b>${esc(String(line?.title || "Rad"))}</b>${line?.sku ? ` <span class="muted small">(${esc(String(line.sku))})</span>` : ""}</div>
+                <div class="muted small">Antal: ${esc(String(line?.qty ?? 0))} · Moms: ${esc(String(line?.vat_rate ?? 0))}%</div>
+              </div>
+              <div class="muted small" style="text-align:right;">${esc(formatPrice(Number(line?.line_total_inc_vat || 0), order?.currency || "SEK"))}</div>
+            </div>
+          `).join("")}</div>`
+        : `<div class="muted small" style="margin-top:10px;">Inga orderrader sparade.</div>`;
+
+      return `
+        <div class="card" data-orderstock-id="${escapeAttr(String(order?.id || ""))}" style="padding:14px; display:grid; gap:10px;">
+          <div class="row" style="justify-content:space-between; gap:10px; align-items:flex-start; flex-wrap:wrap;">
+            <div>
+              <div style="font-weight:800;">Order ${esc(String(order?.order_number || order?.id || "-"))}</div>
+              <div class="muted small">${esc(customerName)}${customerPhone ? ` · ${esc(customerPhone)}` : ""} · ${esc(String(order?.email || "-"))}</div>
+            </div>
+            <div class="row" style="gap:8px; flex-wrap:wrap; justify-content:flex-end;">
+              <span class="${orderstockBadgeClass(String(order?.status || "") === "paid")}">${esc(String(order?.status || "-").toUpperCase())}</span>
+              <span class="${orderstockBadgeClass(fulfilled)}">${fulfilled ? "Utlevererad" : "Ej utlevererad"}</span>
+            </div>
+          </div>
+          <div class="row" style="gap:12px; flex-wrap:wrap;">
+            <div class="muted small">Betald: ${esc(formatOrderstockDateTime(order?.paid_at || order?.placed_at))}</div>
+            <div class="muted small">Belopp: ${esc(formatPrice(Number(order?.total_inc_vat || 0), order?.currency || "SEK"))}</div>
+            <div class="muted small">FU: ${esc(String(order?.fu_voucher_id || "-"))}</div>
+            <div class="muted small">Leverans: ${esc(String(order?.delivery_method || "-"))}</div>
+          </div>
+          ${linesHtml}
+          <div class="row" style="justify-content:space-between; gap:10px; align-items:center; flex-wrap:wrap; margin-top:4px;">
+            <div class="muted small">${fulfilled ? `Markerad utlevererad ${esc(formatOrderstockDateTime(order?.fulfilled_at))}${order?.fulfilled_by ? ` av ${esc(String(order.fulfilled_by))}` : ""}.` : "Bocka i när ordern är utlevererad."}</div>
+            <label class="muted small" style="display:flex; align-items:center; gap:8px; font-weight:700;">
+              <input type="checkbox" data-orderstock-fulfilled="${escapeAttr(String(order?.id || ""))}" ${fulfilled ? "checked" : ""} />
+              Utlevererad
+            </label>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    setOrderstockStatus(`Visar ${orders.length} order (${view}).`);
   }
 
   const __wsKeyStoreAttempted = Object.create(null);
@@ -5549,6 +5743,7 @@ if (!d.features) d.features = { sruEnabled: false };
     if (tabKey === "bank_inbox") safeUiCall(typeof BankImportModule !== "undefined" && BankImportModule && typeof BankImportModule.renderInbox === "function" ? BankImportModule.renderInbox : null);
     if (tabKey === "accounts") safeUiCall(typeof renderAccounts === "function" ? renderAccounts : null);
     if (tabKey === "invoices") safeUiCall(typeof renderInvoices === "function" ? renderInvoices : null);
+    if (tabKey === "orderstock") safeUiCall(typeof renderOrderstock === "function" ? renderOrderstock : null);
     if (tabKey === "customers") safeUiCall(typeof renderCustomers === "function" ? renderCustomers : null);
     if (tabKey === "suppliers") safeUiCall(typeof renderSuppliers === "function" ? renderSuppliers : null);
     if (tabKey === "supplier_invoices") safeUiCall(typeof renderSupplierInvoices === "function" ? renderSupplierInvoices : null);
@@ -12448,6 +12643,84 @@ if (rptYearSelect){
         showToast(`Test misslyckades: ${msg}`, 9000);
       } finally {
         btnWsTest.disabled = prev;
+      }
+    });
+  }
+
+  if (btnOsRefresh){
+    btnOsRefresh.addEventListener("click", async (e)=>{
+      e.preventDefault();
+      const prev = btnOsRefresh.disabled;
+      btnOsRefresh.disabled = true;
+      try {
+        await renderOrderstock();
+      } catch (err) {
+        console.error(err);
+        const msg = explainWebshopFetchError(err);
+        setOrderstockStatus("Fel: " + msg);
+        showToast(`Orderstock misslyckades: ${msg}`, 9000);
+      } finally {
+        btnOsRefresh.disabled = prev;
+      }
+    });
+  }
+
+  if (osViewFilter){
+    osViewFilter.addEventListener("change", ()=>{
+      Promise.resolve().then(()=> renderOrderstock()).catch((err)=>{
+        console.error(err);
+        const msg = explainWebshopFetchError(err);
+        setOrderstockStatus("Fel: " + msg);
+      });
+    });
+  }
+
+  if (orderstockList){
+    orderstockList.addEventListener("change", async (e)=>{
+      const cb = e.target && e.target.closest ? e.target.closest("input[data-orderstock-fulfilled]") : null;
+      if (!cb) return;
+      const orderId = String(cb.getAttribute("data-orderstock-fulfilled") || "").trim();
+      if (!orderId) return;
+
+      const desired = !!cb.checked;
+      cb.disabled = true;
+      try {
+        const companyId = (typeof CompanyManager !== "undefined" && CompanyManager && CompanyManager.getActiveCompanyId) ? CompanyManager.getActiveCompanyId() : null;
+        if (!companyId) throw new Error("Välj ett företag först.");
+
+        state.company = state.company || defaultData().company;
+        const cfgFromState = normalizeWebshopSync(state.company.webshopSync);
+        const cfg = normalizeWebshopSync({
+          enabled: wsEnabled ? wsEnabled.checked : cfgFromState.enabled,
+          apiBaseUrl: wsApiBaseUrl ? wsApiBaseUrl.value : cfgFromState.apiBaseUrl,
+          apiKey: wsApiKey ? wsApiKey.value : cfgFromState.apiKey,
+          series: wsSeries ? wsSeries.value : cfgFromState.series,
+          pullLimit: wsLimit ? wsLimit.value : cfgFromState.pullLimit,
+        });
+        if (!cfg.enabled) throw new Error("Webshop-synk är inte aktiverad för detta företag.");
+        if (!cfg.apiBaseUrl || !cfg.apiKey) throw new Error("Ange Serveradress och X-FU-Key under Inställningar.");
+
+        const resolvedBaseUrl = stripTrailingSlashes((orderstockList.dataset && orderstockList.dataset.baseUrl) ? orderstockList.dataset.baseUrl : cfg.apiBaseUrl);
+        const fulfilledBy = (state.company && state.company.name) ? String(state.company.name).trim() : "FU-Bookkeeping";
+        await webshopSetOrderFulfilled({
+          apiBaseUrl: resolvedBaseUrl,
+          apiKey: cfg.apiKey,
+          orderId,
+          fulfilled: desired,
+          fulfilledBy,
+          note: desired ? "Markerad utlevererad i FU-Bookkeeping" : "Avmarkerad i FU-Bookkeeping",
+        });
+        applyResolvedWebshopBaseUrl(resolvedBaseUrl);
+        showToast(desired ? "Order markerad som utlevererad." : "Order markerad som ej utlevererad.", 3500);
+        await renderOrderstock();
+      } catch (err) {
+        console.error(err);
+        cb.checked = !desired;
+        const msg = explainWebshopFetchError(err);
+        setOrderstockStatus("Fel: " + msg);
+        showToast(`Kunde inte uppdatera order: ${msg}`, 9000);
+      } finally {
+        cb.disabled = false;
       }
     });
   }

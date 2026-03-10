@@ -680,6 +680,11 @@
                         <option value="">Ingen referenskoppling</option>
                       </select>
                       <div class="muted small voucher-link-details" id="uLinkedToDetails">Välj en befintlig verifikation, kundfaktura, leverantörsfaktura eller laddad webshop-order.</div>
+                      <div class="row" style="gap:8px; margin-top:8px; align-items:center; flex-wrap:wrap;">
+                        <button class="btn secondary" type="button" id="btnApplyUnderlagLink" disabled>Verkställ</button>
+                        <div class="muted small" id="uLinkApplyState">Ingen verkställd referenskoppling.</div>
+                      </div>
+                      <div class="muted small" style="margin-top:6px;">Aktuell verifikation är redan underlagets primära koppling och visas därför inte i listan.</div>
                     </div>
                   </div>
                   <div class="voucher-underlag-actions">
@@ -694,7 +699,7 @@
                   </div>
                 </div>
 
-                <div class="muted small" style="margin-top:6px;">Referenskoppling väljs från befintliga poster och används bara för spårbarhet mot faktura, order eller annan verifikation. Den slår inte ihop bokföringsposter.</div>
+                <div class="muted small" style="margin-top:6px;">Referenskoppling väljs från befintliga poster och används bara för spårbarhet mot faktura, order eller annan verifikation. Den slår inte ihop bokföringsposter. Valet börjar gälla först när du klickar Verkställ.</div>
 
                 <div id="uList" class="list" data-ocr="voucher"></div>
 
@@ -2143,7 +2148,7 @@ Tack!</div>
  
 
   const APP_VERSION = "1.4.0"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.8";  // user-facing revision
+  const APP_SEMVER = "0.3.9";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -4868,6 +4873,8 @@ if (!d.features) d.features = { sruEnabled: false };
   const uLinkedTo = document.getElementById("uLinkedTo");
   const uLinkedEntity = document.getElementById("uLinkedEntity");
   const uLinkedToDetails = document.getElementById("uLinkedToDetails");
+  const btnApplyUnderlagLink = document.getElementById("btnApplyUnderlagLink");
+  const uLinkApplyState = document.getElementById("uLinkApplyState");
   const uPrivateOutlay = document.getElementById("uPrivateOutlay");
   const uFiles = document.getElementById("uFiles");
   const uList = document.getElementById("uList");
@@ -4994,6 +5001,8 @@ if (!d.features) d.features = { sruEnabled: false };
   const orderstockList = document.getElementById("orderstockList");
   let underlagLinkOptionsIndex = new Map();
   let latestOrderstockEntries = [];
+  let appliedUnderlagLinkPatch = { linkedTo: "", linkedEntityType: "", linkedEntityId: "" };
+  let pendingUnderlagLinkDirty = false;
 
   function webshopSyncDefaults(){
     return { enabled: false, apiBaseUrl: "https://api.innovatio-brutalis.se", apiKey: "", series: "W", pullLimit: 1 };
@@ -10186,15 +10195,23 @@ if (!d.features) d.features = { sruEnabled: false };
     });
     if (uLinkedEntity) uLinkedEntity.addEventListener("change", ()=>{
       const selection = getCurrentUnderlagLinkSelection();
-      const patch = selection
-        ? { linkedTo: selection.linkedTo, linkedEntityType: selection.type, linkedEntityId: selection.entityId }
-        : { linkedTo: "", linkedEntityType: "", linkedEntityId: "" };
+      const patch = getUnderlagLinkPatchFromUi();
       if (uLinkedTo) uLinkedTo.value = patch.linkedTo;
       renderUnderlagLinkDetails(selection?.option || null, patch.linkedTo);
+      pendingUnderlagLinkDirty = !sameUnderlagLinkPatch(patch, appliedUnderlagLinkPatch);
+      updateUnderlagLinkApplyUi();
+    });
+    if (btnApplyUnderlagLink) btnApplyUnderlagLink.addEventListener("click", ()=>{
+      const patch = getUnderlagLinkPatchFromUi();
+      setAppliedUnderlagLinkPatch(patch);
+      pendingUnderlagLinkDirty = false;
+      updateUnderlagLinkApplyUi();
       if (voucherOcrCtx && voucherOcrCtx.underlagId){
         syncVoucherUnderlagMeta(voucherOcrCtx.underlagId, patch);
+        showToast(patch.linkedTo ? `Referenskoppling verkställd: ${patch.linkedTo}` : "Referenskopplingen togs bort.", 3500);
       } else {
-        renderVoucherOcrMetaInfo({ linkedTo: patch.linkedTo, privateOutlay: !!uPrivateOutlay?.checked });
+        try { renderVoucherOcrMetaInfo({ linkedTo: patch.linkedTo, privateOutlay: !!uPrivateOutlay?.checked }); } catch {}
+        showToast(patch.linkedTo ? `Referenskoppling verkställd för nästa uppladdning: ${patch.linkedTo}` : "Ingen referenskoppling verkställd för nästa uppladdning.", 3500);
       }
     });
     if (btnVoucherOcrDiscard) btnVoucherOcrDiscard.addEventListener("click", (e)=>{ e.preventDefault(); hideVoucherOcrPanel(true); });
@@ -10742,11 +10759,55 @@ if (!d.features) d.features = { sruEnabled: false };
     uLinkedToDetails.textContent = "Välj en befintlig verifikation, kundfaktura, leverantörsfaktura eller laddad webshop-order.";
   }
 
+  function normalizeUnderlagLinkPatch(patch){
+    return {
+      linkedTo: clampText(String(patch?.linkedTo || "").trim(), 160),
+      linkedEntityType: String(patch?.linkedEntityType || "").trim(),
+      linkedEntityId: String(patch?.linkedEntityId || "").trim()
+    };
+  }
+
+  function sameUnderlagLinkPatch(a, b){
+    const aa = normalizeUnderlagLinkPatch(a);
+    const bb = normalizeUnderlagLinkPatch(b);
+    return aa.linkedTo === bb.linkedTo
+      && aa.linkedEntityType === bb.linkedEntityType
+      && aa.linkedEntityId === bb.linkedEntityId;
+  }
+
+  function setAppliedUnderlagLinkPatch(patch){
+    appliedUnderlagLinkPatch = normalizeUnderlagLinkPatch(patch);
+  }
+
+  function updateUnderlagLinkApplyUi(){
+    if (btnApplyUnderlagLink) btnApplyUnderlagLink.disabled = !pendingUnderlagLinkDirty;
+    if (!uLinkApplyState) return;
+    if (pendingUnderlagLinkDirty) {
+      uLinkApplyState.textContent = "Ändring ej verkställd. Klicka Verkställ för att bekräfta valet.";
+      return;
+    }
+    if (appliedUnderlagLinkPatch.linkedTo) {
+      uLinkApplyState.textContent = `Verkställd referenskoppling: ${appliedUnderlagLinkPatch.linkedTo}`;
+      return;
+    }
+    uLinkApplyState.textContent = "Ingen verkställd referenskoppling.";
+  }
+
+  function getUnderlagLinkPatchFromUi(){
+    const selection = getCurrentUnderlagLinkSelection();
+    return normalizeUnderlagLinkPatch(selection
+      ? { linkedTo: selection.linkedTo, linkedEntityType: selection.type, linkedEntityId: selection.entityId }
+      : { linkedTo: "", linkedEntityType: "", linkedEntityId: "" });
+  }
+
   function refreshUnderlagLinkPicker(rec, voucherId){
-    const storedValue = rec?.linkedEntityType && rec?.linkedEntityId
-      ? composeUnderlagLinkValue(rec.linkedEntityType, rec.linkedEntityId)
-      : String(uLinkedEntity?.value || "").trim();
-    const fallbackText = clampText(String(rec?.linkedTo || uLinkedTo?.value || "").trim(), 160);
+    const basePatch = rec
+      ? normalizeUnderlagLinkPatch(rec)
+      : normalizeUnderlagLinkPatch(pendingUnderlagLinkDirty ? getUnderlagLinkPatchFromUi() : appliedUnderlagLinkPatch);
+    const storedValue = basePatch.linkedEntityType && basePatch.linkedEntityId
+      ? composeUnderlagLinkValue(basePatch.linkedEntityType, basePatch.linkedEntityId)
+      : "";
+    const fallbackText = basePatch.linkedTo;
     const options = buildUnderlagLinkOptions(voucherId);
     underlagLinkOptionsIndex = new Map(options.map(option => [option.value, option]));
 
@@ -10775,6 +10836,11 @@ if (!d.features) d.features = { sruEnabled: false };
     const selectedOption = underlagLinkOptionsIndex.get(String(uLinkedEntity?.value || "").trim()) || null;
     if (uLinkedTo) uLinkedTo.value = selectedOption?.linkedTo || fallbackText || "";
     renderUnderlagLinkDetails(selectedOption, selectedOption ? "" : fallbackText);
+    if (rec) {
+      setAppliedUnderlagLinkPatch(basePatch);
+      pendingUnderlagLinkDirty = false;
+    }
+    updateUnderlagLinkApplyUi();
   }
 
   function getCurrentUnderlagLinkSelection(){
@@ -10880,6 +10946,10 @@ if (!d.features) d.features = { sruEnabled: false };
   async function addUnderlagFiles(fileList){
     const files = Array.from(fileList || []);
     if (!files.length) return;
+    if (pendingUnderlagLinkDirty) {
+      showToast("Referensvalet är ändrat men inte verkställt. Klicka Verkställ först.", 5000);
+      return;
+    }
 
     const voucherId = currentVoucherId();
     const yearId = (yearSelect && yearSelect.value) || state.activeYearId;
@@ -10890,8 +10960,8 @@ if (!d.features) d.features = { sruEnabled: false };
     const type = uType ? String(uType.value || "annat") : "annat";
     const ref = uRef ? clampText(String(uRef.value || "").trim(), 120) : "";
     const note = uNote ? clampText(String(uNote.value || "").trim(), 240) : "";
-    const linkSelection = getCurrentUnderlagLinkSelection();
-    const linkedTo = uLinkedTo ? clampText(String(uLinkedTo.value || "").trim(), 160) : "";
+  const linkPatch = normalizeUnderlagLinkPatch(appliedUnderlagLinkPatch);
+  const linkedTo = linkPatch.linkedTo;
     const privateOutlay = !!(uPrivateOutlay && uPrivateOutlay.checked);
 
     state.underlag = Array.isArray(state.underlag) ? state.underlag : [];
@@ -10909,8 +10979,8 @@ if (!d.features) d.features = { sruEnabled: false };
         ref,
         note,
         linkedTo,
-        linkedEntityType: linkSelection?.type || "",
-        linkedEntityId: linkSelection?.entityId || "",
+        linkedEntityType: linkPatch.linkedEntityType || "",
+        linkedEntityId: linkPatch.linkedEntityId || "",
         privateOutlay,
         fileName: safeFileName(f.name),
         mime: f.type || "",
@@ -11723,7 +11793,7 @@ if (!d.features) d.features = { sruEnabled: false };
 
   function renderVoucherOcrMetaInfo(rec){
     if (!voucherOcrMetaInfo) return;
-    const linked = clampText(String(rec?.linkedTo || uLinkedTo?.value || "").trim(), 160);
+    const linked = clampText(String(rec?.linkedTo || appliedUnderlagLinkPatch.linkedTo || "").trim(), 160);
     const isPrivateOutlay = !!(rec?.privateOutlay || uPrivateOutlay?.checked);
     const accountNo = getPrivateOutlayCreditAccount();
     ensureVoucherOcrAccount(accountNo, getPrivateOutlayCreditAccountName(accountNo));
@@ -11738,6 +11808,9 @@ if (!d.features) d.features = { sruEnabled: false };
     const rec = (state.underlag||[]).find(u=>u && u.id===underlagId);
     if (!rec) return null;
     Object.assign(rec, patch || {});
+    setAppliedUnderlagLinkPatch(rec);
+    pendingUnderlagLinkDirty = false;
+    updateUnderlagLinkApplyUi();
     save();
     try { renderUnderlag(); } catch {}
     try { renderVoucherOcrMetaInfo(rec); } catch {}

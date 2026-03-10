@@ -654,13 +654,103 @@
                     <label>Notering (valfritt)</label>
                     <input id="uNote" type="text" placeholder="t.ex. leverantör, projekt, kommentar" />
                   </div>
+                  <label class="muted small" style="display:flex; align-items:center; gap:8px; min-height:40px; padding:0 4px;">
+                    <input id="uPrivateOutlay" type="checkbox" />
+                    Privat utlägg
+                  </label>
                   <label class="btn secondary" style="display:inline-flex; align-items:center; gap:8px; cursor:pointer; height:40px;">
                     + Lägg till filer
                     <input id="uFiles" type="file" multiple accept="application/pdf,image/*" hidden />
                   </label>
                 </div>
 
-                <div id="uList" class="list"></div>
+                <div id="uList" class="list" data-ocr="voucher"></div>
+
+                <div class="card" id="voucherOcrPanel" hidden style="padding:10px; border-radius:14px; background:rgba(11,18,32,.90);">
+                  <div class="row" style="justify-content:space-between; margin-bottom:8px; gap:10px; flex-wrap:wrap;">
+                    <div class="muted small"><b>OCR-konteringsförslag</b> – läs av underlaget och fyll verifikationen med ett redigerbart förslag</div>
+                    <div class="row">
+                      <button class="btn secondary" type="button" id="btnVoucherOcrDiscard">Avvisa</button>
+                      <button class="btn" type="button" id="btnVoucherOcrApply">Använd i verifikationen</button>
+                    </div>
+                  </div>
+
+                  <div class="row" style="gap:10px; align-items:center;">
+                    <span class="status" id="voucherOcrStatus">–</span>
+                    <div class="muted small" id="voucherOcrFileInfo"></div>
+                  </div>
+
+                  <div class="row" style="gap:10px; align-items:flex-end; margin-top:10px; flex-wrap:wrap;">
+                    <div class="field" style="min-width:220px;">
+                      <label>Språk (för OCR)</label>
+                      <select id="voucherOcrLang">
+                        <option value="swe+eng" selected>Svenska + engelska</option>
+                        <option value="swe">Svenska</option>
+                        <option value="eng">Engelska</option>
+                      </select>
+                    </div>
+                    <div class="field" style="min-width:220px;">
+                      <label>PDF-sidor</label>
+                      <select id="voucherOcrPdfPages">
+                        <option value="1" selected>Endast sida 1</option>
+                        <option value="2">Sida 1–2</option>
+                        <option value="5">Sida 1–5</option>
+                        <option value="all">Alla sidor (kan bli långsamt)</option>
+                      </select>
+                    </div>
+                    <label class="muted small" style="display:flex; align-items:center; gap:8px; min-height:40px; padding:0 4px;">
+                      <input id="voucherOcrPrivateOutlay" type="checkbox" />
+                      Privat utlägg (föreslå 2018)
+                    </label>
+                    <button class="btn secondary" type="button" id="btnVoucherOcrRun">Kör OCR igen</button>
+                  </div>
+
+                  <div class="grid two" style="gap:10px; margin-top:10px;">
+                    <div class="field">
+                      <label>Datum</label>
+                      <input id="voucherOcrDate" type="date" />
+                    </div>
+                    <div class="field">
+                      <label>Referens</label>
+                      <input id="voucherOcrRef" type="text" placeholder="OCR / kvittonr / fakturanr" />
+                    </div>
+                    <div class="field" style="grid-column:1 / -1;">
+                      <label>Verifikationstext</label>
+                      <input id="voucherOcrTextField" type="text" placeholder="Text som sätts på verifikationen och raderna" />
+                    </div>
+                    <div class="field">
+                      <label>Belopp inkl moms</label>
+                      <input id="voucherOcrGross" type="text" inputmode="decimal" placeholder="0,00" />
+                    </div>
+                    <div class="field">
+                      <label>Moms</label>
+                      <input id="voucherOcrVat" type="text" inputmode="decimal" placeholder="0,00" />
+                    </div>
+                    <div class="field">
+                      <label>Kostnadskonto</label>
+                      <select id="voucherOcrExpenseAcc"></select>
+                    </div>
+                    <div class="field">
+                      <label>Momskonto</label>
+                      <select id="voucherOcrVatAcc"></select>
+                    </div>
+                    <div class="field">
+                      <label>Motkonto</label>
+                      <select id="voucherOcrCreditAcc"></select>
+                    </div>
+                    <div class="field">
+                      <label>Netto kostnad</label>
+                      <input id="voucherOcrNet" type="text" readonly />
+                    </div>
+                  </div>
+
+                  <div id="voucherOcrPreview" class="muted small" style="margin-top:10px;"></div>
+
+                  <div class="field" style="margin-top:10px;">
+                    <label>OCR-text (för spårbarhet)</label>
+                    <textarea id="voucherOcrText" spellcheck="false" style="min-height:140px;"></textarea>
+                  </div>
+                </div>
 
                 <div class="muted small">
                   Tips: För revisionsbarhet över tid – exportera “Arkivmapp (med underlag)” så hamnar JSON + underlag i samma mappstruktur.
@@ -2014,8 +2104,8 @@ Tack!</div>
 (function(){
  
 
-  const APP_VERSION = "1.3.0"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.2";  // user-facing revision
+  const APP_VERSION = "1.4.0"; // bump when adding new data fields
+  const APP_SEMVER = "0.3.3";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -4648,8 +4738,29 @@ if (!d.features) d.features = { sruEnabled: false };
   const uType = document.getElementById("uType");
   const uRef = document.getElementById("uRef");
   const uNote = document.getElementById("uNote");
+  const uPrivateOutlay = document.getElementById("uPrivateOutlay");
   const uFiles = document.getElementById("uFiles");
   const uList = document.getElementById("uList");
+  const voucherOcrPanel = document.getElementById("voucherOcrPanel");
+  const voucherOcrStatus = document.getElementById("voucherOcrStatus");
+  const voucherOcrFileInfo = document.getElementById("voucherOcrFileInfo");
+  const voucherOcrLang = document.getElementById("voucherOcrLang");
+  const voucherOcrPdfPages = document.getElementById("voucherOcrPdfPages");
+  const voucherOcrPrivateOutlay = document.getElementById("voucherOcrPrivateOutlay");
+  const voucherOcrDate = document.getElementById("voucherOcrDate");
+  const voucherOcrRef = document.getElementById("voucherOcrRef");
+  const voucherOcrTextField = document.getElementById("voucherOcrTextField");
+  const voucherOcrGross = document.getElementById("voucherOcrGross");
+  const voucherOcrVat = document.getElementById("voucherOcrVat");
+  const voucherOcrNet = document.getElementById("voucherOcrNet");
+  const voucherOcrExpenseAcc = document.getElementById("voucherOcrExpenseAcc");
+  const voucherOcrVatAcc = document.getElementById("voucherOcrVatAcc");
+  const voucherOcrCreditAcc = document.getElementById("voucherOcrCreditAcc");
+  const voucherOcrPreview = document.getElementById("voucherOcrPreview");
+  const voucherOcrText = document.getElementById("voucherOcrText");
+  const btnVoucherOcrRun = document.getElementById("btnVoucherOcrRun");
+  const btnVoucherOcrDiscard = document.getElementById("btnVoucherOcrDiscard");
+  const btnVoucherOcrApply = document.getElementById("btnVoucherOcrApply");
 
   const aNo = document.getElementById("aNo");
   const aName = document.getElementById("aName");
@@ -8400,6 +8511,7 @@ if (!d.features) d.features = { sruEnabled: false };
 
   let siOcrCtx = { underlagId: null, lang: "swe+eng", pdfPages: "1", fields: {}, text: "", textSha256: "" };
   let currentSiOcrMeta = null;
+  let voucherOcrCtx = { underlagId: null, lang: "swe+eng", pdfPages: "1", parsed: {}, text: "", textSha256: "", suggestion: {} };
 
 
   let editingSupplierInvoiceId = null;
@@ -9918,9 +10030,41 @@ if (!d.features) d.features = { sruEnabled: false };
         const id = b.dataset.id;
         if (!id) return;
         if (act === "open-underlag") await openUnderlag(id);
+        if (act === "ocr-underlag") await ocrUnderlagToVoucher(id);
         if (act === "detach-underlag") await detachUnderlag(id);
       });
     }
+    if (uPrivateOutlay) uPrivateOutlay.addEventListener("change", ()=>{
+      if (voucherOcrCtx && voucherOcrCtx.underlagId){
+        syncVoucherPrivateOutlay(voucherOcrCtx.underlagId, uPrivateOutlay.checked);
+        if (voucherOcrPrivateOutlay) voucherOcrPrivateOutlay.checked = !!uPrivateOutlay.checked;
+        if (voucherOcrCtx.parsed && Object.keys(voucherOcrCtx.parsed).length){
+          const rec = (state.underlag||[]).find(u=>u && u.id===voucherOcrCtx.underlagId);
+          if (rec){
+            const suggestion = buildVoucherOcrSuggestion(rec, voucherOcrCtx.parsed);
+            populateVoucherOcrForm(suggestion, voucherOcrCtx.text || "");
+          }
+        }
+      }
+    });
+    if (btnVoucherOcrDiscard) btnVoucherOcrDiscard.addEventListener("click", (e)=>{ e.preventDefault(); hideVoucherOcrPanel(true); });
+    if (btnVoucherOcrApply) btnVoucherOcrApply.addEventListener("click", async (e)=>{ e.preventDefault(); await applyVoucherOcrToVoucher(); });
+    if (btnVoucherOcrRun) btnVoucherOcrRun.addEventListener("click", async (e)=>{
+      e.preventDefault();
+      if (!voucherOcrCtx || !voucherOcrCtx.underlagId) return showToast("Välj ett underlag och klicka OCR först.", 4500);
+      await ocrUnderlagToVoucher(voucherOcrCtx.underlagId, { rerun: true });
+    });
+    if (voucherOcrLang) voucherOcrLang.addEventListener("change", ()=>{ voucherOcrCtx.lang = voucherOcrLang.value; });
+    if (voucherOcrPdfPages) voucherOcrPdfPages.addEventListener("change", ()=>{ voucherOcrCtx.pdfPages = voucherOcrPdfPages.value; });
+    if (voucherOcrPrivateOutlay) voucherOcrPrivateOutlay.addEventListener("change", ()=>{
+      if (uPrivateOutlay) uPrivateOutlay.checked = !!voucherOcrPrivateOutlay.checked;
+      if (voucherOcrCtx && voucherOcrCtx.underlagId) syncVoucherPrivateOutlay(voucherOcrCtx.underlagId, voucherOcrPrivateOutlay.checked);
+      renderVoucherOcrPreview();
+    });
+    [voucherOcrDate, voucherOcrRef, voucherOcrTextField, voucherOcrGross, voucherOcrVat, voucherOcrExpenseAcc, voucherOcrVatAcc, voucherOcrCreditAcc].filter(Boolean).forEach(el=>{
+      el.addEventListener("input", renderVoucherOcrPreview);
+      el.addEventListener("change", renderVoucherOcrPreview);
+    });
 
 
     if (btnFillExample) btnFillExample.addEventListener("click", async (e)=>{
@@ -10002,6 +10146,8 @@ if (!d.features) d.features = { sruEnabled: false };
     try { if (uType) uType.value = "kvitto"; } catch (e){}
     try { if (uRef) uRef.value = ""; } catch (e){}
     try { if (uNote) uNote.value = ""; } catch (e){}
+    try { if (uPrivateOutlay) uPrivateOutlay.checked = false; } catch (e){}
+    try { hideVoucherOcrPanel(true); } catch (e){}
     try { renderUnderlag(); } catch (e){}
 
     if (btnSaveVoucher) btnSaveVoucher.disabled = true;
@@ -10373,6 +10519,7 @@ if (!d.features) d.features = { sruEnabled: false };
         u.type ? ("Typ: " + u.type) : "",
         u.ref ? ("ID: " + u.ref) : "",
         u.note ? ("Not: " + u.note) : "",
+        u.privateOutlay ? "Privat utlägg" : "",
         u.createdAt ? ("Tillagd: " + String(u.createdAt).slice(0,10)) : "",
         u.ocrTs ? ("OCR: " + String(u.ocrTs).slice(0,10)) : "",
         (u.size ? ("Storlek: " + Math.round((Number(u.size)||0)/1024) + " KB") : "")
@@ -10381,7 +10528,7 @@ if (!d.features) d.features = { sruEnabled: false };
       const canDetach = (st !== "detached"); // we keep blob for traceability; detaching just changes status + audit
       const detachBtn = canDetach ? `<button type="button" class="btn danger" data-act="detach-underlag" data-id="${escapeAttr(u.id)}">Koppla bort</button>` : "";
       const openBtn = `<button type="button" class="btn secondary" data-act="open-underlag" data-id="${escapeAttr(u.id)}">Öppna</button>`;
-      const ocrBtn = (targetEl && targetEl.dataset && targetEl.dataset.ocr === "supplierinvoice" && st !== "detached")
+      const ocrBtn = (targetEl && targetEl.dataset && targetEl.dataset.ocr && st !== "detached")
         ? `<button type="button" class="btn secondary" data-act="ocr-underlag" data-id="${escapeAttr(u.id)}">OCR</button>`
         : "";
 
@@ -10420,6 +10567,7 @@ if (!d.features) d.features = { sruEnabled: false };
     const type = uType ? String(uType.value || "annat") : "annat";
     const ref = uRef ? clampText(String(uRef.value || "").trim(), 120) : "";
     const note = uNote ? clampText(String(uNote.value || "").trim(), 240) : "";
+    const privateOutlay = !!(uPrivateOutlay && uPrivateOutlay.checked);
 
     state.underlag = Array.isArray(state.underlag) ? state.underlag : [];
 
@@ -10435,6 +10583,7 @@ if (!d.features) d.features = { sruEnabled: false };
         type,
         ref,
         note,
+        privateOutlay,
         fileName: safeFileName(f.name),
         mime: f.type || "",
         size: f.size || 0,
@@ -11033,7 +11182,8 @@ if (!d.features) d.features = { sruEnabled: false };
     }
   }
 
-  async function pdfBlobToCanvases(blob, pageChoice){
+  async function pdfBlobToCanvases(blob, pageChoice, setStatus){
+    const notify = typeof setStatus === "function" ? setStatus : (()=>{});
     if (!(await ensurePdfjs())) throw new Error("pdfjs-missing");
     const ab = await blob.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: ab, disableWorker: true }).promise;
@@ -11045,7 +11195,7 @@ if (!d.features) d.features = { sruEnabled: false };
 
     const canvases = [];
     for (let p=1; p<=want; p++){
-      setSiOcrStatus("", `Renderar PDF sida ${p}/${want}…`);
+      notify("", `Renderar PDF sida ${p}/${want}…`);
       const page = await pdf.getPage(p);
       // scale up a bit for OCR, but cap size
       const v1 = page.getViewport({ scale: 2.0 });
@@ -11064,89 +11214,72 @@ if (!d.features) d.features = { sruEnabled: false };
     return canvases;
   }
 
-  async function ocrUnderlagToSupplierInvoice(underlagId, opts){
+  async function ocrUnderlagWithCache(underlagId, opts){
+    const setStatus = (opts && typeof opts.setStatus === "function") ? opts.setStatus : (()=>{});
+    const rerun = !!(opts && opts.rerun);
     const u = (state.underlag||[]).find(x=>x && x.id===underlagId);
-    if (!u) return showToast("Underlaget hittades inte.", 4500);
+    if (!u){
+      showToast("Underlaget hittades inte.", 4500);
+      return null;
+    }
 
     if (!(await ensureOcrDeps())){
-      setSiOcrStatus("bad", "OCR: bibliotek saknas");
-      return;
+      setStatus("bad", "OCR: bibliotek saknas");
+      return null;
     }
 
     const blob = await idbGet("underlagBlob:" + underlagId);
-    if (!blob) return showToast("Filen finns inte kvar lokalt (IndexedDB).", 6500);
+    if (!blob){
+      showToast("Filen finns inte kvar lokalt (IndexedDB).", 6500);
+      return null;
+    }
 
-    // HEIC/HEIF (vanligt från iPhone) stöds inte säkert i webbläsar-OCR.
     try {
       const fn = String(u.fileName||"").toLowerCase();
       const mt = String(u.mime||"").toLowerCase();
       if (mt.includes("heic") || mt.includes("heif") || fn.endsWith(".heic") || fn.endsWith(".heif")){
         showToast("HEIC/HEIF stöds inte för OCR här. Konvertera till JPG/PNG eller PDF och ladda upp igen.", 9500);
-        setSiOcrStatus("bad", "OCR: filformat stöds ej");
-        return;
+        setStatus("bad", "OCR: filformat stöds ej");
+        return null;
       }
     } catch {}
 
+    const lang = String((opts && opts.lang) || "swe+eng").trim() || "swe+eng";
+    const pdfPages = String((opts && opts.pdfPages) || "1").trim() || "1";
 
-    // show panel + bind context
-    siOcrCtx.underlagId = underlagId;
-    siOcrCtx.lang = (siOcrLang ? (siOcrLang.value || siOcrCtx.lang || "swe+eng") : (siOcrCtx.lang || "swe+eng"));
-    siOcrCtx.pdfPages = (siOcrPdfPages ? (siOcrPdfPages.value || siOcrCtx.pdfPages || "1") : (siOcrCtx.pdfPages || "1"));
-    showSiOcrPanelFor(u);
-
-    setSiOcrStatus("", "Förbereder OCR…");
-    if (btnSiOcrRun) btnSiOcrRun.disabled = false;
-
-    // Try reuse cached OCR unless rerun requested
-    const rerun = !!(opts && opts.rerun);
     if (!rerun){
       try {
         const cached = await idbGet("underlagOcr:" + underlagId);
         if (cached && cached.text && cached.sha256){
-          siOcrCtx.text = String(cached.text||"");
-          siOcrCtx.textSha256 = String(cached.sha256||"");
-          const parsed = parseInvoiceFieldsFromOcr(siOcrCtx.text);
-          siOcrCtx.fields = {};
-          Object.entries(parsed).forEach(([k,v])=>{
-            const value = String(v.value||"").trim();
-            const score = Number(v.score||0);
-            siOcrCtx.fields[k] = { value, score, use: !!value && score >= 0.6 };
-          });
-          if (siOcrText) siOcrText.value = siOcrCtx.text;
-          renderSiOcrFields();
-          setSiOcrStatus("ok", "OCR (cache) klar");
-          return;
+          const text = String(cached.text || "");
+          const parsed = cached.fields && typeof cached.fields === "object" ? cached.fields : parseInvoiceFieldsFromOcr(text);
+          return { underlag: u, text, textSha256: String(cached.sha256 || ""), parsed, lang: String(cached.lang || lang), pdfPages: String(cached.pdfPages || pdfPages), fromCache: true };
         }
       } catch {}
     }
 
-    // Build canvases
     let canvases = [];
     const isPdf = (String(u.mime||"").includes("pdf") || String(u.fileName||"").toLowerCase().endsWith(".pdf"));
     try {
-      if (isPdf){
-        canvases = await pdfBlobToCanvases(blob, siOcrCtx.pdfPages || "1");
-      } else {
-        canvases = [ await blobToCanvasImage(blob) ];
-      }
+      if (isPdf) canvases = await pdfBlobToCanvases(blob, pdfPages, setStatus);
+      else canvases = [ await blobToCanvasImage(blob) ];
     } catch (e){
       console.error(e);
       const em = String((e && e.message) ? e.message : e);
       if (em.includes("pdfjs-missing")) showToast("PDF-läsaren (pdf.js) kunde inte laddas. Om du kör via file:// eller har blockerat CDN: öppna via http://localhost eller lägg pdf.min.js + pdf.worker.min.js lokalt i ./vendor/.", 9500);
       else showToast("Kunde inte förbereda filen för OCR. Prova en bild (JPG/PNG) eller en enklare PDF.", 9000);
-      setSiOcrStatus("bad", "OCR misslyckades");
-      return;
+      setStatus("bad", "OCR misslyckades");
+      return null;
     }
 
-    // Run OCR
     let combined = "";
-    const lang = siOcrCtx.lang || "swe+eng";
     const tPaths = await resolveTesseractPaths(lang);
-    for (let i=0;i<canvases.length;i++){
-      const pageNo = i+1;
+    for (let i=0; i<canvases.length; i++){
+      const pageNo = i + 1;
       const totalPages = canvases.length;
       let lastPct = 0;
-      setSiOcrStatus("", `OCR sida ${pageNo}/${totalPages}…`);      let res = null;
+      setStatus("", `OCR sida ${pageNo}/${totalPages}…`);
+      let res = null;
       try {
         res = await Tesseract.recognize(canvases[i], lang, {
           ...tPaths,
@@ -11157,7 +11290,7 @@ if (!d.features) d.features = { sruEnabled: false };
                 const pct = Math.round(m.progress * 100);
                 if (pct !== lastPct){
                   lastPct = pct;
-                  setSiOcrStatus("", `OCR sida ${pageNo}/${totalPages}… ${pct}%`);
+                  setStatus("", `OCR sida ${pageNo}/${totalPages}… ${pct}%`);
                 }
               }
             } catch {}
@@ -11173,46 +11306,303 @@ if (!d.features) d.features = { sruEnabled: false };
         } else {
           showToast("OCR misslyckades. Prova en skarpare bild/PDF och kör igen.", 9000);
         }
-        setSiOcrStatus("bad", "OCR misslyckades");
-        return;
+        setStatus("bad", "OCR misslyckades");
+        return null;
       }
       const t = (res && res.data && res.data.text) ? String(res.data.text) : "";
       combined += (combined ? "\n\n" : "") + (totalPages > 1 ? (`--- SIDA ${pageNo}/${totalPages} ---\n`) : "") + t;
     }
 
-    siOcrCtx.text = combined;
-    siOcrCtx.textSha256 = await sha256Hex(combined);
-
-    // Parse fields
+    const textSha256 = await sha256Hex(combined);
     const parsed = parseInvoiceFieldsFromOcr(combined);
+
+    try {
+      const nowIso = new Date().toISOString();
+      await idbSet("underlagOcr:" + underlagId, { ts: nowIso, lang, pdfPages, sha256: textSha256, text: combined, fields: parsed });
+      u.ocrTs = nowIso;
+      u.ocrLang = lang;
+      u.ocrTextSha256 = textSha256;
+      u.ocrFields = Object.fromEntries(Object.entries(parsed).map(([k,v])=> [k, String(v?.value || "").trim()]));
+      appendAudit({ action:"underlag.ocr", entityType:"underlag", entityId: underlagId, yearId: u.yearId, details:{ fileName: u.fileName, lang, pdfPages, ocrTextSha256: textSha256 } });
+      save();
+    } catch (e){
+      console.error(e);
+    }
+
+    return { underlag: u, text: combined, textSha256, parsed, lang, pdfPages, fromCache: false };
+  }
+
+  async function ocrUnderlagToSupplierInvoice(underlagId, opts){
+    const u = (state.underlag||[]).find(x=>x && x.id===underlagId);
+    if (!u) return;
+
+    siOcrCtx.underlagId = underlagId;
+    siOcrCtx.lang = (siOcrLang ? (siOcrLang.value || siOcrCtx.lang || "swe+eng") : (siOcrCtx.lang || "swe+eng"));
+    siOcrCtx.pdfPages = (siOcrPdfPages ? (siOcrPdfPages.value || siOcrCtx.pdfPages || "1") : (siOcrCtx.pdfPages || "1"));
+    showSiOcrPanelFor(u);
+
+    setSiOcrStatus("", "Förbereder OCR…");
+    if (btnSiOcrRun) btnSiOcrRun.disabled = false;
+
+    const result = await ocrUnderlagWithCache(underlagId, {
+      rerun: !!(opts && opts.rerun),
+      lang: siOcrCtx.lang,
+      pdfPages: siOcrCtx.pdfPages,
+      setStatus: setSiOcrStatus
+    });
+    if (!result) return;
+
+    siOcrCtx.lang = result.lang || siOcrCtx.lang;
+    siOcrCtx.pdfPages = result.pdfPages || siOcrCtx.pdfPages;
+    siOcrCtx.text = result.text || "";
+    siOcrCtx.textSha256 = result.textSha256 || "";
+
+    const parsed = result.parsed || parseInvoiceFieldsFromOcr(siOcrCtx.text);
     siOcrCtx.fields = {};
     Object.entries(parsed).forEach(([k,v])=>{
       const value = String(v.value||"").trim();
       const score = Number(v.score||0);
-      // default-use: decent confidence AND non-empty
       siOcrCtx.fields[k] = { value, score, use: !!value && score >= 0.6 };
     });
 
-    // Update UI
-    if (siOcrText) siOcrText.value = combined;
+    if (siOcrText) siOcrText.value = siOcrCtx.text;
     renderSiOcrFields();
-    setSiOcrStatus("ok", "OCR klar (granska fälten)");
+    setSiOcrStatus("ok", result.fromCache ? "OCR (cache) klar" : "OCR klar (granska fälten)");
+    try { renderUnderlagInto(siUnderlagList, currentSiAttachTargetId); } catch {}
+  }
 
-    // Persist OCR (for traceability + faster re-open)
-    try {
-      const nowIso = new Date().toISOString();
-      await idbSet("underlagOcr:" + underlagId, { ts: nowIso, lang, pdfPages: siOcrCtx.pdfPages, sha256: siOcrCtx.textSha256, text: combined, fields: parsed });
-      u.ocrTs = nowIso;
-      u.ocrLang = lang;
-      u.ocrTextSha256 = siOcrCtx.textSha256;
-      u.ocrFields = Object.fromEntries(Object.entries(parsed).map(([k,v])=> [k, String(v.value||"").trim()] ));
-      appendAudit({ action:"underlag.ocr", entityType:"underlag", entityId: underlagId, yearId: u.yearId, details:{ fileName: u.fileName, lang, pdfPages: siOcrCtx.pdfPages, ocrTextSha256: siOcrCtx.textSha256 } });
-      save();
-      try { renderUnderlagInto(siUnderlagList, currentSiAttachTargetId); } catch {}
-    } catch (e){
-      console.error(e);
-      // non-fatal
+  function setVoucherOcrStatus(kind, msg){
+    if (!voucherOcrStatus) return;
+    voucherOcrStatus.className = "status" + (kind ? (" " + kind) : "");
+    voucherOcrStatus.textContent = msg || "–";
+  }
+
+  function hideVoucherOcrPanel(clear){
+    if (voucherOcrPanel) voucherOcrPanel.hidden = true;
+    if (!clear) return;
+    voucherOcrCtx = { underlagId: null, lang: (voucherOcrLang ? (voucherOcrLang.value||"swe+eng") : "swe+eng"), pdfPages: (voucherOcrPdfPages ? (voucherOcrPdfPages.value||"1") : "1"), parsed: {}, text: "", textSha256: "", suggestion: {} };
+    if (voucherOcrFileInfo) voucherOcrFileInfo.textContent = "";
+    if (voucherOcrText) voucherOcrText.value = "";
+    if (voucherOcrDate) voucherOcrDate.value = "";
+    if (voucherOcrRef) voucherOcrRef.value = "";
+    if (voucherOcrTextField) voucherOcrTextField.value = "";
+    if (voucherOcrGross) voucherOcrGross.value = "";
+    if (voucherOcrVat) voucherOcrVat.value = "";
+    if (voucherOcrNet) voucherOcrNet.value = "";
+    if (voucherOcrPreview) voucherOcrPreview.innerHTML = "";
+    setVoucherOcrStatus("", "–");
+    if (btnVoucherOcrRun) btnVoucherOcrRun.disabled = true;
+  }
+
+  function moneyToInputValue(n){
+    return String(round2(n || 0)).replace(".", ",");
+  }
+
+  function ensureVoucherOcrDefaultAccounts(){
+    state.accounts = state.accounts || {};
+    if (!state.accounts["1930"]) state.accounts["1930"] = { name:"Företagskonto/bank", type:"asset" };
+    if (!state.accounts["2018"]) state.accounts["2018"] = { name:"Egna insättningar", type:"liability" };
+    if (!state.accounts["2440"]) state.accounts["2440"] = { name:"Leverantörsskulder", type:"liability" };
+    if (!state.accounts["2641"]) state.accounts["2641"] = { name:"Ingående moms", type:"asset" };
+    if (!state.accounts["4010"]) state.accounts["4010"] = { name:"Inköp", type:"expense" };
+    if (!state.accounts["5700"]) state.accounts["5700"] = { name:"Frakter och transporter", type:"expense" };
+  }
+
+  function ensureVoucherOcrAccount(no, fallbackName){
+    const acc = String(no || "").trim();
+    if (!acc) return;
+    state.accounts = state.accounts || {};
+    if (!state.accounts[acc]) state.accounts[acc] = { name: fallbackName || "OCR-konto", type: guessTypeFromAccountNo(acc) };
+  }
+
+  function guessVoucherExpenseAccount(text, underlagType){
+    const s = String(text || "").toLowerCase();
+    if (/(frakt|returfrakt|porto|shipping|postnord|dhl|ups|schenker|bring)/i.test(s)) return "5700";
+    if (String(underlagType || "") === "leverantorsfaktura") return "4010";
+    return state.accounts?.["4010"] ? "4010" : (state.accounts?.["5700"] ? "5700" : "4010");
+  }
+
+  function guessVoucherCreditAccount(underlagType, isPrivateOutlay){
+    if (isPrivateOutlay) return "2018";
+    if (String(underlagType || "") === "leverantorsfaktura") return "2440";
+    return "1930";
+  }
+
+  function buildVoucherTextFromOcr(rec, parsed){
+    const supplier = String(parsed?.supplierName?.value || "").trim();
+    const invoiceNo = String(parsed?.invoiceNo?.value || "").trim();
+    const ref = String(parsed?.ocr?.value || rec?.ref || "").trim();
+    const base = rec?.type === "leverantorsfaktura" ? "Leverantörsunderlag" : (rec?.type === "bank" ? "Bankunderlag" : "Kvitto");
+    const detail = supplier || String(rec?.note || "").trim() || ref || invoiceNo || String(rec?.fileName || "").trim();
+    return clampText(`${base}${detail ? (" " + detail) : ""}`, 200);
+  }
+
+  function buildVoucherOcrSuggestion(rec, parsed){
+    ensureVoucherOcrDefaultAccounts();
+    const isPrivateOutlay = !!(rec?.privateOutlay || (uPrivateOutlay && uPrivateOutlay.checked));
+    const date = String(parsed?.date?.value || rec?.date || vDate?.value || todayISO()).trim() || todayISO();
+    const gross = round2(parseMoney(parsed?.gross?.value || 0));
+    let vat = round2(parseMoney(parsed?.vat?.value || 0));
+    if (!Number.isFinite(vat) || vat < 0) vat = 0;
+    if (gross > 0 && vat > gross) vat = 0;
+    const net = round2(Math.max(0, gross - vat));
+    const text = buildVoucherTextFromOcr(rec, parsed);
+    const ref = clampText(String(rec?.ref || parsed?.ocr?.value || parsed?.invoiceNo?.value || "").trim(), 120);
+    const searchText = [text, rec?.note || "", rec?.ref || "", parsed?.supplierName?.value || "", parsed?.invoiceNo?.value || ""].join(" ");
+    const expenseAccount = guessVoucherExpenseAccount(searchText, rec?.type);
+    const vatAccount = "2641";
+    const creditAccount = guessVoucherCreditAccount(rec?.type, isPrivateOutlay);
+    return { date, text, ref, gross, vat, net, expenseAccount, vatAccount, creditAccount, privateOutlay: isPrivateOutlay };
+  }
+
+  function renderVoucherOcrAccountSelects(suggestion){
+    ensureVoucherOcrDefaultAccounts();
+    fillAccountSelectOptions(voucherOcrExpenseAcc, suggestion?.expenseAccount || "4010");
+    fillAccountSelectOptions(voucherOcrVatAcc, suggestion?.vatAccount || "2641");
+    fillAccountSelectOptions(voucherOcrCreditAcc, suggestion?.creditAccount || "1930");
+  }
+
+  function readVoucherOcrSuggestionFromForm(){
+    const gross = round2(parseMoney(voucherOcrGross?.value || 0));
+    let vat = round2(parseMoney(voucherOcrVat?.value || 0));
+    if (!Number.isFinite(vat) || vat < 0) vat = 0;
+    if (gross > 0 && vat > gross) vat = 0;
+    return {
+      date: String(voucherOcrDate?.value || todayISO()).trim() || todayISO(),
+      text: clampText(String(voucherOcrTextField?.value || "").trim(), 200),
+      ref: clampText(String(voucherOcrRef?.value || "").trim(), 120),
+      gross,
+      vat,
+      net: round2(Math.max(0, gross - vat)),
+      expenseAccount: String(voucherOcrExpenseAcc?.value || "").trim(),
+      vatAccount: String(voucherOcrVatAcc?.value || "").trim(),
+      creditAccount: String(voucherOcrCreditAcc?.value || "").trim(),
+      privateOutlay: !!(voucherOcrPrivateOutlay && voucherOcrPrivateOutlay.checked)
+    };
+  }
+
+  function renderVoucherOcrPreview(){
+    const suggestion = readVoucherOcrSuggestionFromForm();
+    voucherOcrCtx.suggestion = suggestion;
+    if (voucherOcrNet) voucherOcrNet.value = suggestion.gross > 0 ? moneyToInputValue(suggestion.net) : "";
+    if (!voucherOcrPreview) return;
+    if (!suggestion.gross || !suggestion.expenseAccount || !suggestion.creditAccount){
+      voucherOcrPreview.textContent = "OCR-förslaget saknar ännu belopp eller konto. Justera fälten ovan och använd sedan i verifikationen.";
+      return;
     }
+    const bits = [
+      `Debet ${accountLabel(suggestion.expenseAccount)} ${fmtSEK(suggestion.net)}`,
+      suggestion.vat > 0 ? `Debet ${accountLabel(suggestion.vatAccount)} ${fmtSEK(suggestion.vat)}` : "",
+      `Kredit ${accountLabel(suggestion.creditAccount)} ${fmtSEK(suggestion.gross)}`
+    ].filter(Boolean);
+    voucherOcrPreview.innerHTML = `${suggestion.privateOutlay ? "<b>Privat utlägg.</b> " : ""}Förslag: ${bits.map(escapeHtml).join(" · ")}`;
+  }
+
+  function syncVoucherPrivateOutlay(underlagId, checked){
+    const rec = (state.underlag||[]).find(u=>u && u.id===underlagId);
+    if (!rec) return;
+    rec.privateOutlay = !!checked;
+    save();
+    try { renderUnderlag(); } catch {}
+  }
+
+  function populateVoucherOcrForm(suggestion, text){
+    renderVoucherOcrAccountSelects(suggestion);
+    if (voucherOcrDate) voucherOcrDate.value = suggestion.date || "";
+    if (voucherOcrRef) voucherOcrRef.value = suggestion.ref || "";
+    if (voucherOcrTextField) voucherOcrTextField.value = suggestion.text || "";
+    if (voucherOcrGross) voucherOcrGross.value = suggestion.gross ? moneyToInputValue(suggestion.gross) : "";
+    if (voucherOcrVat) voucherOcrVat.value = suggestion.vat ? moneyToInputValue(suggestion.vat) : "";
+    if (voucherOcrPrivateOutlay) voucherOcrPrivateOutlay.checked = !!suggestion.privateOutlay;
+    if (uPrivateOutlay) uPrivateOutlay.checked = !!suggestion.privateOutlay;
+    if (voucherOcrText) voucherOcrText.value = text || "";
+    if (voucherOcrExpenseAcc) voucherOcrExpenseAcc.value = suggestion.expenseAccount || voucherOcrExpenseAcc.value;
+    if (voucherOcrVatAcc) voucherOcrVatAcc.value = suggestion.vatAccount || voucherOcrVatAcc.value;
+    if (voucherOcrCreditAcc) voucherOcrCreditAcc.value = suggestion.creditAccount || voucherOcrCreditAcc.value;
+    renderVoucherOcrPreview();
+  }
+
+  function showVoucherOcrPanelFor(underlagRec){
+    if (!voucherOcrPanel) return;
+    voucherOcrPanel.hidden = false;
+    if (voucherOcrLang) voucherOcrLang.value = voucherOcrCtx.lang || (voucherOcrLang.value || "swe+eng");
+    if (voucherOcrPdfPages) voucherOcrPdfPages.value = voucherOcrCtx.pdfPages || (voucherOcrPdfPages.value || "1");
+    if (voucherOcrFileInfo) voucherOcrFileInfo.textContent = underlagRec ? (`Fil: ${underlagRec.fileName || ""}`) : "";
+    if (btnVoucherOcrRun) btnVoucherOcrRun.disabled = !voucherOcrCtx.underlagId;
+  }
+
+  async function ocrUnderlagToVoucher(underlagId, opts){
+    const rec = (state.underlag||[]).find(x=>x && x.id===underlagId);
+    if (!rec) return;
+
+    voucherOcrCtx.underlagId = underlagId;
+    voucherOcrCtx.lang = (voucherOcrLang ? (voucherOcrLang.value || voucherOcrCtx.lang || "swe+eng") : (voucherOcrCtx.lang || "swe+eng"));
+    voucherOcrCtx.pdfPages = (voucherOcrPdfPages ? (voucherOcrPdfPages.value || voucherOcrCtx.pdfPages || "1") : (voucherOcrCtx.pdfPages || "1"));
+    showVoucherOcrPanelFor(rec);
+    setVoucherOcrStatus("", "Förbereder OCR…");
+    if (btnVoucherOcrRun) btnVoucherOcrRun.disabled = false;
+
+    const result = await ocrUnderlagWithCache(underlagId, {
+      rerun: !!(opts && opts.rerun),
+      lang: voucherOcrCtx.lang,
+      pdfPages: voucherOcrCtx.pdfPages,
+      setStatus: setVoucherOcrStatus
+    });
+    if (!result) return;
+
+    voucherOcrCtx.lang = result.lang || voucherOcrCtx.lang;
+    voucherOcrCtx.pdfPages = result.pdfPages || voucherOcrCtx.pdfPages;
+    voucherOcrCtx.text = result.text || "";
+    voucherOcrCtx.textSha256 = result.textSha256 || "";
+    voucherOcrCtx.parsed = result.parsed || {};
+
+    const suggestion = buildVoucherOcrSuggestion(rec, voucherOcrCtx.parsed);
+    voucherOcrCtx.suggestion = suggestion;
+    populateVoucherOcrForm(suggestion, voucherOcrCtx.text);
+    setVoucherOcrStatus("ok", result.fromCache ? "OCR (cache) klar" : "OCR klar (granska och använd förslaget)");
+    try { renderUnderlag(); } catch {}
+  }
+
+  async function applyVoucherOcrToVoucher(){
+    if (!voucherOcrCtx || !voucherOcrCtx.underlagId) return showToast("Välj ett underlag och kör OCR först.", 4500);
+    const suggestion = readVoucherOcrSuggestionFromForm();
+    if (!(suggestion.gross > 0)) return showToast("OCR-förslaget saknar belopp. Justera belopp inkl moms först.", 5500);
+    if (!suggestion.expenseAccount || !suggestion.creditAccount) return showToast("Välj kostnadskonto och motkonto först.", 5500);
+
+    const hasContent = (currentLines || []).some(ln => Math.abs(parseMoney(ln?.debit || 0)) > 0.00001 || Math.abs(parseMoney(ln?.credit || 0)) > 0.00001 || String(ln?.text || "").trim());
+    if (hasContent){
+      const ok = await confirmAsync("Ersätt nuvarande rader i verifikationen med OCR-förslaget?");
+      if (!ok) return;
+    }
+
+    ensureVoucherOcrDefaultAccounts();
+    ensureVoucherOcrAccount(suggestion.expenseAccount, suggestion.expenseAccount === "5700" ? "Frakter och transporter" : "Kostnad");
+    if (suggestion.vat > 0) ensureVoucherOcrAccount(suggestion.vatAccount, "Ingående moms");
+    ensureVoucherOcrAccount(suggestion.creditAccount, suggestion.privateOutlay ? "Egna insättningar" : (suggestion.creditAccount === "2440" ? "Leverantörsskulder" : "Företagskonto/bank"));
+
+    const rec = (state.underlag||[]).find(u=>u && u.id===voucherOcrCtx.underlagId);
+    const text = suggestion.text || buildVoucherTextFromOcr(rec, voucherOcrCtx.parsed || {});
+    const rows = [];
+    if (suggestion.net > 0) rows.push({ account: suggestion.expenseAccount, text, debit: moneyToInputValue(suggestion.net), credit: "" });
+    if (suggestion.vat > 0) rows.push({ account: suggestion.vatAccount, text, debit: moneyToInputValue(suggestion.vat), credit: "" });
+    rows.push({ account: suggestion.creditAccount, text, debit: "", credit: moneyToInputValue(suggestion.gross) });
+
+    currentLines = rows;
+    if (vDate) vDate.value = suggestion.date || (vDate.value || todayISO());
+    if (vText) vText.value = text;
+    if (uRef && suggestion.ref) uRef.value = suggestion.ref;
+    if (uNote && !uNote.value){
+      const supplier = String(voucherOcrCtx.parsed?.supplierName?.value || "").trim();
+      if (supplier) uNote.value = supplier;
+    }
+    if (uPrivateOutlay) uPrivateOutlay.checked = !!suggestion.privateOutlay;
+    syncVoucherPrivateOutlay(voucherOcrCtx.underlagId, suggestion.privateOutlay);
+
+    renderLines();
+    updateBalanceBadge();
+    appendAudit({ action:"voucher.ocr.apply", entityType:"voucher", entityId: currentVoucherId() || "draft", yearId: (yearSelect?.value || state.activeYearId || ""), details:{ underlagId: voucherOcrCtx.underlagId, gross: suggestion.gross, vat: suggestion.vat, expenseAccount: suggestion.expenseAccount, vatAccount: suggestion.vatAccount, creditAccount: suggestion.creditAccount, privateOutlay: suggestion.privateOutlay } });
+    save();
+    showToast("OCR-förslaget lades in i verifikationen. Granska och spara.", 5500);
   }
 
   function syncUnderlagVoucherMeta(voucher){
@@ -11326,6 +11716,7 @@ if (!d.features) d.features = { sruEnabled: false };
     vNo.value = v.no;
     vText.value = v.text;
     vSign.value = v.sign;
+    try { hideVoucherOcrPanel(true); } catch (e){}
 
     currentLines = v.lines.map(l => ({
       account: l.account,

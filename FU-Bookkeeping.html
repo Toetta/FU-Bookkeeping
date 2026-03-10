@@ -2015,7 +2015,7 @@ Tack!</div>
  
 
   const APP_VERSION = "1.3.0"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.0";  // user-facing revision
+  const APP_SEMVER = "0.3.1";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -4849,6 +4849,20 @@ if (!d.features) d.features = { sruEnabled: false };
     return ok ? "status ok" : "status bad";
   }
 
+  function orderstockFulfillmentLabel(status){
+    const s = String(status || "pending");
+    if (s === "fulfilled") return "Utlevererad";
+    if (s === "partial") return "Dellevererad";
+    return "Ej utlevererad";
+  }
+
+  function formatQty(value){
+    const n = Number(value);
+    if (!Number.isFinite(n)) return "0";
+    if (Math.abs(n - Math.round(n)) < 0.000001) return String(Math.round(n));
+    return String(Math.round(n * 100) / 100).replace(".", ",");
+  }
+
   function webshopImportedKey(companyId){
     const id = String(companyId || "").trim();
     return id ? `FU_WS_IMPORTED_PAYLOADS_V1:${id}` : "";
@@ -5100,7 +5114,7 @@ if (!d.features) d.features = { sruEnabled: false };
     throw lastError || new Error("Kunde inte hämta orderstock.");
   }
 
-  async function webshopSetOrderFulfilled({ apiBaseUrl, apiKey, orderId, fulfilled, fulfilledBy, note }){
+  async function webshopSetOrderFulfilled({ apiBaseUrl, apiKey, orderId, fulfilled, fulfilledBy, note, entityType, lineFulfillments, trackingNumber, trackingUrl }){
     const base = stripTrailingSlashes(apiBaseUrl);
     const url = `${base}/api/fu/orders/${encodeURIComponent(String(orderId || ""))}/fulfill`;
     const res = await fetch(url, {
@@ -5113,6 +5127,10 @@ if (!d.features) d.features = { sruEnabled: false };
         fulfilled: !!fulfilled,
         fulfilled_by: fulfilledBy || "FU-Bookkeeping",
         note: note || null,
+        entity_type: entityType || null,
+        line_fulfillments: Array.isArray(lineFulfillments) ? lineFulfillments : null,
+        tracking_number: trackingNumber || null,
+        tracking_url: trackingUrl || null,
       }),
     });
     const data = await res.json().catch(()=> null);
@@ -5165,30 +5183,47 @@ if (!d.features) d.features = { sruEnabled: false };
       const entryType = String(order?.entry_type || "order");
       const isCustomQuote = entryType === "custom_quote";
       const fulfillable = order?.fulfillable !== false;
-      const fulfilled = fulfillable && String(order?.fulfillment_status || "pending") === "fulfilled";
+      const fulfillmentStatus = String(order?.fulfillment_status || "pending");
+      const fulfilled = fulfillable && fulfillmentStatus === "fulfilled";
+      const partial = fulfillable && fulfillmentStatus === "partial";
       const customerName = String(order?.customer?.full_name || "").trim() || String(order?.email || "-");
       const customerPhone = String(order?.customer?.phone || "").trim();
       const lines = Array.isArray(order?.lines) ? order.lines : [];
+      const summary = order?.fulfillment_summary && typeof order.fulfillment_summary === "object" ? order.fulfillment_summary : null;
       const title = isCustomQuote ? `Custom quote ${esc(String(order?.id || "-"))}` : `Order ${esc(String(order?.order_number || order?.id || "-"))}`;
-      const sourceBadge = isCustomQuote ? `<span class="badge">Custom quote</span>` : `<span class="${orderstockBadgeClass(fulfilled)}">${fulfilled ? "Utlevererad" : "Ej utlevererad"}</span>`;
+      const sourceBadge = isCustomQuote
+        ? `<span class="badge">Custom quote</span><span class="${orderstockBadgeClass(fulfilled)}">${orderstockFulfillmentLabel(fulfillmentStatus)}</span>`
+        : `<span class="${orderstockBadgeClass(fulfilled)}">${fulfilled ? "Utlevererad" : "Ej utlevererad"}</span>`;
       const deliveryInfo = isCustomQuote ? `Referens: ${esc(String(order?.payment_reference || "-"))}` : `Leverans: ${esc(String(order?.delivery_method || "-"))}`;
-      const footerText = fulfillable
-        ? (fulfilled ? `Markerad utlevererad ${esc(formatOrderstockDateTime(order?.fulfilled_at))}${order?.fulfilled_by ? ` av ${esc(String(order.fulfilled_by))}` : ""}.` : "Bocka i när ordern är utlevererad.")
-        : "Custom quotes visas här som betalda FU-underlag men har ingen utleveransmarkering.";
-      const fulfillmentControl = fulfillable
-        ? `<label class="muted small" style="display:flex; align-items:center; gap:8px; font-weight:700;">
+      const footerText = isCustomQuote
+        ? (summary
+            ? `Utlevererat ${esc(formatQty(summary.fulfilled_quantity))} av ${esc(formatQty(summary.total_quantity))}.${partial ? " Delleverans registrerad." : fulfilled ? " Fullt utlevererad." : ""}`
+            : "Ange utlevererat antal per rad och spara.")
+        : (fulfilled ? `Markerad utlevererad ${esc(formatOrderstockDateTime(order?.fulfilled_at))}${order?.fulfilled_by ? ` av ${esc(String(order.fulfilled_by))}` : ""}.` : "Bocka i när ordern är utlevererad.");
+      const fulfillmentControl = isCustomQuote
+        ? `<div class="row" style="gap:8px; align-items:center; justify-content:flex-end; flex-wrap:wrap;">
+              <button class="btn secondary" type="button" data-custom-quote-fill-all="${escapeAttr(String(order?.id || ""))}">Markera allt utlevererat</button>
+              <button class="btn secondary" type="button" data-custom-quote-reset="${escapeAttr(String(order?.id || ""))}">Nollställ</button>
+              <button class="btn" type="button" data-custom-quote-save="${escapeAttr(String(order?.id || ""))}">Spara delleverans</button>
+            </div>`
+        : `<label class="muted small" style="display:flex; align-items:center; gap:8px; font-weight:700;">
               <input type="checkbox" data-orderstock-fulfilled="${escapeAttr(String(order?.id || ""))}" ${fulfilled ? "checked" : ""} />
               Utlevererad
-            </label>`
-        : `<div class="muted small">Ingen leveransstatus</div>`;
+            </label>`;
       const linesHtml = lines.length
         ? `<div class="list" style="margin-top:10px; gap:6px;">${lines.map((line) => `
             <div class="row" style="justify-content:space-between; gap:10px; padding:8px 10px; border:1px solid rgba(34,48,68,.55); border-radius:12px;">
               <div>
                 <div><b>${esc(String(line?.title || "Rad"))}</b>${line?.sku ? ` <span class="muted small">(${esc(String(line.sku))})</span>` : ""}</div>
-                <div class="muted small">Antal: ${esc(String(line?.qty ?? 0))} · Moms: ${esc(String(line?.vat_rate ?? 0))}%</div>
+                <div class="muted small">Antal: ${esc(formatQty(line?.qty ?? 0))} · Moms: ${esc(String(line?.vat_rate ?? 0))}%${isCustomQuote ? ` · Utlevererat: ${esc(formatQty(line?.fulfilled_quantity ?? 0))}${line?.remaining_quantity != null ? ` · Kvar: ${esc(formatQty(line?.remaining_quantity ?? 0))}` : ""}` : ""}</div>
               </div>
-              <div class="muted small" style="text-align:right;">${esc(formatPrice(Number(line?.line_total_inc_vat || 0), order?.currency || "SEK"))}</div>
+              <div class="row" style="gap:10px; align-items:center; margin-left:auto;">
+                ${isCustomQuote ? `<label class="muted small" style="display:grid; gap:4px; min-width:120px;">
+                    <span>Utlevererat</span>
+                    <input type="number" min="0" max="${escapeAttr(String(line?.qty ?? 0))}" step="0.01" value="${escapeAttr(String(line?.fulfilled_quantity ?? 0))}" data-custom-quote-line-fulfilled="${escapeAttr(String(order?.id || ""))}" data-line-id="${escapeAttr(String(line?.id || ""))}" data-line-max="${escapeAttr(String(line?.qty ?? 0))}" />
+                  </label>` : ""}
+                <div class="muted small" style="text-align:right; min-width:110px;">${esc(formatPrice(Number(line?.line_total_inc_vat || 0), order?.currency || "SEK"))}</div>
+              </div>
             </div>
           `).join("")}</div>`
         : `<div class="muted small" style="margin-top:10px;">Inga orderrader sparade.</div>`;
@@ -12716,6 +12751,78 @@ if (rptYearSelect){
   }
 
   if (orderstockList){
+    orderstockList.addEventListener("click", async (e)=>{
+      const btn = e.target && e.target.closest ? e.target.closest("button[data-custom-quote-save],button[data-custom-quote-fill-all],button[data-custom-quote-reset]") : null;
+      if (!btn) return;
+
+      const quoteId = String(btn.getAttribute("data-custom-quote-save") || btn.getAttribute("data-custom-quote-fill-all") || btn.getAttribute("data-custom-quote-reset") || "").trim();
+      if (!quoteId) return;
+      const card = btn.closest ? btn.closest("[data-orderstock-id]") : null;
+      if (!card) return;
+      const inputs = Array.from(card.querySelectorAll("input[data-custom-quote-line-fulfilled]"));
+      const fillAll = btn.hasAttribute("data-custom-quote-fill-all");
+      const resetAll = btn.hasAttribute("data-custom-quote-reset");
+
+      if (fillAll || resetAll) {
+        for (const input of inputs) {
+          const max = Number(input.getAttribute("data-line-max") || 0);
+          input.value = resetAll ? "0" : String(Number.isFinite(max) ? max : 0);
+        }
+        showToast(fillAll ? "Alla rader satta som utlevererade. Klicka Spara delleverans." : "Alla rader nollställda. Klicka Spara delleverans.", 3500);
+        return;
+      }
+
+      btn.disabled = true;
+      try {
+        const companyId = (typeof CompanyManager !== "undefined" && CompanyManager && CompanyManager.getActiveCompanyId) ? CompanyManager.getActiveCompanyId() : null;
+        if (!companyId) throw new Error("Välj ett företag först.");
+
+        state.company = state.company || defaultData().company;
+        const cfg = getWebshopSyncConfigForUi();
+        if (!cfg.enabled) throw new Error("Webshop-synk är inte aktiverad för detta företag.");
+        if (!cfg.apiBaseUrl || !cfg.apiKey) throw new Error("Ange Serveradress och X-FU-Key under Inställningar.");
+
+        const lineFulfillments = inputs.map((input) => {
+          const max = Number(input.getAttribute("data-line-max") || 0);
+          const requested = Number(input.value || 0);
+          const clamped = Math.max(0, Math.min(Number.isFinite(max) ? max : 0, Number.isFinite(requested) ? requested : 0));
+          input.value = String(clamped);
+          return {
+            line_id: String(input.getAttribute("data-line-id") || ""),
+            fulfilled_quantity: clamped,
+          };
+        }).filter((item) => item.line_id);
+
+        const resolvedBaseUrl = stripTrailingSlashes((orderstockList.dataset && orderstockList.dataset.baseUrl) ? orderstockList.dataset.baseUrl : cfg.apiBaseUrl);
+        const fulfilledBy = (state.company && state.company.name) ? String(state.company.name).trim() : "FU-Bookkeeping";
+        const allFulfilled = lineFulfillments.length > 0 && lineFulfillments.every((item) => {
+          const input = inputs.find((node) => String(node.getAttribute("data-line-id") || "") === item.line_id);
+          const max = Number(input && input.getAttribute ? input.getAttribute("data-line-max") || 0 : 0);
+          return Math.abs((Number.isFinite(max) ? max : 0) - item.fulfilled_quantity) < 0.000001;
+        });
+        await webshopSetOrderFulfilled({
+          apiBaseUrl: resolvedBaseUrl,
+          apiKey: cfg.apiKey,
+          orderId: quoteId,
+          entityType: "custom_quote",
+          fulfilled: allFulfilled,
+          fulfilledBy,
+          note: "Uppdaterad delleverans i FU-Bookkeeping",
+          lineFulfillments,
+        });
+        applyResolvedWebshopBaseUrl(resolvedBaseUrl);
+        showToast("Custom order uppdaterad.", 3500);
+        await renderOrderstock();
+      } catch (err) {
+        console.error(err);
+        const msg = explainWebshopFetchError(err);
+        setOrderstockStatus("Fel: " + msg);
+        showToast(`Kunde inte uppdatera custom order: ${msg}`, 9000);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
     orderstockList.addEventListener("change", async (e)=>{
       const cb = e.target && e.target.closest ? e.target.closest("input[data-orderstock-fulfilled]") : null;
       if (!cb) return;

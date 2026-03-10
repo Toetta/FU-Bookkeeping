@@ -10638,7 +10638,7 @@ if (!d.features) d.features = { sruEnabled: false };
       ].filter(Boolean).join(" · ");
 
       const canDetach = (st !== "detached"); // we keep blob for traceability; detaching just changes status + audit
-      const detachBtn = canDetach ? `<button type="button" class="btn danger" data-act="detach-underlag" data-id="${escapeAttr(u.id)}">Koppla bort</button>` : "";
+      const detachBtn = canDetach ? `<button type="button" class="btn danger" data-act="detach-underlag" data-id="${escapeAttr(u.id)}">Avlänka underlag</button>` : "";
       const openBtn = `<button type="button" class="btn secondary" data-act="open-underlag" data-id="${escapeAttr(u.id)}">Öppna</button>`;
       const ocrBtn = (targetEl && targetEl.dataset && targetEl.dataset.ocr && st !== "detached")
         ? `<button type="button" class="btn secondary" data-act="ocr-underlag" data-id="${escapeAttr(u.id)}">OCR</button>`
@@ -10730,7 +10730,7 @@ if (!d.features) d.features = { sruEnabled: false };
     if (!rec) return;
     if (String(rec.status||"") === "detached") return;
 
-    const ok = await confirmAsync("Koppla bort underlaget? (Filen ligger kvar lokalt för spårbarhet, men markeras som bortkopplad.)");
+    const ok = await confirmAsync("Avlänka underlaget? (Filen ligger kvar lokalt för spårbarhet, men markeras som avlänkat.)");
     if (!ok) return;
 
     rec.status = "detached";

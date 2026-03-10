@@ -2105,7 +2105,7 @@ Tack!</div>
  
 
   const APP_VERSION = "1.4.0"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.5";  // user-facing revision
+  const APP_SEMVER = "0.3.6";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -4570,18 +4570,12 @@ if (!d.features) d.features = { sruEnabled: false };
       throw new Error("Filen ser inte ut som en backup från appen");
     }
 
-    state = d;
-    // migration defaults
-    if (!state.company) state.company = defaultData().company;
-    { const cdef = defaultData().company; state.company = state.company || {}; for (const k of Object.keys(cdef)) if (state.company[k] == null) state.company[k] = cdef[k]; }
-    if (!state.features) state.features = { sruEnabled: false };
-    if (typeof state.features.sruEnabled !== "boolean") state.features.sruEnabled = false;
+    state = normalizeImportedState(d);
     if (!state.fileSync) state.fileSync = { autosave: true, requireFile: true };
     if (typeof state.fileSync.autosave !== "boolean") state.fileSync.autosave = true;
     if (typeof state.fileSync.requireFile !== "boolean") state.fileSync.requireFile = true;
 
-    // Auto-repair corrupted kontonamn via standardlista (utan SIE)
-    try { if (typeof applyStdAccountsMapRepair === "function") applyStdAccountsMapRepair({ onlyReplacement: true }); } catch (e){ console.error(e); }
+    try { if (typeof repairAccountNamesInMap === "function") repairAccountNamesInMap(state.accounts); } catch (e){ console.error(e); }
 
     save();
     try { updateBackupUI(); } catch (e){}

@@ -211,6 +211,8 @@
     .voucher-underlag-actions{ grid-column:1 / -1; display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
     .voucher-underlag-toggle{ display:inline-flex; align-items:center; gap:8px; min-height:40px; padding:0 4px; }
     .voucher-underlag-upload{ display:inline-flex; align-items:center; gap:8px; cursor:pointer; min-height:40px; }
+    .voucher-link-picker{ display:grid; gap:8px; }
+    .voucher-link-details{ padding:10px 12px; border:1px dashed rgba(148,163,184,.35); border-radius:12px; background:rgba(11,18,32,.55); overflow-wrap:anywhere; word-break:break-word; }
     .voucher-ocr-actions{ display:flex; gap:10px; flex-wrap:wrap; }
     .voucher-ocr-controls{ display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:10px; align-items:end; }
     .voucher-ocr-fields{ display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:10px; }
@@ -672,7 +674,13 @@
                   </div>
                   <div class="field voucher-underlag-full" style="min-width:260px; flex:1;">
                     <label>Referenskoppling (valfritt)</label>
-                    <input id="uLinkedTo" type="text" placeholder="t.ex. Kundfaktura 1008 / Ver A42 / Order 5531" />
+                    <input id="uLinkedTo" type="text" placeholder="Välj befintlig post nedan" readonly />
+                    <div class="voucher-link-picker">
+                      <select id="uLinkedEntity">
+                        <option value="">Ingen referenskoppling</option>
+                      </select>
+                      <div class="muted small voucher-link-details" id="uLinkedToDetails">Välj en befintlig verifikation, kundfaktura, leverantörsfaktura eller laddad webshop-order.</div>
+                    </div>
                   </div>
                   <div class="voucher-underlag-actions">
                     <label class="muted small voucher-underlag-toggle">
@@ -686,7 +694,7 @@
                   </div>
                 </div>
 
-                <div class="muted small" style="margin-top:6px;">Referenskoppling används bara för spårbarhet mot faktura, order eller annan verifikation. Den slår inte ihop bokföringsposter.</div>
+                <div class="muted small" style="margin-top:6px;">Referenskoppling väljs från befintliga poster och används bara för spårbarhet mot faktura, order eller annan verifikation. Den slår inte ihop bokföringsposter.</div>
 
                 <div id="uList" class="list" data-ocr="voucher"></div>
 
@@ -2135,7 +2143,7 @@ Tack!</div>
  
 
   const APP_VERSION = "1.4.0"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.7";  // user-facing revision
+  const APP_SEMVER = "0.3.8";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -2651,6 +2659,8 @@ Tack!</div>
       if (u.ref == null) u.ref = "";
       if (u.note == null) u.note = "";
       if (u.linkedTo == null) u.linkedTo = "";
+      if (u.linkedEntityType == null) u.linkedEntityType = "";
+      if (u.linkedEntityId == null) u.linkedEntityId = "";
       if (!u.fileName) u.fileName = "underlag";
       if (u.mime == null) u.mime = "";
       if (u.size == null) u.size = 0;
@@ -4856,6 +4866,8 @@ if (!d.features) d.features = { sruEnabled: false };
   const uRef = document.getElementById("uRef");
   const uNote = document.getElementById("uNote");
   const uLinkedTo = document.getElementById("uLinkedTo");
+  const uLinkedEntity = document.getElementById("uLinkedEntity");
+  const uLinkedToDetails = document.getElementById("uLinkedToDetails");
   const uPrivateOutlay = document.getElementById("uPrivateOutlay");
   const uFiles = document.getElementById("uFiles");
   const uList = document.getElementById("uList");
@@ -4980,6 +4992,8 @@ if (!d.features) d.features = { sruEnabled: false };
   const btnOsRefresh = document.getElementById("btnOsRefresh");
   const orderstockStatus = document.getElementById("orderstockStatus");
   const orderstockList = document.getElementById("orderstockList");
+  let underlagLinkOptionsIndex = new Map();
+  let latestOrderstockEntries = [];
 
   function webshopSyncDefaults(){
     return { enabled: false, apiBaseUrl: "https://api.innovatio-brutalis.se", apiKey: "", series: "W", pullLimit: 1 };
@@ -5384,6 +5398,7 @@ if (!d.features) d.features = { sruEnabled: false };
 
   async function renderOrderstock(){
     if (!orderstockList) return;
+    latestOrderstockEntries = [];
 
     const companyId = (typeof CompanyManager !== "undefined" && CompanyManager && CompanyManager.getActiveCompanyId) ? CompanyManager.getActiveCompanyId() : null;
     if (!companyId) {
@@ -5412,6 +5427,8 @@ if (!d.features) d.features = { sruEnabled: false };
 
     const result = await webshopFetchOrderstock({ apiBaseUrl: cfg.apiBaseUrl, apiKey: cfg.apiKey, view, limit: 100 });
     const orders = Array.isArray(result?.orders) ? result.orders : [];
+    latestOrderstockEntries = orders.slice();
+    try { refreshUnderlagLinkPicker(voucherOcrCtx?.underlagId ? (state.underlag||[]).find(u=>u && u.id===voucherOcrCtx.underlagId) : null, currentVoucherId()); } catch (_) {}
     const resolvedBaseUrl = stripTrailingSlashes(result?.resolvedBaseUrl || cfg.apiBaseUrl);
     applyResolvedWebshopBaseUrl(resolvedBaseUrl);
     try { if (orderstockList) orderstockList.dataset.baseUrl = resolvedBaseUrl; } catch (_) {}
@@ -10167,9 +10184,17 @@ if (!d.features) d.features = { sruEnabled: false };
         }
       }
     });
-    if (uLinkedTo) uLinkedTo.addEventListener("input", ()=>{
+    if (uLinkedEntity) uLinkedEntity.addEventListener("change", ()=>{
+      const selection = getCurrentUnderlagLinkSelection();
+      const patch = selection
+        ? { linkedTo: selection.linkedTo, linkedEntityType: selection.type, linkedEntityId: selection.entityId }
+        : { linkedTo: "", linkedEntityType: "", linkedEntityId: "" };
+      if (uLinkedTo) uLinkedTo.value = patch.linkedTo;
+      renderUnderlagLinkDetails(selection?.option || null, patch.linkedTo);
       if (voucherOcrCtx && voucherOcrCtx.underlagId){
-        syncVoucherUnderlagMeta(voucherOcrCtx.underlagId, { linkedTo: clampText(String(uLinkedTo.value || "").trim(), 160) });
+        syncVoucherUnderlagMeta(voucherOcrCtx.underlagId, patch);
+      } else {
+        renderVoucherOcrMetaInfo({ linkedTo: patch.linkedTo, privateOutlay: !!uPrivateOutlay?.checked });
       }
     });
     if (btnVoucherOcrDiscard) btnVoucherOcrDiscard.addEventListener("click", (e)=>{ e.preventDefault(); hideVoucherOcrPanel(true); });
@@ -10267,6 +10292,8 @@ if (!d.features) d.features = { sruEnabled: false };
     try { if (uRef) uRef.value = ""; } catch (e){}
     try { if (uNote) uNote.value = ""; } catch (e){}
     try { if (uLinkedTo) uLinkedTo.value = ""; } catch (e){}
+    try { if (uLinkedEntity) uLinkedEntity.value = ""; } catch (e){}
+    try { renderUnderlagLinkDetails(null, ""); } catch (e){}
     try { if (uPrivateOutlay) uPrivateOutlay.checked = false; } catch (e){}
     try { hideVoucherOcrPanel(true); } catch (e){}
     try { renderUnderlag(); } catch (e){}
@@ -10595,6 +10622,175 @@ if (!d.features) d.features = { sruEnabled: false };
     return (viewingVoucherId || editingVoucherId || draftVoucherId || "");
   }
 
+  function composeUnderlagLinkValue(type, entityId){
+    const t = String(type || "").trim();
+    const id = String(entityId || "").trim();
+    return t && id ? `${t}:${id}` : "";
+  }
+
+  function parseUnderlagLinkValue(value){
+    const raw = String(value || "");
+    const idx = raw.indexOf(":");
+    if (idx <= 0) return { type: "", entityId: "" };
+    return { type: raw.slice(0, idx), entityId: raw.slice(idx + 1) };
+  }
+
+  function makeUnderlagLinkOption(group, type, entityId, label, details, linkedTo){
+    const value = composeUnderlagLinkValue(type, entityId);
+    if (!value) return null;
+    return {
+      group,
+      type,
+      entityId: String(entityId || ""),
+      value,
+      label: clampText(String(label || "").trim(), 220),
+      details: clampText(String(details || "").trim(), 260),
+      linkedTo: clampText(String(linkedTo || label || "").trim(), 160),
+    };
+  }
+
+  function buildUnderlagLinkOptions(voucherId){
+    const currentId = String(voucherId || currentVoucherId() || "");
+    const currency = String(state.company?.currency || "SEK");
+    const options = [];
+    const pushOption = (option)=>{ if (option && option.value) options.push(option); };
+
+    (state.vouchers || [])
+      .filter(v => v && v.id && String(v.id) !== currentId)
+      .slice()
+      .sort((a,b)=> String(b.date || "").localeCompare(String(a.date || ""), "sv") || String(b.series || "").localeCompare(String(a.series || ""), "sv") || Number(b.no || 0) - Number(a.no || 0))
+      .slice(0, 60)
+      .forEach(v => {
+        const label = `Verifikation ${String(v.series || "")}${String(v.no || "")} · ${String(v.date || "")} · ${String((v.text || "").trim() || "(utan text)")}`;
+        const details = [
+          v.regDate ? (`Registrerad ${v.regDate}`) : "",
+          v.sign ? (`Sign ${v.sign}`) : "",
+          (()=>{
+            try {
+              const nU = (state.underlag||[]).filter(u=>u && u.voucherId===v.id && String(u.status||"")!=="detached").length;
+              return nU ? (`Underlag ${nU}`) : "";
+            } catch (_) { return ""; }
+          })()
+        ].filter(Boolean).join(" · ");
+        pushOption(makeUnderlagLinkOption("Verifikationer", "voucher", v.id, label, details, label));
+      });
+
+    (state.invoices || [])
+      .slice()
+      .sort((a,b)=> String(b.date || "").localeCompare(String(a.date || ""), "sv") || String(b.no || "").localeCompare(String(a.no || ""), "sv"))
+      .slice(0, 60)
+      .forEach(inv => {
+        const customer = String(state.customers?.[inv.customerId]?.name || "").trim() || "(kund)";
+        const totals = invoiceTotals(inv);
+        const label = `Kundfaktura ${String(inv.no || "(utan nr)")} · ${String(inv.date || "")} · ${customer}`;
+        const details = [
+          inv.due ? (`Förfaller ${inv.due}`) : "",
+          `Totalt ${fmtSEK(totals.gross)} ${currency}`,
+          inv.ref ? (`Ref ${inv.ref}`) : ""
+        ].filter(Boolean).join(" · ");
+        pushOption(makeUnderlagLinkOption("Kundfakturor", "invoice", inv.id, label, details, label));
+      });
+
+    (state.supplierInvoices || [])
+      .slice()
+      .sort((a,b)=> String(b.date || "").localeCompare(String(a.date || ""), "sv") || String(b.invoiceNo || "").localeCompare(String(a.invoiceNo || ""), "sv"))
+      .slice(0, 60)
+      .forEach(si => {
+        const label = `Leverantörsfaktura ${String(si.invoiceNo || "(utan nr)")} · ${String(si.date || "")} · ${String(si.supplierName || "Leverantör")}`;
+        const details = [
+          si.due ? (`Förfaller ${si.due}`) : "",
+          `Belopp ${fmtSEK(Number(si.gross) || 0)} ${String(si.currency || currency)}`,
+          si.bookedVoucherId ? (()=>{
+            const vv = (state.vouchers||[]).find(v=>v.id===si.bookedVoucherId);
+            return vv ? `Bokförd som ${String(vv.series || "")}${String(vv.no || "")}` : "";
+          })() : ""
+        ].filter(Boolean).join(" · ");
+        pushOption(makeUnderlagLinkOption("Leverantörsfakturor", "supplier_invoice", si.id, label, details, label));
+      });
+
+    latestOrderstockEntries
+      .slice(0, 60)
+      .forEach(order => {
+        const orderId = String(order?.id || "").trim();
+        if (!orderId) return;
+        const isCustomQuote = String(order?.entry_type || "order") === "custom_quote";
+        const number = String(order?.order_number || order?.id || "-");
+        const customer = String(order?.customer?.full_name || order?.email || "-").trim();
+        const date = String(order?.created_at || order?.createdAt || "").slice(0,10);
+        const label = `${isCustomQuote ? "Custom quote" : "Order"} ${number} · ${date || "utan datum"} · ${customer}`;
+        const details = [
+          order?.payment_reference ? (`Betalreferens ${String(order.payment_reference)}`) : "",
+          order?.email ? (`E-post ${String(order.email)}`) : "",
+          order?.delivery_method ? (`Leverans ${String(order.delivery_method)}`) : ""
+        ].filter(Boolean).join(" · ");
+        pushOption(makeUnderlagLinkOption("Webshop-order", "order", orderId, label, details, label));
+      });
+
+    return options;
+  }
+
+  function renderUnderlagLinkDetails(option, fallbackText){
+    if (!uLinkedToDetails) return;
+    if (option) {
+      uLinkedToDetails.textContent = [option.label, option.details].filter(Boolean).join(" · ");
+      return;
+    }
+    if (fallbackText) {
+      uLinkedToDetails.textContent = `Sparad referenskoppling: ${fallbackText}`;
+      return;
+    }
+    uLinkedToDetails.textContent = "Välj en befintlig verifikation, kundfaktura, leverantörsfaktura eller laddad webshop-order.";
+  }
+
+  function refreshUnderlagLinkPicker(rec, voucherId){
+    const storedValue = rec?.linkedEntityType && rec?.linkedEntityId
+      ? composeUnderlagLinkValue(rec.linkedEntityType, rec.linkedEntityId)
+      : String(uLinkedEntity?.value || "").trim();
+    const fallbackText = clampText(String(rec?.linkedTo || uLinkedTo?.value || "").trim(), 160);
+    const options = buildUnderlagLinkOptions(voucherId);
+    underlagLinkOptionsIndex = new Map(options.map(option => [option.value, option]));
+
+    if (uLinkedEntity){
+      const groups = new Map();
+      for (const option of options){
+        const key = option.group || "Övrigt";
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(option);
+      }
+      let html = `<option value="">Ingen referenskoppling</option>`;
+      if (storedValue && fallbackText && !underlagLinkOptionsIndex.has(storedValue)) {
+        html += `<option value="${escapeAttr(storedValue)}">Tidigare sparad koppling · ${escapeHtml(fallbackText)}</option>`;
+      }
+      for (const [group, groupOptions] of groups.entries()){
+        html += `<optgroup label="${escapeAttr(group)}">`;
+        for (const option of groupOptions){
+          html += `<option value="${escapeAttr(option.value)}">${escapeHtml(option.label)}</option>`;
+        }
+        html += `</optgroup>`;
+      }
+      uLinkedEntity.innerHTML = html;
+      uLinkedEntity.value = storedValue && (underlagLinkOptionsIndex.has(storedValue) || fallbackText) ? storedValue : "";
+    }
+
+    const selectedOption = underlagLinkOptionsIndex.get(String(uLinkedEntity?.value || "").trim()) || null;
+    if (uLinkedTo) uLinkedTo.value = selectedOption?.linkedTo || fallbackText || "";
+    renderUnderlagLinkDetails(selectedOption, selectedOption ? "" : fallbackText);
+  }
+
+  function getCurrentUnderlagLinkSelection(){
+    const value = String(uLinkedEntity?.value || "").trim();
+    if (!value) return null;
+    const parsed = parseUnderlagLinkValue(value);
+    if (!parsed.type || !parsed.entityId) return null;
+    const option = underlagLinkOptionsIndex.get(value) || null;
+    return {
+      type: parsed.type,
+      entityId: parsed.entityId,
+      linkedTo: option?.linkedTo || clampText(String(uLinkedTo?.value || "").trim(), 160),
+      option,
+    };
+  }
+
   function padVerno(no){
     const s = String(no || "").trim();
     if (!s) return "";
@@ -10676,6 +10872,8 @@ if (!d.features) d.features = { sruEnabled: false };
 
   function renderUnderlag(voucherId){
     const id = voucherId || currentVoucherId();
+    const selectedRec = voucherOcrCtx?.underlagId ? (state.underlag||[]).find(u=>u && u.id===voucherOcrCtx.underlagId && u.voucherId===id) : null;
+    refreshUnderlagLinkPicker(selectedRec, id);
     renderUnderlagInto(uList, id);
   }
 
@@ -10692,6 +10890,7 @@ if (!d.features) d.features = { sruEnabled: false };
     const type = uType ? String(uType.value || "annat") : "annat";
     const ref = uRef ? clampText(String(uRef.value || "").trim(), 120) : "";
     const note = uNote ? clampText(String(uNote.value || "").trim(), 240) : "";
+    const linkSelection = getCurrentUnderlagLinkSelection();
     const linkedTo = uLinkedTo ? clampText(String(uLinkedTo.value || "").trim(), 160) : "";
     const privateOutlay = !!(uPrivateOutlay && uPrivateOutlay.checked);
 
@@ -10710,6 +10909,8 @@ if (!d.features) d.features = { sruEnabled: false };
         ref,
         note,
         linkedTo,
+        linkedEntityType: linkSelection?.type || "",
+        linkedEntityId: linkSelection?.entityId || "",
         privateOutlay,
         fileName: safeFileName(f.name),
         mime: f.type || "",
@@ -11745,7 +11946,7 @@ if (!d.features) d.features = { sruEnabled: false };
     if (voucherOcrPdfPages) voucherOcrPdfPages.value = voucherOcrCtx.pdfPages || (voucherOcrPdfPages.value || "1");
     if (voucherOcrFileInfo) voucherOcrFileInfo.textContent = underlagRec ? (`Fil: ${underlagRec.fileName || ""}`) : "";
     if (uPrivateOutlay) uPrivateOutlay.checked = !!underlagRec?.privateOutlay;
-    if (uLinkedTo) uLinkedTo.value = String(underlagRec?.linkedTo || "");
+    refreshUnderlagLinkPicker(underlagRec, currentVoucherId());
     renderVoucherOcrMetaInfo(underlagRec);
     if (btnVoucherOcrRun) btnVoucherOcrRun.disabled = !voucherOcrCtx.underlagId;
   }

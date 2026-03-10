@@ -5743,7 +5743,19 @@ if (!d.features) d.features = { sruEnabled: false };
     if (tabKey === "bank_inbox") safeUiCall(typeof BankImportModule !== "undefined" && BankImportModule && typeof BankImportModule.renderInbox === "function" ? BankImportModule.renderInbox : null);
     if (tabKey === "accounts") safeUiCall(typeof renderAccounts === "function" ? renderAccounts : null);
     if (tabKey === "invoices") safeUiCall(typeof renderInvoices === "function" ? renderInvoices : null);
-    if (tabKey === "orderstock") safeUiCall(typeof renderOrderstock === "function" ? renderOrderstock : null);
+    if (tabKey === "orderstock") {
+      Promise.resolve()
+        .then(()=> (typeof renderOrderstock === "function") ? renderOrderstock() : null)
+        .catch((err)=>{
+          console.error(err);
+          const msg = explainWebshopFetchError(err);
+          setOrderstockStatus("Fel: " + msg);
+          if (orderstockList) {
+            orderstockList.innerHTML = `<div class="card"><div class="muted small">Kunde inte hämta orderstock. ${escapeHtml(msg)}</div></div>`;
+          }
+          showToast(`Orderstock misslyckades: ${msg}`, 9000);
+        });
+    }
     if (tabKey === "customers") safeUiCall(typeof renderCustomers === "function" ? renderCustomers : null);
     if (tabKey === "suppliers") safeUiCall(typeof renderSuppliers === "function" ? renderSuppliers : null);
     if (tabKey === "supplier_invoices") safeUiCall(typeof renderSupplierInvoices === "function" ? renderSupplierInvoices : null);

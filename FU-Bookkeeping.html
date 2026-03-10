@@ -2105,7 +2105,7 @@ Tack!</div>
  
 
   const APP_VERSION = "1.4.0"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.4";  // user-facing revision
+  const APP_SEMVER = "0.3.5";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -2447,6 +2447,96 @@ Tack!</div>
     return r ? `${base}|${r}` : base;
   }
 
+  const BUILTIN_ACCOUNT_NAME_FALLBACKS = {
+    "1510": "Kundfordringar",
+    "1580": "Fordran kortbetalningar (Stripe)",
+    "1581": "Fordran kortbetalningar (Klarna)",
+    "1630": "Skattekonto",
+    "1930": "Företagskonto/bank",
+    "2013": "Eget uttag",
+    "2018": "Egna insättningar",
+    "2019": "Årets resultat",
+    "2440": "Leverantörsskulder",
+    "2611": "Utgående moms 25 %",
+    "2641": "Ingående moms",
+    "3001": "Försäljning",
+    "3011": "Försäljning varor 25 %",
+    "3520": "Fakturerade frakter",
+    "4010": "Inköp",
+    "4960": "Förändring av lager",
+    "5700": "Frakter och transporter",
+    "6045": "Kortavgifter",
+    "6570": "Bankkostnader",
+    "8999": "Årets resultat (resultatkonto)"
+  };
+
+  const LEGACY_SWEDISH_MOJIBAKE_MAP = {
+    "„": "ä",
+    "”": "ö",
+    "†": "å",
+    "Ž": "Ä",
+    "™": "Ö"
+  };
+
+  function hasLikelyBrokenAccountName(name){
+    return /[\uFFFDÃÂ„”†Ž™\u0080-\u009f]/.test(String(name || ""));
+  }
+
+  function decodeUtf8MojibakeFromLatin1(text){
+    const s = String(text || "");
+    if (!/[ÃÂ]/.test(s)) return s;
+    try {
+      const chars = Array.from(s);
+      if (chars.some(ch => ch.charCodeAt(0) > 255)) return s;
+      const bytes = Uint8Array.from(chars.map(ch => ch.charCodeAt(0)));
+      const decoded = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+      return decoded || s;
+    } catch {
+      return s;
+    }
+  }
+
+  function repairLegacySwedishGlyphs(text){
+    return String(text || "").replace(/[„”†Ž™\u0080-\u009f]/g, ch => {
+      if (ch.charCodeAt(0) === 0x8f) return "Å";
+      return LEGACY_SWEDISH_MOJIBAKE_MAP[ch] || ch;
+    });
+  }
+
+  function preferredAccountNameFor(no){
+    const key = String(no || "").trim();
+    if (!key) return "";
+    const stdMap = loadStdAccountsMap();
+    if (stdMap && stdMap[key]) return String(stdMap[key] || "").trim();
+    return String(BUILTIN_ACCOUNT_NAME_FALLBACKS[key] || "").trim();
+  }
+
+  function repairAccountNamesInMap(accounts){
+    const map = (accounts && typeof accounts === "object") ? accounts : {};
+    let updated = 0;
+    for (const no of Object.keys(map)){
+      const meta = map[no];
+      if (!meta || typeof meta !== "object") continue;
+      const currentName = String(meta.name || "");
+      let nextName = currentName;
+      nextName = repairLegacySwedishGlyphs(nextName);
+      nextName = decodeUtf8MojibakeFromLatin1(nextName);
+      nextName = String(nextName || "").normalize("NFC").trim();
+
+      const preferredName = preferredAccountNameFor(no);
+      if ((!nextName || nextName.includes("\uFFFD") || hasLikelyBrokenAccountName(nextName)) && preferredName){
+        nextName = preferredName;
+      }
+
+      if (nextName !== currentName){
+        meta.name = nextName;
+        updated++;
+      }
+      if (!meta.type) meta.type = guessTypeFromAccountNo(no);
+    }
+    return { updated };
+  }
+
   function normalizeImportedState(d){
     const base = defaultData();
     const o = (d && typeof d === "object") ? d : base;
@@ -2466,6 +2556,7 @@ Tack!</div>
     if (!Array.isArray(o.fiscalYears)) o.fiscalYears = base.fiscalYears;
     if (!o.activeYearId) o.activeYearId = o.fiscalYears[0]?.id ?? String(new Date().getFullYear());
     if (!o.accounts) o.accounts = demoAccounts();
+    try { repairAccountNamesInMap(o.accounts); } catch (e){}
 
     // Repair account types (common when importing SIE into older versions)
     try{
@@ -8104,7 +8195,7 @@ if (!d.features) d.features = { sruEnabled: false };
       const a = state.accounts[no];
       if (!a) continue;
       const curName = String(a.name || "");
-      if (onlyReplacement && !curName.includes("\uFFFD")) continue;
+      if (onlyReplacement && !hasLikelyBrokenAccountName(curName)) continue;
 
       const stdName = stdMap[String(no)] || stdMap[String(no).trim()];
       if (!stdName) continue;
@@ -13441,8 +13532,8 @@ try { if (typeof wireAccountEvents === "function") wireAccountEvents(); } catch 
 
 // Auto-repair already-saved corrupted kontonamn from standardlista (utan SIE)
 try {
-  if (typeof applyStdAccountsMapRepair === "function"){
-    const r = applyStdAccountsMapRepair({ onlyReplacement: true });
+  if (typeof repairAccountNamesInMap === "function"){
+    const r = repairAccountNamesInMap(state.accounts);
     if (r && r.updated){
       try { localStorage.setItem(storageKeyForActiveCompany(), JSON.stringify(state)); } catch (e){ console.error(e); }
     }

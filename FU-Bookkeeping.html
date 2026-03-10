@@ -2105,7 +2105,7 @@ Tack!</div>
  
 
   const APP_VERSION = "1.4.0"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.3";  // user-facing revision
+  const APP_SEMVER = "0.3.4";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -11418,6 +11418,7 @@ if (!d.features) d.features = { sruEnabled: false };
   function guessVoucherExpenseAccount(text, underlagType){
     const s = String(text || "").toLowerCase();
     if (/(frakt|returfrakt|porto|shipping|postnord|dhl|ups|schenker|bring)/i.test(s)) return "5700";
+    if (/(kvitto|receipt|betalningsmetod|swish|kortköp|terminal)/i.test(s)) return state.accounts?.["5700"] ? "5700" : "4010";
     if (String(underlagType || "") === "leverantorsfaktura") return "4010";
     return state.accounts?.["4010"] ? "4010" : (state.accounts?.["5700"] ? "5700" : "4010");
   }
@@ -11426,6 +11427,58 @@ if (!d.features) d.features = { sruEnabled: false };
     if (isPrivateOutlay) return "2018";
     if (String(underlagType || "") === "leverantorsfaktura") return "2440";
     return "1930";
+  }
+
+  function detectVoucherVatRate(text, rec, parsed){
+    const hay = [
+      String(text || ""),
+      String(rec?.type || ""),
+      String(rec?.fileName || ""),
+      String(rec?.note || ""),
+      String(parsed?.supplierName?.value || ""),
+      String(parsed?.invoiceNo?.value || "")
+    ].join(" \n ").toLowerCase();
+
+    const explicit = hay.match(/(?:moms|vat|momssats|vat rate)[^\d]{0,20}(25|12|6)\s*%/i) || hay.match(/\b(25|12|6)\s*%\b/);
+    if (explicit){
+      const rate = Number(explicit[1]);
+      if (rate === 25 || rate === 12 || rate === 6) return rate;
+    }
+
+    if (/(postnord|frakt|returfrakt|porto|shipping|dhl|ups|schenker|bring|kvitto|receipt|swish|betalningsmetod)/i.test(hay)) return 25;
+    if (String(rec?.type || "") === "kvitto") return 25;
+    return 25;
+  }
+
+  function normalizeVoucherVat(gross, vat, text, rec, parsed){
+    const grossAmt = round2(parseMoney(gross || 0));
+    let vatAmt = round2(parseMoney(vat || 0));
+    if (!(grossAmt > 0)) return { gross: 0, vat: 0, net: 0, inferred: false, rate: 0 };
+
+    if (!Number.isFinite(vatAmt) || vatAmt < 0) vatAmt = 0;
+
+    const rate = detectVoucherVatRate(text, rec, parsed);
+    const inferredVat = round2(grossAmt * (rate / (100 + rate)));
+    const suspiciousVat = !vatAmt || vatAmt >= grossAmt || vatAmt >= round2(grossAmt * 0.9);
+    const nearGrossDuplicate = Math.abs(vatAmt - grossAmt) <= 0.01;
+
+    if (suspiciousVat || nearGrossDuplicate){
+      vatAmt = inferredVat;
+      return { gross: grossAmt, vat: vatAmt, net: round2(grossAmt - vatAmt), inferred: true, rate };
+    }
+
+    if (vatAmt > 0){
+      const impliedRate = round2((vatAmt / Math.max(0.01, grossAmt - vatAmt)) * 100);
+      const allowed = [25, 12, 6];
+      const close = allowed.some((candidate)=> Math.abs(impliedRate - candidate) <= 1.5);
+      if (!close && inferredVat > 0){
+        vatAmt = inferredVat;
+        return { gross: grossAmt, vat: vatAmt, net: round2(grossAmt - vatAmt), inferred: true, rate };
+      }
+    }
+
+    if (vatAmt > grossAmt) vatAmt = 0;
+    return { gross: grossAmt, vat: vatAmt, net: round2(grossAmt - vatAmt), inferred: false, rate };
   }
 
   function buildVoucherTextFromOcr(rec, parsed){
@@ -11441,18 +11494,17 @@ if (!d.features) d.features = { sruEnabled: false };
     ensureVoucherOcrDefaultAccounts();
     const isPrivateOutlay = !!(rec?.privateOutlay || (uPrivateOutlay && uPrivateOutlay.checked));
     const date = String(parsed?.date?.value || rec?.date || vDate?.value || todayISO()).trim() || todayISO();
-    const gross = round2(parseMoney(parsed?.gross?.value || 0));
-    let vat = round2(parseMoney(parsed?.vat?.value || 0));
-    if (!Number.isFinite(vat) || vat < 0) vat = 0;
-    if (gross > 0 && vat > gross) vat = 0;
-    const net = round2(Math.max(0, gross - vat));
     const text = buildVoucherTextFromOcr(rec, parsed);
+    const amounts = normalizeVoucherVat(parsed?.gross?.value || 0, parsed?.vat?.value || 0, text, rec, parsed);
+    const gross = amounts.gross;
+    const vat = amounts.vat;
+    const net = amounts.net;
     const ref = clampText(String(rec?.ref || parsed?.ocr?.value || parsed?.invoiceNo?.value || "").trim(), 120);
     const searchText = [text, rec?.note || "", rec?.ref || "", parsed?.supplierName?.value || "", parsed?.invoiceNo?.value || ""].join(" ");
     const expenseAccount = guessVoucherExpenseAccount(searchText, rec?.type);
     const vatAccount = "2641";
     const creditAccount = guessVoucherCreditAccount(rec?.type, isPrivateOutlay);
-    return { date, text, ref, gross, vat, net, expenseAccount, vatAccount, creditAccount, privateOutlay: isPrivateOutlay };
+    return { date, text, ref, gross, vat, net, expenseAccount, vatAccount, creditAccount, privateOutlay: isPrivateOutlay, vatInferred: !!amounts.inferred, vatRate: amounts.rate || 0 };
   }
 
   function renderVoucherOcrAccountSelects(suggestion){
@@ -11463,21 +11515,20 @@ if (!d.features) d.features = { sruEnabled: false };
   }
 
   function readVoucherOcrSuggestionFromForm(){
-    const gross = round2(parseMoney(voucherOcrGross?.value || 0));
-    let vat = round2(parseMoney(voucherOcrVat?.value || 0));
-    if (!Number.isFinite(vat) || vat < 0) vat = 0;
-    if (gross > 0 && vat > gross) vat = 0;
+    const normalized = normalizeVoucherVat(voucherOcrGross?.value || 0, voucherOcrVat?.value || 0, voucherOcrText?.value || voucherOcrTextField?.value || "", (state.underlag||[]).find(u=>u && u.id===voucherOcrCtx?.underlagId), voucherOcrCtx?.parsed || {});
     return {
       date: String(voucherOcrDate?.value || todayISO()).trim() || todayISO(),
       text: clampText(String(voucherOcrTextField?.value || "").trim(), 200),
       ref: clampText(String(voucherOcrRef?.value || "").trim(), 120),
-      gross,
-      vat,
-      net: round2(Math.max(0, gross - vat)),
+      gross: normalized.gross,
+      vat: normalized.vat,
+      net: normalized.net,
       expenseAccount: String(voucherOcrExpenseAcc?.value || "").trim(),
       vatAccount: String(voucherOcrVatAcc?.value || "").trim(),
       creditAccount: String(voucherOcrCreditAcc?.value || "").trim(),
-      privateOutlay: !!(voucherOcrPrivateOutlay && voucherOcrPrivateOutlay.checked)
+      privateOutlay: !!(voucherOcrPrivateOutlay && voucherOcrPrivateOutlay.checked),
+      vatInferred: !!normalized.inferred,
+      vatRate: normalized.rate || 0
     };
   }
 
@@ -11495,7 +11546,8 @@ if (!d.features) d.features = { sruEnabled: false };
       suggestion.vat > 0 ? `Debet ${accountLabel(suggestion.vatAccount)} ${fmtSEK(suggestion.vat)}` : "",
       `Kredit ${accountLabel(suggestion.creditAccount)} ${fmtSEK(suggestion.gross)}`
     ].filter(Boolean);
-    voucherOcrPreview.innerHTML = `${suggestion.privateOutlay ? "<b>Privat utlägg.</b> " : ""}Förslag: ${bits.map(escapeHtml).join(" · ")}`;
+    const inferredNote = suggestion.vatInferred && suggestion.vatRate ? ` Moms normaliserad automatiskt till ${suggestion.vatRate}% (${fmtSEK(suggestion.vat)}).` : "";
+    voucherOcrPreview.innerHTML = `${suggestion.privateOutlay ? "<b>Privat utlägg.</b> " : ""}Förslag: ${bits.map(escapeHtml).join(" · ")}${escapeHtml(inferredNote)}`;
   }
 
   function syncVoucherPrivateOutlay(underlagId, checked){

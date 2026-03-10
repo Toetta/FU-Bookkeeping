@@ -300,8 +300,11 @@
     .item{ position:relative; overflow:hidden; padding:10px; border:1px solid var(--line); border-radius:14px; background:rgba(11,18,32,.92); }
     .item.voided{ opacity:.72; border-style:dashed; }
     .item .top{ display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+    .item .top > :first-child{ min-width:0; flex:1 1 320px; }
+    .item .titleRow{ display:flex; align-items:flex-start; gap:10px; flex-wrap:wrap; }
     .item .title{ font-weight:700; }
-    .item .meta{ font-size:12px; color:var(--muted); }
+    .item .titleText{ min-width:0; flex:1 1 240px; overflow-wrap:anywhere; word-break:break-word; }
+    .item .meta{ font-size:12px; color:var(--muted); overflow-wrap:anywhere; word-break:break-word; }
     .kbd{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas; font-size:12px; color:var(--muted); }
     .small{ font-size:12px; }
 
@@ -10654,7 +10657,10 @@ if (!d.features) d.features = { sruEnabled: false };
       div.innerHTML = `
         <div class="top">
           <div>
-            <div class="title">${escapeHtml(u.fileName || "underlag")} ${tag}</div>
+            <div class="titleRow">
+              <div class="title titleText">${escapeHtml(u.fileName || "underlag")}</div>
+              ${tag}
+            </div>
             <div class="meta">${escapeHtml(meta)}</div>
           </div>
           <div class="row">

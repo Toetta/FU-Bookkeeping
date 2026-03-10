@@ -2228,6 +2228,11 @@ Tack!</div>
     if (!Number.isFinite(n)) return "–";
     return n.toLocaleString("sv-SE", {minimumFractionDigits: 2, maximumFractionDigits: 2});
   };
+  function formatPrice(n, currency = "SEK"){
+    const amount = fmtSEK(Number(n));
+    const code = String(currency || "").trim();
+    return code ? `${amount} ${code}` : amount;
+  }
   const parseMoney = (s) => {
     if (s == null) return 0;
     const t = String(s).trim().replace(/\s+/g, "").replace(",", ".");

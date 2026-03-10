@@ -2292,6 +2292,9 @@ Tack!</div>
       .replaceAll('"', "&quot;")
       .replaceAll("'", "&#39;");
   }
+  function esc(s){
+    return escapeHtml(s);
+  }
   function escapeAttr(s){
     // For quoted attributes; reuse HTML escaping.
     return escapeHtml(s);
@@ -4800,6 +4803,21 @@ if (!d.features) d.features = { sruEnabled: false };
     };
   }
 
+  function getWebshopSyncConfigForUi(options = {}){
+    state.company = state.company || defaultData().company;
+    const cfgFromState = normalizeWebshopSync(state.company.webshopSync);
+    const settingsVisible = !!(typeof sections !== "undefined" && sections && sections.settings && !sections.settings.hidden);
+    const useUi = !!options.preferUi || settingsVisible;
+    if (!useUi) return cfgFromState;
+    return normalizeWebshopSync({
+      enabled: wsEnabled ? wsEnabled.checked : cfgFromState.enabled,
+      apiBaseUrl: wsApiBaseUrl ? wsApiBaseUrl.value : cfgFromState.apiBaseUrl,
+      apiKey: wsApiKey ? wsApiKey.value : cfgFromState.apiKey,
+      series: wsSeries ? wsSeries.value : cfgFromState.series,
+      pullLimit: wsLimit ? wsLimit.value : cfgFromState.pullLimit,
+    });
+  }
+
   function setWebshopStatus(text){
     if (!wsStatus) return;
     wsStatus.textContent = String(text || "");
@@ -5109,14 +5127,7 @@ if (!d.features) d.features = { sruEnabled: false };
     }
 
     state.company = state.company || defaultData().company;
-    const cfgFromState = normalizeWebshopSync(state.company.webshopSync);
-    const cfg = normalizeWebshopSync({
-      enabled: wsEnabled ? wsEnabled.checked : cfgFromState.enabled,
-      apiBaseUrl: wsApiBaseUrl ? wsApiBaseUrl.value : cfgFromState.apiBaseUrl,
-      apiKey: wsApiKey ? wsApiKey.value : cfgFromState.apiKey,
-      series: wsSeries ? wsSeries.value : cfgFromState.series,
-      pullLimit: wsLimit ? wsLimit.value : cfgFromState.pullLimit,
-    });
+    const cfg = getWebshopSyncConfigForUi();
 
     if (!cfg.enabled) {
       orderstockList.innerHTML = `<div class="card"><div class="muted small">Aktivera först Webshop-synk under Inställningar för detta företag.</div></div>`;
@@ -12701,14 +12712,7 @@ if (rptYearSelect){
         if (!companyId) throw new Error("Välj ett företag först.");
 
         state.company = state.company || defaultData().company;
-        const cfgFromState = normalizeWebshopSync(state.company.webshopSync);
-        const cfg = normalizeWebshopSync({
-          enabled: wsEnabled ? wsEnabled.checked : cfgFromState.enabled,
-          apiBaseUrl: wsApiBaseUrl ? wsApiBaseUrl.value : cfgFromState.apiBaseUrl,
-          apiKey: wsApiKey ? wsApiKey.value : cfgFromState.apiKey,
-          series: wsSeries ? wsSeries.value : cfgFromState.series,
-          pullLimit: wsLimit ? wsLimit.value : cfgFromState.pullLimit,
-        });
+        const cfg = getWebshopSyncConfigForUi();
         if (!cfg.enabled) throw new Error("Webshop-synk är inte aktiverad för detta företag.");
         if (!cfg.apiBaseUrl || !cfg.apiKey) throw new Error("Ange Serveradress och X-FU-Key under Inställningar.");
 

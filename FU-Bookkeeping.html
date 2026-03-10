@@ -2015,7 +2015,7 @@ Tack!</div>
  
 
   const APP_VERSION = "1.3.0"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.1";  // user-facing revision
+  const APP_SEMVER = "0.3.2";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -4863,6 +4863,19 @@ if (!d.features) d.features = { sruEnabled: false };
     return String(Math.round(n * 100) / 100).replace(".", ",");
   }
 
+  function buildCustomQuoteSummary(lines){
+    const arr = Array.isArray(lines) ? lines : [];
+    const hours = arr.filter((line) => String(line?.line_type || "") === "service_hourly");
+    const items = arr.filter((line) => String(line?.line_type || "") !== "service_hourly" && String(line?.line_type || "") !== "discount");
+    const sumQty = (rows, key) => rows.reduce((sum, row) => sum + (Number(row?.[key] || 0) || 0), 0);
+    return {
+      hoursTotal: sumQty(hours, "qty"),
+      hoursDelivered: sumQty(hours, "fulfilled_quantity"),
+      itemsTotal: sumQty(items, "qty"),
+      itemsDelivered: sumQty(items, "fulfilled_quantity"),
+    };
+  }
+
   function webshopImportedKey(companyId){
     const id = String(companyId || "").trim();
     return id ? `FU_WS_IMPORTED_PAYLOADS_V1:${id}` : "";
@@ -5190,6 +5203,7 @@ if (!d.features) d.features = { sruEnabled: false };
       const customerPhone = String(order?.customer?.phone || "").trim();
       const lines = Array.isArray(order?.lines) ? order.lines : [];
       const summary = order?.fulfillment_summary && typeof order.fulfillment_summary === "object" ? order.fulfillment_summary : null;
+      const customSummary = isCustomQuote ? buildCustomQuoteSummary(lines) : null;
       const title = isCustomQuote ? `Custom quote ${esc(String(order?.id || "-"))}` : `Order ${esc(String(order?.order_number || order?.id || "-"))}`;
       const sourceBadge = isCustomQuote
         ? `<span class="badge">Custom quote</span><span class="${orderstockBadgeClass(fulfilled)}">${orderstockFulfillmentLabel(fulfillmentStatus)}</span>`
@@ -5197,7 +5211,7 @@ if (!d.features) d.features = { sruEnabled: false };
       const deliveryInfo = isCustomQuote ? `Referens: ${esc(String(order?.payment_reference || "-"))}` : `Leverans: ${esc(String(order?.delivery_method || "-"))}`;
       const footerText = isCustomQuote
         ? (summary
-            ? `Utlevererat ${esc(formatQty(summary.fulfilled_quantity))} av ${esc(formatQty(summary.total_quantity))}.${partial ? " Delleverans registrerad." : fulfilled ? " Fullt utlevererad." : ""}`
+            ? `${customSummary && customSummary.hoursTotal > 0 ? `Arbetstimmar ${esc(formatQty(customSummary.hoursDelivered))} av ${esc(formatQty(customSummary.hoursTotal))} h.` : ""}${customSummary && customSummary.itemsTotal > 0 ? `${customSummary && customSummary.hoursTotal > 0 ? " " : ""}Artiklar ${esc(formatQty(customSummary.itemsDelivered))} av ${esc(formatQty(customSummary.itemsTotal))} st.` : ""}${partial ? " Delleverans registrerad." : fulfilled ? " Fullt utlevererad." : ""}`
             : "Ange utlevererat antal per rad och spara.")
         : (fulfilled ? `Markerad utlevererad ${esc(formatOrderstockDateTime(order?.fulfilled_at))}${order?.fulfilled_by ? ` av ${esc(String(order.fulfilled_by))}` : ""}.` : "Bocka i när ordern är utlevererad.");
       const fulfillmentControl = isCustomQuote

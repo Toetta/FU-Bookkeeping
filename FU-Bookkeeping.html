@@ -206,12 +206,17 @@
     main .wrap{ padding-top:18px; }
     .grid{ display:grid; grid-template-columns: 1fr; gap:12px; min-width:0; }
     @media (min-width: 980px){ .grid.two{ grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); } }
-    .voucher-underlag-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:10px; align-items:end; }
+    .voucher-underlag-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:10px; align-items:end; }
+    .voucher-underlag-full{ grid-column:1 / -1; }
+    .voucher-underlag-actions{ grid-column:1 / -1; display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .voucher-underlag-toggle{ display:inline-flex; align-items:center; gap:8px; min-height:40px; padding:0 4px; }
+    .voucher-underlag-upload{ display:inline-flex; align-items:center; gap:8px; cursor:pointer; min-height:40px; }
     .voucher-ocr-actions{ display:flex; gap:10px; flex-wrap:wrap; }
     .voucher-ocr-controls{ display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:10px; align-items:end; }
     .voucher-ocr-fields{ display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:10px; }
     .voucher-ocr-fields .full{ grid-column:1 / -1; }
     @media (max-width: 820px){
+      .voucher-underlag-actions > *{ width:100%; }
       .voucher-ocr-actions{ width:100%; justify-content:flex-start; }
     }
     .card{ isolation:isolate; overflow:hidden; background:rgba(var(--card-rgb),.94); border:1px solid var(--line); border-radius:16px; padding:14px; box-shadow: 0 10px 30px rgba(0,0,0,.25);  min-width:0; overflow:hidden; }
@@ -662,18 +667,20 @@
                     <label>Notering (valfritt)</label>
                     <input id="uNote" type="text" placeholder="t.ex. leverantör, projekt, kommentar" />
                   </div>
-                  <div class="field" style="min-width:260px; flex:1;">
+                  <div class="field voucher-underlag-full" style="min-width:260px; flex:1;">
                     <label>Referenskoppling (valfritt)</label>
                     <input id="uLinkedTo" type="text" placeholder="t.ex. Kundfaktura 1008 / Ver A42 / Order 5531" />
                   </div>
-                  <label class="muted small" style="display:flex; align-items:center; gap:8px; min-height:40px; padding:0 4px;">
-                    <input id="uPrivateOutlay" type="checkbox" />
-                    Privat utlägg
-                  </label>
-                  <label class="btn secondary" style="display:inline-flex; align-items:center; gap:8px; cursor:pointer; height:40px;">
-                    + Lägg till filer
-                    <input id="uFiles" type="file" multiple accept="application/pdf,image/*" hidden />
-                  </label>
+                  <div class="voucher-underlag-actions">
+                    <label class="muted small voucher-underlag-toggle">
+                      <input id="uPrivateOutlay" type="checkbox" />
+                      Privat utlägg
+                    </label>
+                    <label class="btn secondary voucher-underlag-upload">
+                      + Lägg till filer
+                      <input id="uFiles" type="file" multiple accept="application/pdf,image/*" hidden />
+                    </label>
+                  </div>
                 </div>
 
                 <div class="muted small" style="margin-top:6px;">Referenskoppling används bara för spårbarhet mot faktura, order eller annan verifikation. Den slår inte ihop bokföringsposter.</div>

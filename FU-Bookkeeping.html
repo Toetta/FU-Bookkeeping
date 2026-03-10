@@ -663,7 +663,7 @@
                     <input id="uNote" type="text" placeholder="t.ex. leverantör, projekt, kommentar" />
                   </div>
                   <div class="field" style="min-width:260px; flex:1;">
-                    <label>Koppla till (valfritt)</label>
+                    <label>Referenskoppling (valfritt)</label>
                     <input id="uLinkedTo" type="text" placeholder="t.ex. Kundfaktura 1008 / Ver A42 / Order 5531" />
                   </div>
                   <label class="muted small" style="display:flex; align-items:center; gap:8px; min-height:40px; padding:0 4px;">
@@ -675,6 +675,8 @@
                     <input id="uFiles" type="file" multiple accept="application/pdf,image/*" hidden />
                   </label>
                 </div>
+
+                <div class="muted small" style="margin-top:6px;">Referenskoppling används bara för spårbarhet mot faktura, order eller annan verifikation. Den slår inte ihop bokföringsposter.</div>
 
                 <div id="uList" class="list" data-ocr="voucher"></div>
 
@@ -10628,7 +10630,7 @@ if (!d.features) d.features = { sruEnabled: false };
         u.type ? ("Typ: " + u.type) : "",
         u.ref ? ("ID: " + u.ref) : "",
         u.note ? ("Not: " + u.note) : "",
-        u.linkedTo ? ("Koppling: " + u.linkedTo) : "",
+        u.linkedTo ? ("Referenskoppling: " + u.linkedTo) : "",
         u.privateOutlay ? "Privat utlägg" : "",
         u.createdAt ? ("Tillagd: " + String(u.createdAt).slice(0,10)) : "",
         u.ocrTs ? ("OCR: " + String(u.ocrTs).slice(0,10)) : "",
@@ -11514,7 +11516,7 @@ if (!d.features) d.features = { sruEnabled: false };
     const privateText = isPrivateOutlay
       ? `Privat utlägg: Ja, föreslår ${accountLabel(accountNo)}`
       : "Privat utlägg: Nej";
-    const linkText = linked ? `Koppling: ${linked}` : "Koppling: ingen";
+    const linkText = linked ? `Referenskoppling: ${linked} (spårbarhet, påverkar inte konteringen)` : "Referenskoppling: ingen";
     voucherOcrMetaInfo.textContent = `${privateText} · ${linkText}`;
   }
 

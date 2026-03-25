@@ -2148,7 +2148,7 @@ Tack!</div>
  
 
   const APP_VERSION = "1.4.0"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.9";  // user-facing revision
+  const APP_SEMVER = "0.3.10";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -3632,6 +3632,7 @@ cur = {
     fillSelect(invYearSelect, active);
     fillSelect(siYearSelect, active);
     fillSelect(lockYear, active);
+    fillSelect(sruYearSelect, active);
 
     if (yearPillSelect){
       const prev = yearPillSelect.value;
@@ -5779,6 +5780,7 @@ if (!d.features) d.features = { sruEnabled: false };
   function saveSettings(){
     state.company = state.company || defaultData().company;
     state.features = state.features || { sruEnabled: false };
+    state.sru = state.sru || { enabled:false, periodSuffix:"P4", neMappings: [] };
 
     const payDays = parseInt(String(sPayDays?.value || "").trim(), 10);
 
@@ -5819,6 +5821,7 @@ if (!d.features) d.features = { sruEnabled: false };
     });
 
     state.features.sruEnabled = !!(sSruEnabled && sSruEnabled.checked);
+    state.sru.enabled = !!state.features.sruEnabled;
 
     // Keep multi-company registry metadata updated (so the company selector reflects settings)
     try {
@@ -5856,11 +5859,181 @@ if (!d.features) d.features = { sruEnabled: false };
   const yearsTbody = document.getElementById("yearsTbody");
 
   // SRU tab
+  const sruLockBadge = document.getElementById("sruLockBadge");
   const sruLockedBox = document.getElementById("sruLockedBox");
+  const sruUnlockedBox = document.getElementById("sruUnlockedBox");
   const sruStatusText = document.getElementById("sruStatusText");
-  const btnSruExport = document.getElementById("btnSruExport");
+  const btnEnableSRU = document.getElementById("btnEnableSRU");
+  const sruYearSelect = document.getElementById("sruYearSelect");
+  const sruPeriodSuffix = document.getElementById("sruPeriodSuffix");
+  const btnExportSRUNE = document.getElementById("btnExportSRUNE");
+  const sruMapTbody = document.getElementById("sruMapTbody");
+  const btnSruAddMap = document.getElementById("btnSruAddMap");
+  const btnSruSaveMap = document.getElementById("btnSruSaveMap");
   const carryFrom = document.getElementById("carryFrom");
   const carryTo = document.getElementById("carryTo");
+
+  function sruEls(){
+    return {
+      lockBadge: sruLockBadge,
+      lockedBox: sruLockedBox,
+      unlockedBox: sruUnlockedBox,
+      statusText: sruStatusText,
+      btnEnable: btnEnableSRU,
+      yearSelect: sruYearSelect,
+      periodSuffix: sruPeriodSuffix,
+      btnExport: btnExportSRUNE,
+      mapTbody: sruMapTbody,
+      btnAddMap: btnSruAddMap,
+      btnSaveMap: btnSruSaveMap,
+    };
+  }
+
+  function renderSru(){
+    state.features = state.features || { sruEnabled: false };
+    state.sru = state.sru || { enabled:false, periodSuffix:"P4", neMappings: [] };
+    if (typeof state.sru.enabled !== "boolean") state.sru.enabled = false;
+    if (!state.sru.periodSuffix) state.sru.periodSuffix = "P4";
+    if (!Array.isArray(state.sru.neMappings)) state.sru.neMappings = [];
+
+    const el = sruEls();
+    const enabled = !!(state.features && state.features.sruEnabled);
+
+    if (el.lockBadge) el.lockBadge.hidden = enabled;
+    if (el.lockedBox) el.lockedBox.hidden = enabled;
+    if (el.unlockedBox) el.unlockedBox.hidden = !enabled;
+    if (el.yearSelect) el.yearSelect.value = el.yearSelect.value || state.activeYearId || "";
+    if (el.periodSuffix) el.periodSuffix.value = state.sru.periodSuffix || "P4";
+    if (el.statusText) el.statusText.textContent = enabled
+      ? `SRU aktivt. ${state.sru.neMappings.length} mappingrader laddade.`
+      : "SRU är låst tills det aktiveras i Inställningar eller via knappen ovan.";
+
+    if (!el.mapTbody) return;
+    el.mapTbody.innerHTML = "";
+    (state.sru.neMappings || []).forEach((mapping, idx)=>{
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td><input data-k="code" data-i="${idx}" value="${escapeHtml(mapping.code || "")}" placeholder="R1" /></td>
+        <td><input data-k="filter" data-i="${idx}" value="${escapeHtml(mapping.filter || "")}" placeholder="3001, 30*, 3000-3099" /></td>
+        <td>
+          <select data-k="sign" data-i="${idx}">
+            <option value="1">Normalt</option>
+            <option value="-1">Invertera</option>
+          </select>
+        </td>
+        <td><input data-k="comment" data-i="${idx}" value="${escapeHtml(mapping.comment || "")}" placeholder="valfritt" /></td>
+        <td class="right"><button class="btn danger" data-del="${idx}">✕</button></td>
+      `;
+      const signSelect = tr.querySelector("select");
+      if (signSelect) signSelect.value = String(mapping.sign ?? 1);
+
+      tr.addEventListener("input", (e)=>{
+        const target = e.target;
+        if (!target || !target.dataset) return;
+        const rowIndex = Number(target.dataset.i);
+        const key = target.dataset.k;
+        if (!Number.isFinite(rowIndex) || !key) return;
+        const row = state.sru.neMappings[rowIndex];
+        if (!row) return;
+        if (key === "sign") row.sign = Number(target.value) || 1;
+        else row[key] = target.value;
+      });
+
+      tr.addEventListener("change", (e)=>{
+        const target = e.target;
+        if (!target || !target.dataset || target.dataset.k !== "sign") return;
+        const rowIndex = Number(target.dataset.i);
+        if (!Number.isFinite(rowIndex)) return;
+        const row = state.sru.neMappings[rowIndex];
+        if (!row) return;
+        row.sign = Number(target.value) || 1;
+      });
+
+      tr.addEventListener("click", (e)=>{
+        const btn = e.target && e.target.closest ? e.target.closest("button[data-del]") : null;
+        if (!btn) return;
+        const rowIndex = Number(btn.dataset.del);
+        if (!Number.isFinite(rowIndex)) return;
+        state.sru.neMappings.splice(rowIndex, 1);
+        renderSru();
+      });
+
+      el.mapTbody.appendChild(tr);
+    });
+  }
+
+  function parseSruFilter(filterStr){
+    const parts = String(filterStr || "")
+      .split(",")
+      .map((part)=> part.trim())
+      .filter(Boolean);
+    const tests = parts.map((part)=>{
+      if (part.endsWith("*")){
+        const prefix = part.slice(0, -1);
+        return (account)=> String(account).startsWith(prefix);
+      }
+      if (/^\d+\s*-\s*\d+$/.test(part)){
+        const [start, end] = part.split("-").map((value)=> value.trim());
+        const low = Number(start);
+        const high = Number(end);
+        return (account)=>{
+          const n = Number(account);
+          return Number.isFinite(n) && n >= low && n <= high;
+        };
+      }
+      return (account)=> String(account) === part;
+    });
+    return (account)=> tests.some((fn)=> fn(account));
+  }
+
+  function exportSruNe(){
+    const el = sruEls();
+    if (!state.features?.sruEnabled) return showToast("SRU är låst. Aktivera under Inställningar.", 5500);
+
+    const yearId = el.yearSelect?.value || state.activeYearId;
+    const suffix = (el.periodSuffix?.value || state.sru?.periodSuffix || "P4").trim() || "P4";
+    state.sru = state.sru || { enabled:false, periodSuffix:"P4", neMappings: [] };
+    state.sru.periodSuffix = suffix;
+
+    const sums = [];
+    (state.sru.neMappings || []).forEach((mapping)=>{
+      const code = String(mapping.code || "").trim();
+      const filter = String(mapping.filter || "").trim();
+      if (!code || !filter) return;
+      const match = parseSruFilter(filter);
+      let sum = 0;
+      yearVouchers(yearId).forEach((voucher)=>{
+        (voucher.lines || []).forEach((line)=>{
+          if (match(line.account)) sum += Number(line.amount) || 0;
+        });
+      });
+      sum = Math.round(sum * 100) / 100;
+      sum = Math.round((sum * (Number(mapping.sign) || 1)) * 100) / 100;
+      sums.push({ code, value: sum, comment: String(mapping.comment || "") });
+    });
+
+    const info = [
+      "FU-BOOKKEEPING SRU (beta)",
+      `Company=${state.company?.name || ""}`,
+      `OrgNr=${state.company?.orgnr || ""}`,
+      `Year=${yearId}`,
+      `PeriodSuffix=${suffix}`,
+      "",
+      "Mappings:",
+      ...sums.map((entry)=> `${entry.code};${entry.value.toFixed(2)};${entry.comment.replaceAll("\n", " ")}`)
+    ].join("\n") + "\n";
+
+    const blanketter = [
+      "# BLANKETTER.SRU (beta) - values are sums of matching accounts",
+      ...sums.map((entry)=> `${entry.code};${entry.value.toFixed(2)}`)
+    ].join("\n") + "\n";
+
+    downloadTextFile("INFO.SRU", info, "text/plain;charset=utf-8");
+    downloadTextFile("BLANKETTER.SRU", blanketter, "text/plain;charset=utf-8");
+    save({ renderAll: false });
+    if (el.statusText) el.statusText.textContent = `SRU export skapad för ${yearId} (${suffix}). ${sums.length} fält exporterade.`;
+    showToast(`Exporterade INFO.SRU och BLANKETTER.SRU för ${yearId}.`, 4500);
+  }
 
   // Period lock
   const lockYear = document.getElementById("lockYear");
@@ -6075,6 +6248,7 @@ if (!d.features) d.features = { sruEnabled: false };
 
     // Lazy renders
     if (tabKey === "reports") safeUiCall(typeof renderReports === "function" ? renderReports : null);
+    if (tabKey === "sru") safeUiCall(typeof renderSru === "function" ? renderSru : null);
     if (tabKey === "bank_inbox") safeUiCall(typeof BankImportModule !== "undefined" && BankImportModule && typeof BankImportModule.renderInbox === "function" ? BankImportModule.renderInbox : null);
     if (tabKey === "accounts") safeUiCall(typeof renderAccounts === "function" ? renderAccounts : null);
     if (tabKey === "invoices") safeUiCall(typeof renderInvoices === "function" ? renderInvoices : null);
@@ -13574,6 +13748,34 @@ if (rptYearSelect){
       }
     });
   }
+
+  if (btnEnableSRU) btnEnableSRU.addEventListener("click", ()=>{
+    state.features = state.features || { sruEnabled:false };
+    state.sru = state.sru || { enabled:false, periodSuffix:"P4", neMappings: [] };
+    state.features.sruEnabled = true;
+    state.sru.enabled = true;
+    if (sSruEnabled) sSruEnabled.checked = true;
+    save({ renderAll: false });
+    renderSru();
+  });
+
+  if (btnSruAddMap) btnSruAddMap.addEventListener("click", ()=>{
+    state.sru = state.sru || { enabled:true, periodSuffix:"P4", neMappings: [] };
+    state.sru.neMappings = Array.isArray(state.sru.neMappings) ? state.sru.neMappings : [];
+    state.sru.neMappings.push({ code:"", filter:"", sign:1, comment:"" });
+    renderSru();
+  });
+
+  if (btnSruSaveMap) btnSruSaveMap.addEventListener("click", ()=>{
+    save({ renderAll: false });
+    renderSru();
+    showToast("SRU-mappningen sparades.", 3000);
+  });
+
+  if (btnExportSRUNE) btnExportSRUNE.addEventListener("click", (e)=>{
+    e.preventDefault();
+    exportSruNe();
+  });
 
   if (btnWsQuickImport) btnWsQuickImport.addEventListener("click", async (e)=>{
     try { if (e && e.preventDefault) e.preventDefault(); } catch {}

@@ -943,6 +943,14 @@
               <select id="biBatchFilter"></select>
             </div>
             <div class="field" style="min-width:220px;">
+              <label>Räkenskapsår</label>
+              <select id="biYearFilter">
+                <option value="active">Aktivt år</option>
+                <option value="overlap">Årsskiftesöverlap</option>
+                <option value="all">Alla år</option>
+              </select>
+            </div>
+            <div class="field" style="min-width:220px;">
               <label>Status</label>
               <select id="biStatusFilter">
                 <option value="">Alla</option>
@@ -2208,8 +2216,8 @@ Tack!</div>
 (function(){
  
 
-  const APP_VERSION = "1.4.5"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.15";  // user-facing revision
+  const APP_VERSION = "1.4.6"; // bump when adding new data fields
+  const APP_SEMVER = "0.3.16";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -7084,6 +7092,7 @@ if (!d.features) d.features = { sruEnabled: false };
     // Only hydrate settings fields if Settings tab is currently visible (avoid overriding user typing)
     try { if (sections && sections.settings && !sections.settings.hidden) renderSettings(); } catch {}
     try { if (sections && sections.export && !sections.export.hidden && typeof renderDocumentRegistryList === "function") renderDocumentRegistryList(); } catch {}
+    try { if (sections && sections.bank_inbox && !sections.bank_inbox.hidden && typeof BankImportModule !== "undefined" && BankImportModule && typeof BankImportModule.renderInbox === "function") BankImportModule.renderInbox(); } catch {}
     try { updateFsUI(); } catch {}
   }
 
@@ -7277,6 +7286,7 @@ if (!d.features) d.features = { sruEnabled: false };
       // inbox
       btnRefresh: el("btnBankInboxRefresh"),
       batchFilter: el("biBatchFilter"),
+      yearFilter: el("biYearFilter"),
       statusFilter: el("biStatusFilter"),
       selectAll: el("biSelectAll"),
       tbody: el("biTbody"),
@@ -8028,11 +8038,59 @@ if (!d.features) d.features = { sruEnabled: false };
       return Object.values(m).filter(x=>x && typeof x === "object");
     }
 
+    function fiscalYearsByStart(){
+      return (state.fiscalYears || [])
+        .filter(y => y && y.id)
+        .slice()
+        .sort((a,b)=> String(a.start || a.id || "").localeCompare(String(b.start || b.id || ""), "sv"));
+    }
+
+    function yearIdsForInboxFilter(mode){
+      const activeYearId = String(state.activeYearId || "").trim();
+      if (!activeYearId || mode === "all") return null;
+      if (mode !== "overlap") return new Set([activeYearId]);
+      const years = fiscalYearsByStart();
+      const idx = years.findIndex(y => String(y.id) === activeYearId);
+      const ids = new Set([activeYearId]);
+      if (idx > 0 && years[idx - 1]?.id) ids.add(String(years[idx - 1].id));
+      if (idx >= 0 && idx < years.length - 1 && years[idx + 1]?.id) ids.add(String(years[idx + 1].id));
+      return ids;
+    }
+
+    function resolveInboxItemYearId(item){
+      const dateIso = String(item?.dateISO || "").slice(0,10);
+      if (!dateIso) return "";
+      const direct = (state.fiscalYears || []).find(fy => fy && fy.start && fy.end && fy.start <= dateIso && dateIso <= fy.end);
+      if (direct && direct.id) return String(direct.id);
+      const yearPrefix = dateIso.slice(0,4);
+      if (yearPrefix){
+        const exact = (state.fiscalYears || []).find(fy => fy && String(fy.id || "") === yearPrefix);
+        if (exact && exact.id) return String(exact.id);
+      }
+      return "";
+    }
+
+    function itemMatchesYearFilter(item, mode){
+      if (mode === "all") return true;
+      const targetYearIds = yearIdsForInboxFilter(mode);
+      if (!targetYearIds || !targetYearIds.size) return true;
+      const itemYearId = resolveInboxItemYearId(item);
+      return !!itemYearId && targetYearIds.has(itemYearId);
+    }
+
+    function yearFilterLabel(mode){
+      if (mode === "all") return "alla år";
+      if (mode === "overlap") return "årsskiftesöverlap";
+      return "aktivt år";
+    }
+
     function visibleItems(){
       const batchId = ui.batchFilter ? ui.batchFilter.value : "";
+      const yearMode = String(ui.yearFilter?.value || "active").trim() || "active";
       const status = ui.statusFilter ? ui.statusFilter.value : "";
       let items = listItems();
       if (batchId) items = items.filter(x=> x.batchId === batchId);
+      items = items.filter(x=> itemMatchesYearFilter(x, yearMode));
       if (status) items = items.filter(x=> String(x.status||"") === status);
       items.sort((a,b)=> (String(b.dateISO||"") + String(b.createdAtISO||b.createdAt||"")).localeCompare(String(a.dateISO||"")+String(a.createdAtISO||a.createdAt||""), "sv"));
       return items;
@@ -8728,12 +8786,13 @@ if (!d.features) d.features = { sruEnabled: false };
     function renderInbox(){
       ensureBankImportState();
       renderBatchFilter();
+      const yearMode = String(ui.yearFilter?.value || "active").trim() || "active";
       const items = visibleItems();
       const total = listItems().length;
       const matched = listItems().filter(x=>x.status==="matched").length;
       const posted = listItems().filter(x=>x.status==="posted").length;
       const sel = Array.from(selectedIds).filter(id=> !!getItem(id)).length;
-      if (ui.stats) ui.stats.textContent = `Visar ${items.length} · Totalt ${total} · matched ${matched} · posted ${posted} · markerade ${sel}`;
+      if (ui.stats) ui.stats.textContent = `Visar ${items.length} · Totalt ${total} · matched ${matched} · posted ${posted} · markerade ${sel} · filter ${yearFilterLabel(yearMode)}`;
 
       if (ui.selectAll) ui.selectAll.checked = (items.length > 0) && items.every(x=> selectedIds.has(x.id));
       if (!ui.tbody) return;
@@ -9132,6 +9191,7 @@ if (!d.features) d.features = { sruEnabled: false };
 
       // inbox handlers
       if (ui.batchFilter) ui.batchFilter.addEventListener("change", ()=> renderInbox());
+      if (ui.yearFilter) ui.yearFilter.addEventListener("change", ()=> renderInbox());
       if (ui.statusFilter) ui.statusFilter.addEventListener("change", ()=> renderInbox());
       if (ui.selectAll) ui.selectAll.addEventListener("change", ()=> onSelectAllChanged());
       if (ui.tbody) ui.tbody.addEventListener("change", (e)=>{

@@ -272,16 +272,20 @@
     .biInboxTable th,
     .biInboxTable td{ overflow-wrap:anywhere; word-break:break-word; }
 
-    /* Voucher lines table: avoid horizontal scrollbar by letting content shrink */
-    .linesTable{ table-layout:fixed; }
+    /* Voucher lines table: prioritize readability on desktop, shrink only on smaller screens */
+    .linesTable{ width:100%; min-width:820px; table-layout:auto; }
     .linesTable td > input,
     .linesTable td > select{
       width:100%;
       min-width:0;
       box-sizing:border-box;
     }
+    .linesTable td{ vertical-align:top; }
     .linesTable td:last-child{ text-align:center; }
     .linesTable td:last-child .btn{ padding:8px 10px; }
+    @media (max-width: 900px){
+      .linesTable{ min-width:0; table-layout:fixed; }
+    }
     .status{ font-size:12px; padding:6px 10px; border-radius:999px; border:1px solid var(--line); }
     .status.ok{ color:var(--ok); border-color:rgba(34,197,94,.35); background:rgba(34,197,94,.08); }
     .status.bad{ color:var(--bad); border-color:rgba(239,68,68,.35); background:rgba(239,68,68,.08); }
@@ -2216,8 +2220,8 @@ Tack!</div>
 (function(){
  
 
-  const APP_VERSION = "1.4.7"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.17";  // user-facing revision
+  const APP_VERSION = "1.4.8"; // bump when adding new data fields
+  const APP_SEMVER = "0.3.18";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -11558,6 +11562,11 @@ if (!d.features) d.features = { sruEnabled: false };
     linesTbody.innerHTML = "";
     const accList = Object.keys(state.accounts).sort((a,b)=>a.localeCompare(b,"sv"));
 
+    function setLineFieldTitles(selectEl, textEl, line){
+      if (selectEl) selectEl.title = accountLabel(line.account || "");
+      if (textEl) textEl.title = String(line.text || "").trim();
+    }
+
     currentLines.forEach((ln, idx) => {
       const tr = document.createElement("tr");
 
@@ -11579,17 +11588,26 @@ if (!d.features) d.features = { sruEnabled: false };
         sel.insertBefore(opt, sel.firstChild);
       }
       sel.value = ln.account;
+      sel.title = accountLabel(ln.account || "");
       sel.disabled = voucherEditorReadOnly;
-      sel.addEventListener("change", () => { ln.account = sel.value; updateBalanceBadge(); });
+      sel.addEventListener("change", () => {
+        ln.account = sel.value;
+        setLineFieldTitles(sel, inpText, ln);
+        updateBalanceBadge();
+      });
       tdAcc.appendChild(sel);
 
       // text
       const tdText = document.createElement("td");
       const inpText = document.createElement("input");
       inpText.value = ln.text;
+      inpText.title = String(ln.text || "").trim();
       inpText.placeholder = "valfritt";
       inpText.disabled = voucherEditorReadOnly;
-      inpText.addEventListener("input", () => ln.text = inpText.value);
+      inpText.addEventListener("input", () => {
+        ln.text = inpText.value;
+        setLineFieldTitles(sel, inpText, ln);
+      });
       tdText.appendChild(inpText);
 
       // debit
@@ -11646,6 +11664,7 @@ if (!d.features) d.features = { sruEnabled: false };
       tr.appendChild(tdD);
       tr.appendChild(tdC);
       tr.appendChild(tdX);
+      setLineFieldTitles(sel, inpText, ln);
       linesTbody.appendChild(tr);
     });
   }

@@ -2220,8 +2220,8 @@ Tack!</div>
 (function(){
  
 
-  const APP_VERSION = "1.4.8"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.18";  // user-facing revision
+  const APP_VERSION = "1.4.9"; // bump when adding new data fields
+  const APP_SEMVER = "0.3.19";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -2878,7 +2878,133 @@ Tack!</div>
 // --- Auto-backup (JSON) to user-chosen folder (max 1 file/day) ---
 const OLD_AUTO_BACKUP_LAST_DAY_KEY = "FU_AUTOBACKUP_LAST_DAY_V1"; // legacy single-company key (migration/fallback)
 const AUTO_BACKUP_ENABLED_KEY  = "FU_AUTOBACKUP_ENABLED_V1";
+const DOC_MIRROR_MANIFEST_KEY_PREFIX = "FU_DOC_MIRROR_MANIFEST_V1:";
 let backupDirHandle = null;
+
+function documentMirrorManifestKey(){
+  try {
+    const activeId = CompanyManager.getActiveCompanyId();
+    if (activeId) return DOC_MIRROR_MANIFEST_KEY_PREFIX + String(activeId);
+  } catch {}
+  return DOC_MIRROR_MANIFEST_KEY_PREFIX + "default";
+}
+
+function dataFileStemForMirror(){
+  const rawName = String(fsHandle && fsHandle.name ? fsHandle.name : "fu-data.json");
+  const stem = rawName.replace(/\.[A-Za-z0-9]+$/g, "");
+  return safeFilename(stem) || "fu-data";
+}
+
+function documentMirrorRootFolderName(){
+  return `${dataFileStemForMirror()}_files`;
+}
+
+function documentMirrorFolderParts(doc){
+  const root = documentMirrorRootFolderName();
+  const yearId = safeStemPart(doc?.yearId || "unknown", 24) || "unknown";
+  const kind = String(doc?.kind || "document").trim();
+  const number = safeStemPart(doc?.number || doc?.linkedId || doc?.id || "document", 80) || "document";
+  if (kind === "invoice_pdf") return [root, "documents", yearId, "invoices", number];
+  if (kind === "voucher_pdf") return [root, "documents", yearId, "vouchers", number];
+  if (kind.startsWith("webshop_")) return [root, "documents", yearId, "webshop", safeStemPart(kind, 48) || "webshop", number];
+  return [root, "documents", yearId, safeStemPart(kind, 48) || "other", number];
+}
+
+async function backupEnsureDir(rootDir, parts){
+  let dir = rootDir;
+  for (const part of (parts || [])){
+    if (!part) continue;
+    dir = await dir.getDirectoryHandle(String(part), { create: true });
+  }
+  return dir;
+}
+
+async function backupWriteTextFile(dir, name, text, mime){
+  const fh = await dir.getFileHandle(String(name), { create: true });
+  const w = await fh.createWritable();
+  await w.write(new Blob([text], { type: mime || "text/plain;charset=utf-8" }));
+  await w.close();
+}
+
+async function backupWriteBlobFile(dir, name, blob){
+  const fh = await dir.getFileHandle(String(name), { create: true });
+  const w = await fh.createWritable();
+  await w.write(blob);
+  await w.close();
+}
+
+async function syncDocumentsToBackupDir(reason, options = {}){
+  if (!backupDirHandle || !fsHandle) return false;
+  if (!CompanyManager.hasActiveCompany || !CompanyManager.hasActiveCompany()) return false;
+
+  const ok = await backupEnsurePermission(!!options.requestPermission);
+  if (!ok) return false;
+
+  const rootName = documentMirrorRootFolderName();
+  const docs = (state.documents || [])
+    .filter(doc => doc && String(doc.status || "active") === "active")
+    .slice()
+    .sort((a,b)=> String(a.createdAt || "").localeCompare(String(b.createdAt || ""), "sv") || String(a.id || "").localeCompare(String(b.id || ""), "sv"));
+
+  const manifestKey = documentMirrorManifestKey();
+  const previousManifest = await idbGet(manifestKey).catch(()=> null);
+  const previousItems = previousManifest && previousManifest.items && typeof previousManifest.items === "object" ? previousManifest.items : {};
+  const nextItems = {};
+  const indexItems = [];
+
+  for (const doc of docs){
+    const folderParts = documentMirrorFolderParts(doc);
+    const exportFileName = safeFileName(doc?.fileName || (String(doc?.kind || "").startsWith("webshop_") ? "document.json" : "document.pdf"));
+    const relPath = folderParts.concat([exportFileName]).join("/");
+    const signature = `${String(doc?.sha256 || "")}|${String(doc?.size || 0)}|${exportFileName}|${String(doc?.status || "active")}`;
+    const previous = previousItems[doc.id] || null;
+    const blob = await idbGet("docBlob:" + doc.id).catch(()=> null);
+
+    if (blob && (!previous || previous.signature !== signature || previous.relPath !== relPath)){
+      const dir = await backupEnsureDir(backupDirHandle, folderParts);
+      await backupWriteBlobFile(dir, exportFileName, blob);
+    }
+
+    nextItems[doc.id] = {
+      signature,
+      relPath,
+      mirroredAt: blob ? nowISO() : (previous && previous.mirroredAt) ? previous.mirroredAt : null,
+    };
+
+    indexItems.push({
+      id: doc.id,
+      yearId: doc.yearId,
+      kind: doc.kind,
+      number: doc.number,
+      linkedType: doc.linkedType,
+      linkedId: doc.linkedId,
+      fileName: exportFileName,
+      relPath: blob ? relPath : null,
+      sha256: doc.sha256 || "",
+      size: Number(doc.size || 0) || 0,
+      mime: doc.mime || "",
+      hasLocalBlob: !!blob,
+    });
+  }
+
+  const docsDir = await backupEnsureDir(backupDirHandle, [rootName, "documents"]);
+  await backupWriteTextFile(docsDir, "index.json", JSON.stringify({
+    root: rootName,
+    dataFile: fsHandle && fsHandle.name ? String(fsHandle.name) : "",
+    updatedAt: nowISO(),
+    reason: String(reason || "sync"),
+    items: indexItems,
+  }, null, 2) + "\n", "application/json");
+
+  await idbSet(manifestKey, {
+    version: 1,
+    rootName,
+    updatedAt: nowISO(),
+    items: nextItems,
+  }).catch(()=> null);
+
+  return true;
+}
 
 function autoBackupEnabled(){
   try {
@@ -2997,7 +3123,8 @@ async function chooseBackupFolder(){
     updateBackupUI();
     // Create today's backup immediately (still max 1/day)
     await maybeDailyAutoBackup("choose-folder");
-    showToast("Backup-mapp vald.", 2500);
+    try { await syncDocumentsToBackupDir("choose-folder", { requestPermission: false }); } catch (e) { console.warn("Document mirror sync failed", e); }
+    showToast("Backup-mapp vald. Dokument speglas nu hit i mappsystem.", 3000);
   } catch (e){
     if (e && e.name === "AbortError") return;
     console.error(e);
@@ -3049,7 +3176,7 @@ function updateBackupUI(){
       } else if (!has){
         el.textContent = "Ingen backup-mapp vald.";
       } else {
-        el.textContent = last ? (`Senast backup: ${last}`) : "Backup-mapp vald.";
+        el.textContent = last ? (`Senast backup: ${last} · dokument speglas också hit.`) : "Backup-mapp vald. Dokument speglas också hit.";
       }
     }
   } catch {}
@@ -5202,6 +5329,7 @@ if (!d.features) d.features = { sruEnabled: false };
       try { renderAll(); } catch (e){ console.error(e); }
     }
     try { scheduleFileAutosave(); } catch (e){ console.error(e); }
+    try { scheduleDocumentMirrorSync("save"); } catch (e){ console.error(e); }
     return persisted;
   }
 
@@ -5484,6 +5612,7 @@ if (!d.features) d.features = { sruEnabled: false };
   async function fsDisconnect(){
     // Best-effort silent autosave before disconnect (no prompts)
     try { await maybeSilentAutosaveToFile("disconnect"); } catch {}
+    try { if (fsDocumentMirrorTimer) clearTimeout(fsDocumentMirrorTimer); } catch {}
 
     fsHandle = null;
     fsLastError = null;
@@ -5643,6 +5772,20 @@ if (!d.features) d.features = { sruEnabled: false };
     }, 600);
   }
 
+  function scheduleDocumentMirrorSync(reason){
+    if (!backupApiSupported()) return;
+    if (!backupDirHandle || !fsHandle) return;
+
+    if (fsDocumentMirrorTimer) clearTimeout(fsDocumentMirrorTimer);
+    fsDocumentMirrorTimer = setTimeout(async ()=>{
+      try {
+        await syncDocumentsToBackupDir(reason || "save", { requestPermission: false });
+      } catch (e){
+        console.warn("Document mirror autosync failed", e);
+      }
+    }, 1200);
+  }
+
   // --- State ---
   let state = normalizeImportedState(load());
   let editingVoucherId = null;
@@ -5654,6 +5797,7 @@ if (!d.features) d.features = { sruEnabled: false };
   let fsLastSavedAt = null;
   let fsLastError = null;
   let fsAutosaveTimer = null;
+  let fsDocumentMirrorTimer = null;
 
   // --- DOM ---
   const tabs = Array.from(document.querySelectorAll(".tab[data-tab]"));

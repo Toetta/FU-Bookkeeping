@@ -2220,8 +2220,8 @@ Tack!</div>
 (function(){
  
 
-  const APP_VERSION = "1.4.9"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.19";  // user-facing revision
+  const APP_VERSION = "1.4.10"; // bump when adding new data fields
+  const APP_SEMVER = "0.3.20";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -4515,7 +4515,8 @@ cur = {
       }
 
       const importedFrom = (v.importedFrom && typeof v.importedFrom === "object") ? v.importedFrom : null;
-      if (!importedFrom || String(importedFrom.source || "").trim() !== "webshop") continue;
+      const importedSource = String(importedFrom?.source || "").trim().toLowerCase();
+      if (!importedFrom || !importedSource || !/webshop/.test(importedSource)) continue;
 
       try {
         const payloadKind = String(importedFrom.kind || "receipt").trim().toLowerCase();

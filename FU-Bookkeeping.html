@@ -2220,8 +2220,8 @@ Tack!</div>
 (function(){
  
 
-  const APP_VERSION = "1.4.12"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.22";  // user-facing revision
+  const APP_VERSION = "1.4.13"; // bump when adding new data fields
+  const APP_SEMVER = "0.3.23";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -4575,6 +4575,76 @@ cur = {
     return stats;
   }
 
+  async function regeneratePdfDocumentsForYear(yearId){
+    const targetYearId = String(yearId || "").trim();
+    if (!targetYearId) throw new Error("Saknar räkenskapsår för PDF-regenerering.");
+
+    const stats = {
+      regeneratedInvoices: 0,
+      regeneratedVouchers: 0,
+      failed: 0,
+    };
+
+    const invoices = (state.invoices || []).filter(inv => inv && String(inv.yearId || "") === targetYearId);
+    for (const inv of invoices){
+      try {
+        const blob = await generateInvoicePdfBlob(inv);
+        const docFileName = safeFileName(`${normalizeDateForFileName(inv.date || "")}_invoice_${safeStemPart(inv.no || inv.id || "invoice", 48) || "invoice"}.pdf`);
+        await registerGeneratedPdfDocument({
+          kind: "invoice_pdf",
+          number: inv.no || inv.id,
+          date: inv.date || todayISO(),
+          linkedType: "invoice",
+          linkedId: inv.id,
+          blob,
+          yearId: inv.yearId,
+          fileName: docFileName,
+          createdBy: state.company?.defaultSign || "",
+        });
+        stats.regeneratedInvoices++;
+      } catch (err) {
+        stats.failed++;
+        console.error("Invoice PDF regeneration failed", inv?.id, err);
+      }
+    }
+
+    const vouchers = (state.vouchers || []).filter(v => v && String(v.yearId || "") === targetYearId);
+    for (const v of vouchers){
+      try {
+        const blob = await generateVoucherPdfBlob(v);
+        const docFileName = safeFileName(`${normalizeDateForFileName(v.date || "")}_voucher_${safeStemPart(`${v.series || ""}${v.no || v.id || "voucher"}`, 48) || "voucher"}.pdf`);
+        await registerGeneratedPdfDocument({
+          kind: "voucher_pdf",
+          number: `${v.series || ""}${v.no || ""}`.trim() || v.id,
+          date: v.date || todayISO(),
+          linkedType: "voucher",
+          linkedId: v.id,
+          blob,
+          yearId: v.yearId,
+          fileName: docFileName,
+          createdBy: v.sign || state.company?.defaultSign || "",
+        });
+        stats.regeneratedVouchers++;
+      } catch (err) {
+        stats.failed++;
+        console.error("Voucher PDF regeneration failed", v?.id, err);
+      }
+    }
+
+    try {
+      appendAudit({
+        action: "document.regenerate_pdf",
+        entityType: "document",
+        entityId: targetYearId,
+        yearId: targetYearId,
+        details: { ...stats }
+      });
+    } catch (e) { console.error(e); }
+
+    try { save({ renderAll: false }); } catch (e) { console.error(e); }
+    return stats;
+  }
+
 
 
 
@@ -5930,6 +6000,7 @@ if (!d.features) d.features = { sruEnabled: false };
   const btnMakeArchive = document.getElementById("btnMakeArchive");
   const btnMakeArchiveFolder = document.getElementById("btnMakeArchiveFolder");
   const btnBackfillMissingDocuments = document.getElementById("btnBackfillMissingDocuments");
+  const btnRegeneratePdfDocuments = document.getElementById("btnRegeneratePdfDocuments");
   const archiveImportJson = document.getElementById("archiveImportJson");
   const archiveImportSha = document.getElementById("archiveImportSha");
   const btnVerifyArchive = document.getElementById("btnVerifyArchive");
@@ -8997,6 +9068,7 @@ if (!d.features) d.features = { sruEnabled: false };
               <button class="btn secondary" data-act="undo" data-id="${it.id}" ${(!it.postedVoucherId || it.undoVoucherId) ? "disabled" : ""}>Ångra</button>
               <button class="btn danger" data-act="del" data-id="${it.id}" ${(it.status==="posted") ? "disabled" : ""}>Radera</button>
             </div>
+              <button class="btn secondary" id="btnRegeneratePdfDocuments">Generera om PDF-dokument för valt år</button>
           </td>
         `;
 
@@ -15553,6 +15625,28 @@ if (sOrgnr) sOrgnr.addEventListener("input", ()=>{ try { updateWsCredIdPreview()
       catch(err){ console.error(err); showToast("Kunde inte skapa saknade dokument. Se konsolen för detaljer.", 8000); }
     });
   }
+  async function runPdfRegenerationForSelectedYear(){
+    const yearId = (archiveYearSelect && archiveYearSelect.value) || state.activeYearId;
+    const stats = await regeneratePdfDocumentsForYear(yearId);
+    try {
+      await syncDocumentsToBackupDir("pdf-regenerate", { requestPermission: false, backfill: false });
+    } catch (e) {
+      console.warn("PDF mirror sync failed", e);
+    }
+    const msg = `PDF-regenerering ${yearId}: kundfakturor ${stats.regeneratedInvoices}, verifikationer ${stats.regeneratedVouchers}, fel ${stats.failed}.`;
+    if (archiveVerifyResult) archiveVerifyResult.textContent = msg;
+    showToast(msg, 7000);
+    try { await renderDocumentRegistryList(); } catch (e) { console.error(e); }
+  }
+  if (btnRegeneratePdfDocuments){
+    btnRegeneratePdfDocuments.addEventListener("click", async (e)=>{
+      e.preventDefault();
+      try {
+        await runPdfRegenerationForSelectedYear();
+      }
+      catch(err){ console.error(err); showToast("Kunde inte generera om PDF-dokument. Se konsolen för detaljer.", 8000); }
+    });
+  }
   if (btnRefreshDocumentList) btnRefreshDocumentList.addEventListener("click", ()=>{ renderDocumentRegistryList().catch(err=> console.error(err)); });
   if (archiveYearSelect) archiveYearSelect.addEventListener("change", ()=>{ renderDocumentRegistryList().catch(err=> console.error(err)); });
   [docListKindFilter, docListStatusFilter, docListLinkedTypeFilter, docListDateFrom, docListDateTo].filter(Boolean).forEach(el => {
@@ -15573,6 +15667,7 @@ if (sOrgnr) sOrgnr.addEventListener("input", ()=>{ try { updateWsCredIdPreview()
     const b2 = e.target && e.target.closest ? e.target.closest("#btnVerifyArchive") : null;
     const b3 = e.target && e.target.closest ? e.target.closest("#btnMakeArchiveFolder") : null;
     const b4 = e.target && e.target.closest ? e.target.closest("#btnBackfillMissingDocuments") : null;
+    const b5 = e.target && e.target.closest ? e.target.closest("#btnRegeneratePdfDocuments") : null;
     if (b1){
       e.preventDefault();
       makeArchive((archiveYearSelect && archiveYearSelect.value) || state.activeYearId);
@@ -15595,6 +15690,11 @@ if (sOrgnr) sOrgnr.addEventListener("input", ()=>{ try { updateWsCredIdPreview()
           showToast(msg, 7000);
         })
         .catch((err)=>{ console.error(err); showToast("Kunde inte skapa saknade dokument. Se konsolen för detaljer.", 8000); });
+    }
+    if (b5){
+      e.preventDefault();
+      runPdfRegenerationForSelectedYear()
+        .catch((err)=>{ console.error(err); showToast("Kunde inte generera om PDF-dokument. Se konsolen för detaljer.", 8000); });
     }
   }, true);
 })();

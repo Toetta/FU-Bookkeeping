@@ -2216,8 +2216,8 @@ Tack!</div>
 (function(){
  
 
-  const APP_VERSION = "1.4.6"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.16";  // user-facing revision
+  const APP_VERSION = "1.4.7"; // bump when adding new data fields
+  const APP_SEMVER = "0.3.17";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -5904,7 +5904,7 @@ if (!d.features) d.features = { sruEnabled: false };
     state.company = state.company || defaultData().company;
     const cfgFromState = normalizeWebshopSync(state.company.webshopSync);
     const settingsVisible = !!(typeof sections !== "undefined" && sections && sections.settings && !sections.settings.hidden);
-    const useUi = !!options.preferUi || settingsVisible;
+    const useUi = settingsVisible;
     if (!useUi) return cfgFromState;
     return normalizeWebshopSync({
       enabled: wsEnabled ? wsEnabled.checked : cfgFromState.enabled,

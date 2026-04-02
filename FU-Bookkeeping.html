@@ -1891,6 +1891,7 @@ Tack!</div>
           <h2>Företag (JSON-datafil)</h2>
           <div class="row" style="gap:10px; flex-wrap:wrap;">
             <button class="btn" id="btnConnectFile">Koppla befintligt företag (JSON)</button>
+            <button class="btn secondary" id="btnRelinkFile">Byt datafil…</button>
             <button class="btn secondary" id="btnCreateFile">+ Skapa företag</button>
             <button class="btn secondary" id="btnLoadFromFile" disabled>Läs in</button>
             <button class="btn secondary" id="btnSaveToFile" disabled>Spara nu</button>
@@ -5037,6 +5038,16 @@ cur = {
       try { updateBackupUI(); } catch {}
     }
 
+    async function setActiveDataFileHandle(fileHandle){
+      const id = getActiveCompanyId();
+      if (!id) throw new Error("Inget aktivt företag");
+      fsHandle = fileHandle || null;
+      if (fsHandle) await idbSetHandle(companyHandleKey(id, "data"), fsHandle);
+      else await idbDelHandle(companyHandleKey(id, "data"));
+      saveRegistry();
+      try { updateFsUI(); } catch {}
+    }
+
     function updateActiveCompanyMeta(patch){
       const id = getActiveCompanyId();
       if (!id) return false;
@@ -5141,6 +5152,7 @@ cur = {
       updateCompanySelectUI,
       setActiveCompany,
       upsertCompany,
+      setActiveDataFileHandle,
       setActiveBackupDirHandle,
       updateActiveCompanyMeta,
     };
@@ -5526,6 +5538,7 @@ if (!d.features) d.features = { sruEnabled: false };
 
     const hasCompany = CompanyManager.hasActiveCompany();
     const connected = hasCompany && !!fsHandle;
+    if (btnRelinkFile) btnRelinkFile.disabled = !hasCompany;
     if (btnLoadFromFile) btnLoadFromFile.disabled = !connected;
     if (btnSaveToFile) btnSaveToFile.disabled = !connected;
     if (btnDisconnectFile) btnDisconnectFile.disabled = !hasCompany;
@@ -5636,14 +5649,44 @@ if (!d.features) d.features = { sruEnabled: false };
     }
   }
 
+  function isMissingDataFileError(err){
+    const name = String(err && err.name ? err.name : "").trim();
+    const msg = String(err && err.message ? err.message : "").trim().toLowerCase();
+    return name === "NotFoundError"
+      || /notfound/.test(name.toLowerCase())
+      || /filen kunde inte hittas|kunde inte hittas|file could not be found|entry not found|no such file/.test(msg);
+  }
+
+  async function clearStaleDataFileHandle(err){
+    fsLastError = err || new Error("Datafilen kunde inte hittas.");
+    fsLastSavedAt = null;
+    try {
+      if (CompanyManager && typeof CompanyManager.setActiveDataFileHandle === "function" && CompanyManager.hasActiveCompany()) {
+        await CompanyManager.setActiveDataFileHandle(null);
+      } else {
+        fsHandle = null;
+      }
+    } catch (e) {
+      console.error(e);
+      fsHandle = null;
+    }
+    try { updateFsUI(); } catch {}
+    throw new Error("Datafilen kunde inte hittas på den gamla platsen. Klicka 'Byt datafil…' och välj den flyttade JSON-filen.");
+  }
+
   async function fsWriteState(){
     if (!fsHandle) throw new Error("Ingen fil ansluten");
     const ok = await fsEnsurePermission(false);
     if (!ok) throw new Error("Ingen behörighet (klicka 'Spara nu' för att tillåta)");
 
-    const writable = await fsHandle.createWritable();
-    await writable.write(JSON.stringify(state, null, 2));
-    await writable.close();
+    try {
+      const writable = await fsHandle.createWritable();
+      await writable.write(JSON.stringify(state, null, 2));
+      await writable.close();
+    } catch (e) {
+      if (isMissingDataFileError(e)) await clearStaleDataFileHandle(e);
+      throw e;
+    }
 
     fsLastSavedAt = new Date().toLocaleString("sv-SE", { hour12:false });
     fsLastError = null;
@@ -5655,8 +5698,14 @@ if (!d.features) d.features = { sruEnabled: false };
     const ok = await fsEnsurePermission(true);
     if (!ok) throw new Error("Behörighet nekad");
 
-    const file = await fsHandle.getFile();
-    const txt = await file.text();
+    let txt = "";
+    try {
+      const file = await fsHandle.getFile();
+      txt = await file.text();
+    } catch (e) {
+      if (isMissingDataFileError(e)) await clearStaleDataFileHandle(e);
+      throw e;
+    }
     if (!txt.trim()) throw new Error("Filen är tom");
 
     const d = JSON.parse(txt);
@@ -5778,6 +5827,42 @@ if (!d.features) d.features = { sruEnabled: false };
       fsLastError = e;
       updateFsUI();
       showToast("Kunde inte välja fil. Är du på HTTPS/localhost och i Chrome/Edge?", 6500);
+    }
+  }
+
+  async function fsRelinkActiveCompanyDataFile(){
+    if (!fsApiSupported()) return showToast("Fil-synk kräver Chrome/Edge och secure context (HTTPS eller localhost).", 6500);
+    if (!CompanyManager.hasActiveCompany()) return showToast("Välj ett företag först.", 4500);
+    try {
+      const picked = await window.showOpenFilePicker({
+        multiple: false,
+        types: [{ description: "Bokföringsdata (JSON)", accept: { "application/json": [".json"] } }]
+      });
+      const handle = picked && picked[0] ? picked[0] : null;
+      if (!handle) return;
+
+      const f = await handle.getFile();
+      const txt = await f.text();
+      const d = JSON.parse(txt);
+      const looksValid = !!(d && typeof d === "object" && Array.isArray(d.fiscalYears) && d.accounts && typeof d.accounts === "object" && Array.isArray(d.vouchers));
+      if (!looksValid){
+        showToast("Filen ser inte ut som FU-Bookkeeping-data (fel format).", 6500);
+        return;
+      }
+
+      await CompanyManager.setActiveDataFileHandle(handle);
+      fsHandle = handle;
+      fsLastError = null;
+      fsLastSavedAt = null;
+      await fsLoadState();
+      fillYearSelectors();
+      try { if (typeof renderAll === "function") renderAll(); } catch (e) { console.error(e); }
+      showToast("Datafil omkopplad och laddad.", 4000);
+    } catch (e){
+      if (e && e.name === "AbortError") return;
+      fsLastError = e;
+      try { updateFsUI(); } catch {}
+      showToast(e && e.message ? e.message : "Kunde inte byta datafil.", 7000);
     }
   }
 
@@ -6018,6 +6103,7 @@ if (!d.features) d.features = { sruEnabled: false };
   const sieImportFileName = document.getElementById("sieImportFileName");
 // File sync (Drive-synkad mapp via File System Access API)
   const btnConnectFile = document.getElementById("btnConnectFile");
+  const btnRelinkFile = document.getElementById("btnRelinkFile");
   const btnCreateFile = document.getElementById("btnCreateFile");
   const btnLoadFromFile = document.getElementById("btnLoadFromFile");
   const btnSaveToFile = document.getElementById("btnSaveToFile");
@@ -15484,7 +15570,7 @@ if (companySelect) companySelect.addEventListener("change", async ()=>{
         showToast("Bytte företag.", 2500);
       } catch (e){
         console.error(e);
-        showToast("Kunde inte ladda företagets datafil. Se konsolen.", 7000);
+        showToast(e && e.message ? e.message : "Kunde inte ladda företagets datafil. Se konsolen.", 7000);
       }
     } else {
       if (requireFile){
@@ -15520,6 +15606,7 @@ if (btnWorkfileFix) btnWorkfileFix.addEventListener("click", (e)=>{
 });
 
 if (btnConnectFile) btnConnectFile.addEventListener("click", async (e)=>{ e.preventDefault(); await fsConnectExisting(); });
+if (btnRelinkFile) btnRelinkFile.addEventListener("click", async (e)=>{ e.preventDefault(); await fsRelinkActiveCompanyDataFile(); });
 if (btnCreateFile) btnCreateFile.addEventListener("click", async (e)=>{ e.preventDefault(); await fsCreateNew(); });
 if (btnLoadFromFile) btnLoadFromFile.addEventListener("click", async (e)=>{
   e.preventDefault();
@@ -15529,12 +15616,12 @@ if (btnLoadFromFile) btnLoadFromFile.addEventListener("click", async (e)=>{
     try { if (typeof renderAll === "function") renderAll(); } catch (e){ console.error(e); }
     showToast("Laddade data från fil.", 3500);
   }
-  catch(err){ console.error(err); showToast("Kunde inte läsa från fil. Se konsolen.", 8000); }
+  catch(err){ console.error(err); showToast(err && err.message ? err.message : "Kunde inte läsa från fil. Se konsolen.", 8000); }
 });
 if (btnSaveToFile) btnSaveToFile.addEventListener("click", async (e)=>{
   e.preventDefault();
   try { await fsWriteState(); showToast("Sparade till fil.", 3000); }
-  catch(err){ console.error(err); showToast("Kunde inte spara till fil. Se konsolen.", 8000); }
+  catch(err){ console.error(err); showToast(err && err.message ? err.message : "Kunde inte spara till fil. Se konsolen.", 8000); }
 });
 if (btnDisconnectFile) btnDisconnectFile.addEventListener("click", async (e)=>{ e.preventDefault(); await fsDisconnect(); });
 
@@ -15579,6 +15666,7 @@ if (sOrgnr) sOrgnr.addEventListener("input", ()=>{ try { updateWsCredIdPreview()
             }
           } catch (err){
             console.error(err);
+            showToast(err && err.message ? err.message : "Kunde inte läsa datafilen.", 7000);
           }
           try { updateFsUI(); } catch (e){ /* ignore */ }
           try { updateBackupUI(); } catch (e){ /* ignore */ }
@@ -15587,6 +15675,7 @@ if (sOrgnr) sOrgnr.addEventListener("input", ()=>{ try { updateWsCredIdPreview()
       }
     } catch (err){
       console.error(err);
+      showToast(err && err.message ? err.message : "Kunde inte läsa datafilen.", 7000);
     }
   }
 

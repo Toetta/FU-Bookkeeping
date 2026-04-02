@@ -5907,6 +5907,16 @@ if (!d.features) d.features = { sruEnabled: false };
     });
   }
 
+  function syncWebshopConfigFromUi(options = {}){
+    state.company = state.company || defaultData().company;
+    const next = getWebshopSyncConfigForUi({ preferUi: true, ...options });
+    state.company.webshopSync = normalizeWebshopSync({
+      ...normalizeWebshopSync(state.company.webshopSync),
+      ...next,
+    });
+    return normalizeWebshopSync(state.company.webshopSync);
+  }
+
   function setWebshopStatus(text){
     if (!wsStatus) return;
     wsStatus.textContent = String(text || "");
@@ -6247,8 +6257,7 @@ if (!d.features) d.features = { sruEnabled: false };
       return;
     }
 
-    state.company = state.company || defaultData().company;
-    const cfg = getWebshopSyncConfigForUi();
+    const cfg = syncWebshopConfigFromUi();
 
     if (!cfg.enabled) {
       orderstockList.innerHTML = `<div class="card"><div class="muted small">Aktivera först Webshop-synk under Inställningar för detta företag.</div></div>`;
@@ -6488,16 +6497,7 @@ if (!d.features) d.features = { sruEnabled: false };
     const companyId = (typeof CompanyManager !== "undefined" && CompanyManager && CompanyManager.getActiveCompanyId) ? CompanyManager.getActiveCompanyId() : null;
     if (!companyId) return showToast("Välj ett företag innan test.", 5500);
 
-    state.company = state.company || defaultData().company;
-    const cfgFromState = normalizeWebshopSync(state.company.webshopSync);
-
-    const cfg = normalizeWebshopSync({
-      enabled: wsEnabled ? wsEnabled.checked : cfgFromState.enabled,
-      apiBaseUrl: wsApiBaseUrl ? wsApiBaseUrl.value : cfgFromState.apiBaseUrl,
-      apiKey: wsApiKey ? wsApiKey.value : cfgFromState.apiKey,
-      series: wsSeries ? wsSeries.value : cfgFromState.series,
-      pullLimit: wsLimit ? wsLimit.value : cfgFromState.pullLimit,
-    });
+    const cfg = syncWebshopConfigFromUi();
 
     if (!cfg.apiBaseUrl) return showToast("Ange API base URL.", 5500);
     if (!cfg.apiKey) return showToast("Ange X-FU-Key.", 5500);
@@ -6529,16 +6529,7 @@ if (!d.features) d.features = { sruEnabled: false };
     const companyId = (typeof CompanyManager !== "undefined" && CompanyManager && CompanyManager.getActiveCompanyId) ? CompanyManager.getActiveCompanyId() : null;
     if (!companyId) return showToast("Välj ett företag innan import.", 5500);
 
-    state.company = state.company || defaultData().company;
-    const cfgFromState = normalizeWebshopSync(state.company.webshopSync);
-
-    const cfg = normalizeWebshopSync({
-      enabled: wsEnabled ? wsEnabled.checked : cfgFromState.enabled,
-      apiBaseUrl: wsApiBaseUrl ? wsApiBaseUrl.value : cfgFromState.apiBaseUrl,
-      apiKey: wsApiKey ? wsApiKey.value : cfgFromState.apiKey,
-      series: wsSeries ? wsSeries.value : cfgFromState.series,
-      pullLimit: wsLimit ? wsLimit.value : cfgFromState.pullLimit,
-    });
+    const cfg = syncWebshopConfigFromUi();
 
     if (!cfg.enabled) return showToast("Webshop-synk är inte aktiverad för detta företag.", 5500);
     if (!cfg.apiBaseUrl) return showToast("Ange API base URL.", 5500);
@@ -14845,8 +14836,7 @@ if (rptYearSelect){
         const companyId = (typeof CompanyManager !== "undefined" && CompanyManager && CompanyManager.getActiveCompanyId) ? CompanyManager.getActiveCompanyId() : null;
         if (!companyId) throw new Error("Välj ett företag först.");
 
-        state.company = state.company || defaultData().company;
-        const cfg = getWebshopSyncConfigForUi();
+        const cfg = syncWebshopConfigFromUi();
         if (!cfg.enabled) throw new Error("Webshop-synk är inte aktiverad för detta företag.");
         if (!cfg.apiBaseUrl || !cfg.apiKey) throw new Error("Ange Serveradress och X-FU-Key under Inställningar.");
 
@@ -14903,8 +14893,7 @@ if (rptYearSelect){
         const companyId = (typeof CompanyManager !== "undefined" && CompanyManager && CompanyManager.getActiveCompanyId) ? CompanyManager.getActiveCompanyId() : null;
         if (!companyId) throw new Error("Välj ett företag först.");
 
-        state.company = state.company || defaultData().company;
-        const cfg = getWebshopSyncConfigForUi();
+        const cfg = syncWebshopConfigFromUi();
         if (!cfg.enabled) throw new Error("Webshop-synk är inte aktiverad för detta företag.");
         if (!cfg.apiBaseUrl || !cfg.apiKey) throw new Error("Ange Serveradress och X-FU-Key under Inställningar.");
 
@@ -14940,15 +14929,7 @@ if (rptYearSelect){
         const companyId = (typeof CompanyManager !== "undefined" && CompanyManager && CompanyManager.getActiveCompanyId) ? CompanyManager.getActiveCompanyId() : null;
         if (!companyId) return showToast("Välj ett företag först.", 5500);
 
-        state.company = state.company || defaultData().company;
-        const cfgFromState = normalizeWebshopSync(state.company.webshopSync);
-        const cfg = normalizeWebshopSync({
-          enabled: wsEnabled ? wsEnabled.checked : cfgFromState.enabled,
-          apiBaseUrl: wsApiBaseUrl ? wsApiBaseUrl.value : cfgFromState.apiBaseUrl,
-          apiKey: wsApiKey ? wsApiKey.value : cfgFromState.apiKey,
-          series: wsSeries ? wsSeries.value : cfgFromState.series,
-          pullLimit: wsLimit ? wsLimit.value : cfgFromState.pullLimit,
-        });
+        const cfg = syncWebshopConfigFromUi();
 
         if (!cfg.apiBaseUrl) return showToast("Ange serveradress först.", 5500);
         if (!cfg.apiKey) return showToast("Ange X-FU-Key först.", 5500);

@@ -1923,6 +1923,7 @@ Tack!</div>
             <select id="archiveYearSelect" aria-label="Räkenskapsår för arkiv"></select>
             <button class="btn" id="btnMakeArchive">Skapa arkivpaket</button>
             <button class="btn secondary" id="btnMakeArchiveFolder">Skapa arkivmapp (med underlag)</button>
+            <button class="btn secondary" id="btnBackfillMissingDocuments">Skapa saknade dokument för valt år</button>
           </div>
           <p class="muted small" style="margin-top:10px;">
             Skapar en fryst export för valt år (kontoplan, verifikationer, fakturor + relevanta register) samt en SHA-256 checksumma.
@@ -2147,8 +2148,8 @@ Tack!</div>
 (function(){
  
 
-  const APP_VERSION = "1.4.1"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.10";  // user-facing revision
+  const APP_VERSION = "1.4.5"; // bump when adding new data fields
+  const APP_SEMVER = "0.3.15";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -2709,6 +2710,26 @@ Tack!</div>
       return si;
     });
     if (!Array.isArray(o.invoices)) o.invoices = [];
+    if (!Array.isArray(o.documents)) o.documents = [];
+    o.documents = o.documents.filter(x=>x && typeof x === "object").map(doc=>{
+      if (!doc.id) doc.id = crypto.randomUUID();
+      if (!doc.yearId) doc.yearId = (doc.date ? String(doc.date).slice(0,4) : o.activeYearId);
+      if (!doc.kind) doc.kind = "invoice_pdf";
+      if (doc.number == null) doc.number = "";
+      if (!doc.date) doc.date = "";
+      if (doc.linkedType == null) doc.linkedType = "";
+      if (doc.linkedId == null) doc.linkedId = "";
+      if (!doc.fileName) doc.fileName = String(doc.kind || "").startsWith("webshop_") ? "document.json" : "document.pdf";
+      if (doc.mime == null) doc.mime = String(doc.kind || "").startsWith("webshop_") ? "application/json" : "application/pdf";
+      if (doc.size == null || !Number.isFinite(Number(doc.size))) doc.size = 0;
+      else doc.size = Number(doc.size);
+      if (doc.sha256 == null) doc.sha256 = "";
+      if (!doc.createdAt) doc.createdAt = nowISO();
+      if (doc.createdBy == null) doc.createdBy = "";
+      if (!doc.sourceMeta || typeof doc.sourceMeta !== "object") doc.sourceMeta = null;
+      if (!doc.status) doc.status = "active";
+      return doc;
+    });
     if (!o.locks || typeof o.locks !== "object") o.locks = {};
     if (!o.compliance) o.compliance = { immutableVouchers: true };
 
@@ -3362,11 +3383,413 @@ cur = {
     return sha256HexBuf(ab);
   }
 
+  function pdfWinAnsiBytes(value){
+    const cp1252 = {
+      0x20AC: 0x80,
+      0x201A: 0x82,
+      0x0192: 0x83,
+      0x201E: 0x84,
+      0x2026: 0x85,
+      0x2020: 0x86,
+      0x2021: 0x87,
+      0x02C6: 0x88,
+      0x2030: 0x89,
+      0x0160: 0x8A,
+      0x2039: 0x8B,
+      0x0152: 0x8C,
+      0x017D: 0x8E,
+      0x2018: 0x91,
+      0x2019: 0x92,
+      0x201C: 0x93,
+      0x201D: 0x94,
+      0x2022: 0x95,
+      0x2013: 0x96,
+      0x2014: 0x97,
+      0x02DC: 0x98,
+      0x2122: 0x99,
+      0x0161: 0x9A,
+      0x203A: 0x9B,
+      0x0153: 0x9C,
+      0x017E: 0x9E,
+      0x0178: 0x9F,
+    };
+    const bytes = [];
+    for (const ch of String(value ?? "")){
+      const code = ch.codePointAt(0);
+      if (code == null) continue;
+      if ((code >= 32 && code <= 126) || (code >= 160 && code <= 255)) {
+        bytes.push(code & 0xFF);
+        continue;
+      }
+      if (Object.prototype.hasOwnProperty.call(cp1252, code)) {
+        bytes.push(cp1252[code]);
+        continue;
+      }
+      bytes.push(63);
+    }
+    return bytes;
+  }
+
+  function pdfHexText(value){
+    return pdfWinAnsiBytes(value).map(b => b.toString(16).padStart(2, "0")).join("").toUpperCase();
+  }
+
+  function wrapPdfText(value, maxChars){
+    const text = String(value ?? "").replace(/\s+/g, " ").trim();
+    if (!text) return [];
+    const limit = Math.max(8, Number(maxChars) || 72);
+    const words = text.split(" ");
+    const lines = [];
+    let current = "";
+    for (const word of words){
+      const next = current ? (current + " " + word) : word;
+      if (next.length <= limit){
+        current = next;
+      } else {
+        if (current) lines.push(current);
+        if (word.length <= limit){
+          current = word;
+        } else {
+          let rest = word;
+          while (rest.length > limit){
+            lines.push(rest.slice(0, limit - 1) + "-");
+            rest = rest.slice(limit - 1);
+          }
+          current = rest;
+        }
+      }
+    }
+    if (current) lines.push(current);
+    return lines;
+  }
+
+  function buildMinimalPdfBlob(lines){
+    const safeLines = Array.isArray(lines) ? lines.filter(Boolean).map(line => String(line)) : [];
+    const pageWidth = 595;
+    const pageHeight = 842;
+    const left = 48;
+    const top = 800;
+    const lineHeight = 15;
+    const commands = ["BT", "/F1 11 Tf"];
+    let y = top;
+    for (const line of safeLines){
+      if (y < 48) break;
+      commands.push(`1 0 0 1 ${left} ${y} Tm <${pdfHexText(line)}> Tj`);
+      y -= lineHeight;
+    }
+    commands.push("ET");
+    const stream = commands.join("\n") + "\n";
+
+    const objects = [
+      "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+      "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+      `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n`,
+      "4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
+      `5 0 obj\n<< /Length ${stream.length} >>\nstream\n${stream}endstream\nendobj\n`
+    ];
+
+    let pdf = "%PDF-1.4\n%\u00E2\u00E3\u00CF\u00D3\n";
+    const offsets = [0];
+    for (const obj of objects){
+      offsets.push(pdf.length);
+      pdf += obj;
+    }
+    const xrefOffset = pdf.length;
+    pdf += `xref\n0 ${objects.length + 1}\n`;
+    pdf += "0000000000 65535 f \n";
+    for (let i = 1; i < offsets.length; i++){
+      pdf += `${String(offsets[i]).padStart(10, "0")} 00000 n \n`;
+    }
+    pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+    return new Blob([pdf], { type: "application/pdf" });
+  }
+
+  async function generateInvoicePdfBlob(invoice){
+    const inv = invoice && typeof invoice === "object" ? invoice : null;
+    if (!inv) throw new Error("generateInvoicePdfBlob kräver en faktura.");
+
+    const company = state.company || {};
+    const customer = (state.customers && inv.customerId) ? (state.customers[inv.customerId] || {}) : {};
+    const totals = invoiceTotals(inv);
+    const currency = String(company.currency || "SEK");
+    const lines = [];
+
+    lines.push(`FAKTURA ${String(inv.no || "").trim() || "(utan nummer)"}`);
+    lines.push(`${String(company.name || "").trim() || "FU-BOOKKEEPING"}`);
+    if (company.orgnr) lines.push(`Org.nr: ${String(company.orgnr).trim()}`);
+    if (company.vat) lines.push(`Momsreg.nr: ${String(company.vat).trim()}`);
+    lines.push("");
+    lines.push(`Fakturadatum: ${String(inv.date || "").trim() || todayISO()}`);
+    lines.push(`Förfallodatum: ${String(inv.due || "").trim() || "-"}`);
+    if (inv.ref) lines.push(`Referens: ${String(inv.ref).trim()}`);
+    lines.push("");
+    lines.push(`Kund: ${String(customer.name || "").trim() || "(ingen kund)"}`);
+    if (customer.orgnr) lines.push(`Kund org.nr: ${String(customer.orgnr).trim()}`);
+    if (customer.email) lines.push(`Kund e-post: ${String(customer.email).trim()}`);
+    if (customer.addr) wrapPdfText(String(customer.addr), 72).forEach(part => lines.push(part));
+    lines.push("");
+    lines.push("RADER");
+
+    const invoiceLines = Array.isArray(inv.lines) ? inv.lines : [];
+    invoiceLines.forEach((ln, idx) => {
+      if (String(ln?.kind || "item") !== "item") {
+        wrapPdfText(String(ln?.desc || ""), 72).forEach((part, partIdx) => lines.push(partIdx === 0 ? `Kommentar ${idx + 1}: ${part}` : `  ${part}`));
+        return;
+      }
+      const qty = Number(ln?.qty || 0);
+      const price = Number(ln?.price || 0);
+      const vat = Number(ln?.vat || 0);
+      const amt = lineAmount({ kind:"item", qty, price, vat });
+      const descParts = wrapPdfText(String(ln?.desc || ""), 52);
+      lines.push(`Rad ${idx + 1}: ${descParts.shift() || "(utan beskrivning)"}`);
+      descParts.forEach(part => lines.push(`  ${part}`));
+      lines.push(`  Antal ${qty}  A-pris ${fmtSEK(price)}  Moms ${vat}%  Belopp ${fmtSEK(amt.gross)} ${currency}`);
+    });
+
+    lines.push("");
+    lines.push(`Summa exkl. moms: ${fmtSEK(totals.net)} ${currency}`);
+    lines.push(`Moms: ${fmtSEK(totals.vat)} ${currency}`);
+    lines.push(`Att betala: ${fmtSEK(totals.gross)} ${currency}`);
+    if (company.invoiceNote) {
+      lines.push("");
+      wrapPdfText(String(company.invoiceNote), 72).forEach((part, idx) => lines.push(idx === 0 ? `Notering: ${part}` : `  ${part}`));
+    }
+    if (company.invoiceFooter) {
+      lines.push("");
+      wrapPdfText(String(company.invoiceFooter), 72).forEach((part, idx) => lines.push(idx === 0 ? `Footer: ${part}` : `  ${part}`));
+    }
+
+    return buildMinimalPdfBlob(lines);
+  }
+
+  async function generateVoucherPdfBlob(voucher){
+    const v = voucher && typeof voucher === "object" ? voucher : null;
+    if (!v) throw new Error("generateVoucherPdfBlob kräver en verifikation.");
+
+    const company = state.company || {};
+    const voucherLines = Array.isArray(v.lines) ? v.lines : [];
+    let totalDebit = 0;
+    let totalCredit = 0;
+    const lines = [];
+
+    lines.push(`VERIFIKATION ${String(v.series || "").trim()}${String(v.no || "").trim()}`.trim() || "VERIFIKATION");
+    lines.push(`${String(company.name || "").trim() || "FU-BOOKKEEPING"}`);
+    lines.push("");
+    lines.push(`Datum: ${String(v.date || "").trim() || todayISO()}`);
+    lines.push(`Registrerad: ${String(v.regDate || "").trim() || todayISO()}`);
+    if (v.sign) lines.push(`Signatur: ${String(v.sign).trim()}`);
+    if (v.text) wrapPdfText(`Text: ${String(v.text)}`, 72).forEach(part => lines.push(part));
+    if (v.correctionOf) lines.push(`Rättelse av: ${String(v.correctionOf).trim()}`);
+    lines.push("");
+    lines.push("KONTORADER");
+
+    voucherLines.forEach((ln, idx) => {
+      const amount = Number(ln?.amount || 0);
+      const debit = amount > 0 ? amount : 0;
+      const credit = amount < 0 ? -amount : 0;
+      totalDebit += debit;
+      totalCredit += credit;
+      const accountNo = String(ln?.account || "").trim();
+      const accountName = String(state.accounts?.[accountNo]?.name || "").trim();
+      const header = `Rad ${idx + 1}: ${accountNo || "(utan konto)"}${accountName ? ` ${accountName}` : ""}`;
+      lines.push(header);
+      if (ln?.text) wrapPdfText(`  Text: ${String(ln.text)}`, 68).forEach(part => lines.push(part));
+      lines.push(`  Debet ${fmtSEK(debit)}  Kredit ${fmtSEK(credit)}`);
+    });
+
+    lines.push("");
+    lines.push(`Summa debet: ${fmtSEK(Math.round(totalDebit * 100) / 100)}`);
+    lines.push(`Summa kredit: ${fmtSEK(Math.round(totalCredit * 100) / 100)}`);
+    lines.push(`Balansdiff: ${fmtSEK(Math.round((totalDebit - totalCredit) * 100) / 100)}`);
+
+    return buildMinimalPdfBlob(lines);
+  }
+
+  async function registerGeneratedPdfDocument({ kind, number, date, linkedType, linkedId, blob, yearId, fileName, createdBy }){
+    const docKind = clampText(String(kind || "").trim(), 40) || "invoice_pdf";
+    const docYearId = String(yearId || (date ? String(date).slice(0,4) : state.activeYearId) || state.activeYearId || "").trim();
+    const docNumber = clampText(String(number || "").trim(), 80);
+    const docDate = String(date || "").trim() || todayISO();
+    const docLinkedType = clampText(String(linkedType || "").trim(), 40);
+    const docLinkedId = clampText(String(linkedId || "").trim(), 80);
+    const docCreatedBy = clampText(String(createdBy != null ? createdBy : (state.company?.defaultSign || "")).trim(), 60);
+
+    if (!(blob instanceof Blob)) throw new Error("registerGeneratedPdfDocument kräver en Blob.");
+
+    state.documents = Array.isArray(state.documents) ? state.documents : [];
+
+    const mime = String(blob.type || "application/pdf").trim() || "application/pdf";
+    const size = Number(blob.size || 0) || 0;
+    const sha256 = await sha256HexBlob(blob);
+    const effectiveFileName = safeFileName(fileName || "document.pdf");
+
+    const existing = state.documents.find(doc => doc && doc.kind === docKind && String(doc.number || "") === docNumber && String(doc.yearId || "") === docYearId && String(doc.status || "active") === "active");
+    if (existing && String(existing.sha256 || "") === sha256 && String(existing.mime || "") === mime && Number(existing.size || 0) === size) {
+      try {
+        const existingBlob = await idbGet("docBlob:" + existing.id);
+        if (existingBlob) {
+          existing.date = docDate;
+          existing.linkedType = docLinkedType;
+          existing.linkedId = docLinkedId;
+          existing.fileName = effectiveFileName;
+          existing.createdBy = existing.createdBy || docCreatedBy;
+          existing.status = existing.status || "active";
+          appendAudit({ action:"document.reuse", actor: docCreatedBy || undefined, entityType:"document", entityId: existing.id, yearId: docYearId, details:{ kind: docKind, number: docNumber, linkedType: docLinkedType, linkedId: docLinkedId, sha256 } });
+          save({ renderAll:false });
+          return existing;
+        }
+      } catch (e){ console.error(e); }
+    }
+
+    const now = nowISO();
+    const docId = existing?.id || crypto.randomUUID();
+    const record = {
+      id: docId,
+      yearId: docYearId,
+      kind: docKind,
+      number: docNumber,
+      date: docDate,
+      linkedType: docLinkedType,
+      linkedId: docLinkedId,
+      fileName: effectiveFileName,
+      mime,
+      size,
+      sha256,
+      createdAt: existing?.createdAt || now,
+      createdBy: existing?.createdBy || docCreatedBy,
+      status: "active"
+    };
+
+    await idbSet("docBlob:" + docId, blob);
+
+    const idx = state.documents.findIndex(doc => doc && doc.id === docId);
+    if (idx >= 0) state.documents[idx] = record; else state.documents.push(record);
+
+    appendAudit({
+      action: existing ? "document.replace" : "document.create",
+      actor: docCreatedBy || undefined,
+      entityType: "document",
+      entityId: docId,
+      yearId: docYearId,
+      details: {
+        kind: docKind,
+        number: docNumber,
+        linkedType: docLinkedType,
+        linkedId: docLinkedId,
+        fileName: effectiveFileName,
+        mime,
+        size,
+        sha256
+      }
+    });
+    save({ renderAll:false });
+    return record;
+  }
+
+  async function registerGeneratedWebshopDocument({ kind, number, date, linkedType, linkedId, payload, yearId, fileName, createdBy, sourceMeta }){
+    const docKind = clampText(String(kind || "").trim(), 40) || "webshop_order";
+    const docYearId = String(yearId || (date ? String(date).slice(0,4) : state.activeYearId) || state.activeYearId || "").trim();
+    const docNumber = clampText(String(number || "").trim(), 80);
+    const docDate = String(date || "").trim() || todayISO();
+    const docLinkedType = clampText(String(linkedType || "").trim(), 40);
+    const docLinkedId = clampText(String(linkedId || "").trim(), 80);
+    const docCreatedBy = clampText(String(createdBy != null ? createdBy : (state.company?.defaultSign || "")).trim(), 60);
+    const payloadObject = payload && typeof payload === "object" ? payload : null;
+    if (!payloadObject) throw new Error("registerGeneratedWebshopDocument kräver ett payload-objekt.");
+
+    state.documents = Array.isArray(state.documents) ? state.documents : [];
+
+    const jsonText = JSON.stringify(payloadObject, null, 2) + "\n";
+    const blob = new Blob([jsonText], { type: "application/json" });
+    const mime = "application/json";
+    const size = Number(blob.size || 0) || 0;
+    const sha256 = await sha256Hex(jsonText);
+    const effectiveFileName = safeFileName(fileName || "webshop-document.json");
+    const normalizedSourceMeta = (sourceMeta && typeof sourceMeta === "object") ? {
+      order_id: String(sourceMeta.order_id || "").trim(),
+      order_number: String(sourceMeta.order_number || "").trim(),
+      payload_id: String(sourceMeta.payload_id || "").trim(),
+      source: String(sourceMeta.source || "webshop").trim(),
+      payload_kind: String(sourceMeta.payload_kind || "").trim(),
+    } : null;
+
+    const existing = state.documents.find(doc => doc
+      && doc.kind === docKind
+      && String(doc.number || "") === docNumber
+      && String(doc.yearId || "") === docYearId
+      && String(doc.status || "active") === "active");
+
+    if (existing && String(existing.sha256 || "") === sha256 && String(existing.mime || "") === mime && Number(existing.size || 0) === size) {
+      try {
+        const existingBlob = await idbGet("docBlob:" + existing.id);
+        if (existingBlob) {
+          existing.date = docDate;
+          existing.linkedType = docLinkedType;
+          existing.linkedId = docLinkedId;
+          existing.fileName = effectiveFileName;
+          existing.createdBy = existing.createdBy || docCreatedBy;
+          existing.sourceMeta = normalizedSourceMeta;
+          existing.status = existing.status || "active";
+          appendAudit({ action:"document.reuse", actor: docCreatedBy || undefined, entityType:"document", entityId: existing.id, yearId: docYearId, details:{ kind: docKind, number: docNumber, linkedType: docLinkedType, linkedId: docLinkedId, sha256 } });
+          save({ renderAll:false });
+          return existing;
+        }
+      } catch (e){ console.error(e); }
+    }
+
+    const now = nowISO();
+    const docId = existing?.id || crypto.randomUUID();
+    const record = {
+      id: docId,
+      yearId: docYearId,
+      kind: docKind,
+      number: docNumber,
+      date: docDate,
+      linkedType: docLinkedType,
+      linkedId: docLinkedId,
+      fileName: effectiveFileName,
+      mime,
+      size,
+      sha256,
+      sourceMeta: normalizedSourceMeta,
+      createdAt: existing?.createdAt || now,
+      createdBy: existing?.createdBy || docCreatedBy,
+      status: "active"
+    };
+
+    await idbSet("docBlob:" + docId, blob);
+
+    const idx = state.documents.findIndex(doc => doc && doc.id === docId);
+    if (idx >= 0) state.documents[idx] = record; else state.documents.push(record);
+
+    appendAudit({
+      action: existing ? "document.replace" : "document.create",
+      actor: docCreatedBy || undefined,
+      entityType: "document",
+      entityId: docId,
+      yearId: docYearId,
+      details: {
+        kind: docKind,
+        number: docNumber,
+        linkedType: docLinkedType,
+        linkedId: docLinkedId,
+        fileName: effectiveFileName,
+        mime,
+        size,
+        sha256,
+        sourceMeta: normalizedSourceMeta,
+      }
+    });
+    save({ renderAll:false });
+    return record;
+  }
+
   function archiveBuildObject(yearId){
     const fy = (state.fiscalYears||[]).find(y=>y.id===yearId) || null;
     const vouchers = (state.vouchers||[]).filter(v=>v.yearId===yearId);
     const invoices = (state.invoices||[]).filter(i=>i.yearId===yearId);
     const supplierInvoices = (state.supplierInvoices||[]).filter(si=>si && si.yearId===yearId);
+    const documents = (state.documents||[]).filter(doc=>doc && String(doc.yearId||"")===String(yearId));
     const auditLog = (state.auditLog||[]).filter(e=>String(e.yearId||"")===String(yearId));
     const lockUntil = lockUntilForYear(yearId);
 
@@ -3424,6 +3847,7 @@ cur = {
       vouchers,
       invoices,
       supplierInvoices,
+      documents,
       customers,
       suppliers,
       underlag: (state.underlag||[]).filter(u=>u && (u.yearId||"")===yearId),
@@ -3504,6 +3928,14 @@ cur = {
       return `${stem}_${crypto.randomUUID().slice(0,8)}${ext}`;
     }
 
+    function archiveDocumentFolderParts(doc){
+      const kind = String(doc?.kind || "document").trim();
+      const number = safeStemPart(doc?.number || doc?.linkedId || doc?.id || "document", 80) || "document";
+      if (kind === "invoice_pdf") return ["documents", "invoices", number];
+      if (kind.startsWith("webshop_")) return ["documents", "webshop", safeStemPart(kind, 48) || "webshop", number];
+      return ["documents", safeStemPart(kind, 48) || "other", number];
+    }
+
     // Create folder structure
     const outDir = await root.getDirectoryHandle(base, { create: true });
 
@@ -3520,9 +3952,18 @@ cur = {
     const usedByFolder = new Map(); // folderPath -> Set(names)
 
     for (const u of underlag){
+      const originalFileName = safeFileName(u?.fileName || "underlag");
+      const plannedExportFileName = buildDatedUnderlagFileName(u);
       const blob = await idbGet("underlagBlob:" + u.id);
       if (!blob){
-        underlagIndex.push({ ...u, relPath: null, sha256: null, note2: "SAKNAS LOKALT (IndexedDB)" });
+        underlagIndex.push({
+          ...u,
+          originalFileName,
+          exportFileName: plannedExportFileName,
+          relPath: null,
+          sha256: null,
+          note2: "SAKNAS LOKALT (IndexedDB)"
+        });
         continue;
       }
 
@@ -3536,10 +3977,10 @@ cur = {
       const used = usedByFolder.get(folderPath) || new Set();
       usedByFolder.set(folderPath, used);
 
-      const fname = uniqueName(used, safeFileName(u.fileName || "underlag"));
-      await writeBlob(dir, fname, blob);
+      const exportFileName = uniqueName(used, plannedExportFileName);
+      await writeBlob(dir, exportFileName, blob);
 
-      const relPath = folderPath + "/" + fname;
+      const relPath = folderPath + "/" + exportFileName;
       const shaFile = await sha256HexBlob(blob);
       manifestLines.push(`${shaFile}  ${relPath}`);
 
@@ -3549,7 +3990,7 @@ cur = {
       try {
         const ocr = await idbGet("underlagOcr:" + u.id);
         if (ocr && ocr.text){
-          const baseName = String(fname).replace(/\.[A-Za-z0-9]{1,8}$/,"");
+          const baseName = String(exportFileName).replace(/\.[A-Za-z0-9]{1,8}$/,"");
           const ocrName = uniqueName(used, safeFileName(baseName + ".ocr.txt"));
           const ocrText = String(ocr.text || "");
           await writeText(dir, ocrName, ocrText, "text/plain;charset=utf-8");
@@ -3559,14 +4000,61 @@ cur = {
         }
       } catch (e){ /* ignore OCR export failures */ }
 
-      underlagIndex.push({ ...u, relPath, sha256: shaFile, ocrRelPath, ocrSha256 });
+      underlagIndex.push({
+        ...u,
+        originalFileName,
+        exportFileName,
+        date: u?.date || normalizeDateForFileName(u?.createdAt || ""),
+        type: u?.type || "",
+        ref: u?.ref || "",
+        relPath,
+        sha256: shaFile,
+        ocrRelPath,
+        ocrSha256
+      });
+    }
+
+    const documentIndex = [];
+    const documents = (state.documents||[]).filter(doc=>doc && String(doc.yearId||"")===String(yearId) && String(doc.status||"active") === "active");
+    for (const doc of documents){
+      const plannedFileName = safeFileName(doc?.fileName || (String(doc?.kind || "").startsWith("webshop_") ? "document.json" : "document.pdf"));
+      const blob = await idbGet("docBlob:" + doc.id).catch(()=> null);
+      const folderParts = archiveDocumentFolderParts(doc);
+      const folderPath = folderParts.join("/");
+      const dir = await ensureDir(outDir, folderParts);
+      const used = usedByFolder.get(folderPath) || new Set();
+      usedByFolder.set(folderPath, used);
+      const exportFileName = uniqueName(used, plannedFileName);
+
+      if (!blob){
+        documentIndex.push({
+          ...doc,
+          exportFileName,
+          relPath: null,
+          sha256: doc?.sha256 || null,
+          note2: "SAKNAS LOKALT (IndexedDB)"
+        });
+        continue;
+      }
+
+      await writeBlob(dir, exportFileName, blob);
+      const relPath = folderPath + "/" + exportFileName;
+      const shaFile = await sha256HexBlob(blob);
+      manifestLines.push(`${shaFile}  ${relPath}`);
+      documentIndex.push({
+        ...doc,
+        exportFileName,
+        relPath,
+        sha256: shaFile,
+      });
     }
 
     // Write underlag index + manifest
     await writeText(await ensureDir(outDir, ["underlag"]), "index.json", JSON.stringify({ yearId, base, generatedAt: new Date().toISOString(), items: underlagIndex }, null, 2) + "\n", "application/json");
+    await writeText(await ensureDir(outDir, ["documents"]), "index.json", JSON.stringify({ yearId, base, generatedAt: new Date().toISOString(), items: documentIndex }, null, 2) + "\n", "application/json");
     await writeText(outDir, "manifest.sha256.txt", manifestLines.sort((a,b)=>a.localeCompare(b,"sv")).join("\n") + "\n", "text/plain");
 
-    appendAudit({ action:"archive.exportFolder", entityType:"archive", entityId: base, yearId, details:{ shaArchive: shaJson, files: underlagIndex.length } });
+    appendAudit({ action:"archive.exportFolder", entityType:"archive", entityId: base, yearId, details:{ shaArchive: shaJson, files: underlagIndex.length + documentIndex.length, underlagFiles: underlagIndex.length, documentFiles: documentIndex.length } });
     save();
 
     if (archiveVerifyResult) archiveVerifyResult.textContent = `Skapade arkivmapp ${base} (${yearId}).`;
@@ -3600,6 +4088,178 @@ cur = {
     } else {
       showToast(ok ? "Arkiv OK" : "Arkiv FEL (checksum matchar inte)", 5500);
     }
+  }
+
+  function hasActiveDocumentForEntity({ yearId, kind, linkedType, linkedId }){
+    const targetYearId = String(yearId || "").trim();
+    const targetKind = String(kind || "").trim();
+    const targetLinkedType = String(linkedType || "").trim();
+    const targetLinkedId = String(linkedId || "").trim();
+    return (state.documents || []).some(doc => doc
+      && String(doc.status || "active") === "active"
+      && String(doc.yearId || "") === targetYearId
+      && String(doc.kind || "") === targetKind
+      && String(doc.linkedType || "") === targetLinkedType
+      && String(doc.linkedId || "") === targetLinkedId);
+  }
+
+  function buildWebshopBackfillPayloadFromVoucher(voucher){
+    const v = voucher && typeof voucher === "object" ? voucher : null;
+    if (!v) return null;
+    const importedFrom = (v.importedFrom && typeof v.importedFrom === "object") ? v.importedFrom : {};
+    return {
+      schema_version: "backfill-1.0",
+      source: String(importedFrom.source || "webshop"),
+      kind: String(importedFrom.kind || "receipt"),
+      order_id: String(importedFrom.order_id || ""),
+      order_number: String(importedFrom.order_number || ""),
+      voucher: {
+        id: v.id,
+        yearId: v.yearId,
+        series: v.series,
+        no: v.no,
+        date: v.date,
+        text: v.text,
+        regDate: v.regDate,
+        sign: v.sign,
+      },
+      lines: (Array.isArray(v.lines) ? v.lines : []).map(line => {
+        const amount = Number(line?.amount || 0);
+        return {
+          account: String(line?.account || "").trim(),
+          text: String(line?.text || "").trim(),
+          debit: amount > 0 ? Math.round(amount * 100) / 100 : 0,
+          credit: amount < 0 ? Math.round((-amount) * 100) / 100 : 0,
+        };
+      })
+    };
+  }
+
+  async function backfillMissingDocumentsForYear(yearId){
+    const targetYearId = String(yearId || "").trim();
+    if (!targetYearId) throw new Error("Saknar räkenskapsår för backfill.");
+
+    const stats = {
+      createdInvoices: 0,
+      createdVouchers: 0,
+      createdWebshop: 0,
+      skippedExisting: 0,
+      failed: 0,
+    };
+
+    const invoices = (state.invoices || []).filter(inv => inv && String(inv.yearId || "") === targetYearId);
+    for (const inv of invoices){
+      try {
+        if (hasActiveDocumentForEntity({ yearId: targetYearId, kind: "invoice_pdf", linkedType: "invoice", linkedId: inv.id })) {
+          stats.skippedExisting++;
+          continue;
+        }
+        const blob = await generateInvoicePdfBlob(inv);
+        const docFileName = safeFileName(`${normalizeDateForFileName(inv.date || "")}_invoice_${safeStemPart(inv.no || inv.id || "invoice", 48) || "invoice"}.pdf`);
+        await registerGeneratedPdfDocument({
+          kind: "invoice_pdf",
+          number: inv.no || inv.id,
+          date: inv.date || todayISO(),
+          linkedType: "invoice",
+          linkedId: inv.id,
+          blob,
+          yearId: inv.yearId,
+          fileName: docFileName,
+          createdBy: state.company?.defaultSign || "",
+        });
+        stats.createdInvoices++;
+      } catch (err) {
+        stats.failed++;
+        console.error("Invoice backfill failed", inv?.id, err);
+      }
+    }
+
+    const vouchers = (state.vouchers || []).filter(v => v && String(v.yearId || "") === targetYearId);
+    for (const v of vouchers){
+      try {
+        if (hasActiveDocumentForEntity({ yearId: targetYearId, kind: "voucher_pdf", linkedType: "voucher", linkedId: v.id })) {
+          stats.skippedExisting++;
+        } else {
+          const blob = await generateVoucherPdfBlob(v);
+          const docFileName = safeFileName(`${normalizeDateForFileName(v.date || "")}_voucher_${safeStemPart(`${v.series || ""}${v.no || v.id || "voucher"}`, 48) || "voucher"}.pdf`);
+          await registerGeneratedPdfDocument({
+            kind: "voucher_pdf",
+            number: `${v.series || ""}${v.no || ""}`.trim() || v.id,
+            date: v.date || todayISO(),
+            linkedType: "voucher",
+            linkedId: v.id,
+            blob,
+            yearId: v.yearId,
+            fileName: docFileName,
+            createdBy: v.sign || state.company?.defaultSign || "",
+          });
+          stats.createdVouchers++;
+        }
+      } catch (err) {
+        stats.failed++;
+        console.error("Voucher backfill failed", v?.id, err);
+      }
+
+      const importedFrom = (v.importedFrom && typeof v.importedFrom === "object") ? v.importedFrom : null;
+      if (!importedFrom || String(importedFrom.source || "").trim() !== "webshop") continue;
+
+      try {
+        const payloadKind = String(importedFrom.kind || "receipt").trim().toLowerCase();
+        const webshopDocKind = payloadKind === "order" ? "webshop_order" : "webshop_receipt";
+        if (hasActiveDocumentForEntity({ yearId: targetYearId, kind: webshopDocKind, linkedType: "voucher", linkedId: v.id })) {
+          stats.skippedExisting++;
+          continue;
+        }
+
+        const payload = buildWebshopBackfillPayloadFromVoucher(v);
+        const webshopDocDate = String(v.date || todayISO()).slice(0,10);
+        const orderNumber = String(importedFrom.order_number || "").trim();
+        const orderId = String(importedFrom.order_id || "").trim();
+        const webshopDocNumber = orderNumber || orderId || `${v.series || ""}${v.no || ""}`.trim() || v.id;
+        await registerGeneratedWebshopDocument({
+          kind: webshopDocKind,
+          number: webshopDocNumber,
+          date: webshopDocDate,
+          linkedType: "voucher",
+          linkedId: v.id,
+          payload,
+          yearId: v.yearId,
+          fileName: buildDatedWebshopDocumentFileName({
+            date: webshopDocDate,
+            kind: webshopDocKind,
+            orderNumber,
+            orderId,
+            payloadId: v.id,
+            ext: ".json",
+          }),
+          createdBy: v.sign || state.company?.defaultSign || "",
+          sourceMeta: {
+            order_id: orderId,
+            order_number: orderNumber,
+            payload_id: v.id,
+            source: importedFrom.source || "webshop",
+            payload_kind: importedFrom.kind || "",
+          }
+        });
+        stats.createdWebshop++;
+      } catch (err) {
+        stats.failed++;
+        console.error("Webshop backfill failed", v?.id, err);
+      }
+    }
+
+    try {
+      appendAudit({
+        action: "document.backfill",
+        entityType: "document",
+        entityId: targetYearId,
+        yearId: targetYearId,
+        details: { ...stats }
+      });
+    } catch (e) { console.error(e); }
+
+    try { save({ renderAll: false }); } catch (e) { console.error(e); }
+    return stats;
   }
 
 
@@ -4122,6 +4782,7 @@ cur = {
       suppliers: {},
       supplierInvoices: [],
       invoices: [],
+      documents: [],
       locks: {},
       compliance: { immutableVouchers: true },
       auditSeq: 0,
@@ -4278,6 +4939,7 @@ if (!d.features) d.features = { sruEnabled: false };
       if (!d.suppliers) d.suppliers = {};
       if (!d.supplierInvoices) d.supplierInvoices = [];
       if (!d.invoices) d.invoices = [];
+      if (!d.documents) d.documents = [];
       
       
       if (!d.locks || typeof d.locks !== "object") d.locks = {};
@@ -4934,6 +5596,14 @@ if (!d.features) d.features = { sruEnabled: false };
   const sieImportEncoding = document.getElementById("sieImportEncoding");
   const sieImportWipe = document.getElementById("sieImportWipe");
   const sieImportParallel = document.getElementById("sieImportParallel");
+  const archiveYearSelect = document.getElementById("archiveYearSelect");
+  const btnMakeArchive = document.getElementById("btnMakeArchive");
+  const btnMakeArchiveFolder = document.getElementById("btnMakeArchiveFolder");
+  const btnBackfillMissingDocuments = document.getElementById("btnBackfillMissingDocuments");
+  const archiveImportJson = document.getElementById("archiveImportJson");
+  const archiveImportSha = document.getElementById("archiveImportSha");
+  const btnVerifyArchive = document.getElementById("btnVerifyArchive");
+  const archiveVerifyResult = document.getElementById("archiveVerifyResult");
 
   
   const sieImportFileName = document.getElementById("sieImportFileName");
@@ -5748,6 +6418,40 @@ if (!d.features) d.features = { sruEnabled: false };
       try {
         const v = voucherFromWebshopPayload(p, { series: cfg.series });
         const voucher_id = `${v.series}${v.no}`;
+        try {
+          const payloadKind = String(p?.kind || item?.kind || "").trim().toLowerCase();
+          const webshopDocKind = payloadKind === "order" ? "webshop_order" : "webshop_receipt";
+          const webshopDocNumber = String(p?.order_number || p?.order_id || item?.order_id || payloadId || voucher_id || "").trim() || voucher_id;
+          const webshopDocDate = String(p?.date || v.date || todayISO()).slice(0,10);
+          await registerGeneratedWebshopDocument({
+            kind: webshopDocKind,
+            number: webshopDocNumber,
+            date: webshopDocDate,
+            linkedType: "voucher",
+            linkedId: v.id,
+            payload: p,
+            yearId: v.yearId,
+            fileName: buildDatedWebshopDocumentFileName({
+              date: webshopDocDate,
+              kind: webshopDocKind,
+              orderNumber: p?.order_number,
+              orderId: p?.order_id || item?.order_id,
+              payloadId,
+              ext: ".json",
+            }),
+            createdBy: state.company?.defaultSign || v.sign || "",
+            sourceMeta: {
+              order_id: p?.order_id || item?.order_id || "",
+              order_number: p?.order_number || "",
+              payload_id: payloadId,
+              source: p?.source || "webshop",
+              payload_kind: p?.kind || item?.kind || "",
+            }
+          });
+        } catch (docErr) {
+          console.error("Webshop document archive failed", docErr);
+          try { showToast(`Kunde inte arkivera webshop-dokument för ${voucher_id}. Importen fortsätter.`, 5500); } catch (_) {}
+        }
         markWebshopPayloadImported(companyId, payloadId, voucher_id);
         try {
           appendAudit({ action:"voucher.import", actor: v.sign || undefined, entityType:"voucher", entityId: v.id, yearId: v.yearId, details:{ source:"webshop", payloadId, voucher_id, order_id: item?.order_id || null, kind: item?.kind || null } });
@@ -9041,6 +9745,27 @@ if (!d.features) d.features = { sruEnabled: false };
     save();
     newInvoice();
     renderInvoices();
+
+    (async ()=>{
+      try {
+        const blob = await generateInvoicePdfBlob(inv);
+        const docFileName = safeFileName(`${normalizeDateForFileName(inv.date || date)}_invoice_${safeStemPart(inv.no || inv.id || "invoice", 48) || "invoice"}.pdf`);
+        await registerGeneratedPdfDocument({
+          kind: "invoice_pdf",
+          number: inv.no || inv.id,
+          date: inv.date || date,
+          linkedType: "invoice",
+          linkedId: inv.id,
+          blob,
+          yearId: inv.yearId,
+          fileName: docFileName,
+          createdBy: state.company?.defaultSign || "",
+        });
+      } catch (err) {
+        console.error("Invoice PDF archive failed", err);
+        try { showToast("Kunde inte arkivera faktura-PDF lokalt. Fakturan sparades ändå.", 5500); } catch (_) {}
+      }
+    })();
   }
 
   function invoiceTotals(inv){
@@ -11048,6 +11773,60 @@ if (!d.features) d.features = { sruEnabled: false };
       .trim();
   }
 
+  function safeStemPart(value, maxLen=48){
+    let s = String(value ?? "").trim();
+    if (!s) return "";
+    try { s = s.normalize("NFKD"); } catch (_) {}
+    s = s
+      .replace(/[\u0300-\u036f]/g, "")
+      .replaceAll("\\", " ").replaceAll("/", " ")
+      .replace(/[<>:"|?*\u0000-\u001F]/g, " ")
+      .replace(/\s+/g, "_")
+      .replace(/[^A-Za-z0-9._-]+/g, "_")
+      .replace(/_+/g, "_")
+      .replace(/^[_\. -]+|[_\. -]+$/g, "");
+    if (!s) return "";
+    return s.slice(0, Math.max(8, Number(maxLen)||48)).replace(/^[_\. -]+|[_\. -]+$/g, "");
+  }
+
+  function normalizeDateForFileName(value){
+    const raw = String(value || "").trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+    if (/^\d{8}$/.test(raw)) return ymd8ToIso(raw);
+    const isoPrefix = raw.slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(isoPrefix)) return isoPrefix;
+    return "undated";
+  }
+
+  function buildDatedUnderlagFileName(u){
+    const original = safeFileName(u?.fileName || "underlag");
+    const m = String(original).match(/^(.*?)(\.[A-Za-z0-9]{1,8})?$/);
+    const originalStem = safeStemPart((m && m[1]) ? m[1] : original, 80) || "underlag";
+    const ext = (m && m[2]) ? m[2] : "";
+    const date = normalizeDateForFileName(u?.date || u?.createdAt || "");
+    const type = safeStemPart(u?.type || "underlag", 32) || "underlag";
+    const ref = safeStemPart(u?.ref || "", 40);
+    const parts = [date, type];
+    if (ref) parts.push(ref);
+    parts.push(originalStem);
+    const stem = parts.filter(Boolean).join("_").replace(/_+/g, "_").replace(/^_+|_+$/g, "") || "undated_underlag";
+    return stem + ext;
+  }
+
+  function buildDatedWebshopDocumentFileName({ date, kind, orderNumber, orderId, payloadId, ext } = {}){
+    const normalizedExt = (() => {
+      const raw = String(ext || ".json").trim() || ".json";
+      return raw.startsWith(".") ? raw : ("." + raw);
+    })();
+    const normalizedDate = normalizeDateForFileName(date || "");
+    const type = safeStemPart(kind || "webshop_document", 32) || "webshop_document";
+    const orderRef = safeStemPart(orderNumber || orderId || payloadId || "", 48);
+    const parts = [normalizedDate, type];
+    if (orderRef) parts.push(orderRef);
+    const stem = parts.filter(Boolean).join("_").replace(/_+/g, "_").replace(/^_+|_+$/g, "") || "undated_webshop_document";
+    return safeFileName(stem + normalizedExt);
+  }
+
   function underlagForVoucher(voucherId){
     const id = voucherId || currentVoucherId();
     return (state.underlag || []).filter(u => u && u.voucherId === id);
@@ -12359,6 +13138,28 @@ if (!d.features) d.features = { sruEnabled: false };
     save();
     newVoucher();
     renderVouchers();
+
+    (async ()=>{
+      try {
+        const blob = await generateVoucherPdfBlob(v);
+        const docFileName = safeFileName(`${normalizeDateForFileName(v.date || date)}_voucher_${safeStemPart(`${v.series || ""}${v.no || v.id || "voucher"}`, 48) || "voucher"}.pdf`);
+        await registerGeneratedPdfDocument({
+          kind: "voucher_pdf",
+          number: `${v.series || ""}${v.no || ""}`.trim() || v.id,
+          date: v.date || date,
+          linkedType: "voucher",
+          linkedId: v.id,
+          blob,
+          yearId: v.yearId,
+          fileName: docFileName,
+          createdBy: v.sign || state.company?.defaultSign || "",
+        });
+      } catch (err) {
+        console.error("Voucher PDF archive failed", err);
+        try { showToast("Kunde inte arkivera verifikations-PDF lokalt. Verifikationen sparades ändå.", 5500); } catch (_) {}
+      }
+    })();
+
     // If user already generated a report, keep it in sync
     try { if (lastReportHtml) generateReport(); } catch (e){ console.error(e); }
   }
@@ -14347,6 +15148,19 @@ if (sOrgnr) sOrgnr.addEventListener("input", ()=>{ try { updateWsCredIdPreview()
       catch(err){ console.error(err); showToast("Kunde inte skapa arkivmapp. Se konsolen för detaljer.", 8000); }
     });
   }
+  if (btnBackfillMissingDocuments){
+    btnBackfillMissingDocuments.addEventListener("click", async (e)=>{
+      e.preventDefault();
+      try {
+        const yearId = (archiveYearSelect && archiveYearSelect.value) || state.activeYearId;
+        const stats = await backfillMissingDocumentsForYear(yearId);
+        const msg = `Backfill ${yearId}: kundfakturor ${stats.createdInvoices}, verifikationer ${stats.createdVouchers}, webshop ${stats.createdWebshop}, hoppade ${stats.skippedExisting}, fel ${stats.failed}.`;
+        if (archiveVerifyResult) archiveVerifyResult.textContent = msg;
+        showToast(msg, 7000);
+      }
+      catch(err){ console.error(err); showToast("Kunde inte skapa saknade dokument. Se konsolen för detaljer.", 8000); }
+    });
+  }
   if (btnVerifyArchive){
     btnVerifyArchive.addEventListener("click", async (e)=>{
       e.preventDefault();
@@ -14360,6 +15174,7 @@ if (sOrgnr) sOrgnr.addEventListener("input", ()=>{ try { updateWsCredIdPreview()
     const b1 = e.target && e.target.closest ? e.target.closest("#btnMakeArchive") : null;
     const b2 = e.target && e.target.closest ? e.target.closest("#btnVerifyArchive") : null;
     const b3 = e.target && e.target.closest ? e.target.closest("#btnMakeArchiveFolder") : null;
+    const b4 = e.target && e.target.closest ? e.target.closest("#btnBackfillMissingDocuments") : null;
     if (b1){
       e.preventDefault();
       makeArchive((archiveYearSelect && archiveYearSelect.value) || state.activeYearId);
@@ -14371,6 +15186,17 @@ if (sOrgnr) sOrgnr.addEventListener("input", ()=>{ try { updateWsCredIdPreview()
     if (b3){
       e.preventDefault();
       makeArchiveFolder((archiveYearSelect && archiveYearSelect.value) || state.activeYearId);
+    }
+    if (b4){
+      e.preventDefault();
+      backfillMissingDocumentsForYear((archiveYearSelect && archiveYearSelect.value) || state.activeYearId)
+        .then((stats)=>{
+          const yearId = (archiveYearSelect && archiveYearSelect.value) || state.activeYearId;
+          const msg = `Backfill ${yearId}: kundfakturor ${stats.createdInvoices}, verifikationer ${stats.createdVouchers}, webshop ${stats.createdWebshop}, hoppade ${stats.skippedExisting}, fel ${stats.failed}.`;
+          if (archiveVerifyResult) archiveVerifyResult.textContent = msg;
+          showToast(msg, 7000);
+        })
+        .catch((err)=>{ console.error(err); showToast("Kunde inte skapa saknade dokument. Se konsolen för detaljer.", 8000); });
     }
   }, true);
 })();

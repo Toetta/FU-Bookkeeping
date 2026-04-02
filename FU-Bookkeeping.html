@@ -1943,6 +1943,66 @@ Tack!</div>
           </div>
           <div id="archiveVerifyResult" class="muted small" style="margin-top:10px;"></div>
         </div>
+
+        <div class="card">
+          <div class="row" style="justify-content:space-between; gap:10px; align-items:center; margin-bottom:10px; flex-wrap:wrap;">
+            <h2>Dokumentlista</h2>
+            <button class="btn secondary" id="btnRefreshDocumentList" type="button">Uppdatera lista</button>
+          </div>
+          <div class="row" style="gap:10px; flex-wrap:wrap; align-items:end; margin-bottom:10px;">
+            <div class="field" style="min-width:180px;">
+              <label>Kind</label>
+              <select id="docListKindFilter">
+                <option value="">Alla</option>
+                <option value="invoice_pdf">invoice_pdf</option>
+                <option value="voucher_pdf">voucher_pdf</option>
+                <option value="webshop_*">webshop_*</option>
+                <option value="webshop_order">webshop_order</option>
+                <option value="webshop_receipt">webshop_receipt</option>
+              </select>
+            </div>
+            <div class="field" style="min-width:160px;">
+              <label>Status</label>
+              <select id="docListStatusFilter">
+                <option value="">Alla</option>
+                <option value="active">active</option>
+                <option value="detached">detached</option>
+              </select>
+            </div>
+            <div class="field" style="min-width:160px;">
+              <label>Linked type</label>
+              <select id="docListLinkedTypeFilter">
+                <option value="">Alla</option>
+              </select>
+            </div>
+            <div class="field" style="min-width:150px;">
+              <label>Datum från</label>
+              <input id="docListDateFrom" type="date" />
+            </div>
+            <div class="field" style="min-width:150px;">
+              <label>Datum till</label>
+              <input id="docListDateTo" type="date" />
+            </div>
+          </div>
+          <div id="documentListStatus" class="muted small" style="margin-bottom:10px;"></div>
+          <div style="overflow:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Datum</th>
+                  <th>Kind</th>
+                  <th>Nummer/ref</th>
+                  <th>Linked type</th>
+                  <th>Linked id</th>
+                  <th>Filnamn</th>
+                  <th>Blob-status</th>
+                  <th>Skapad</th>
+                </tr>
+              </thead>
+              <tbody id="documentListTbody"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </section>
       </div>
@@ -3858,6 +3918,7 @@ cur = {
 
   async function makeArchive(yearId){
     if (!yearId) return showToast("Välj räkenskapsår.", 3500);
+    try { await backfillMissingDocumentsForYear(yearId); } catch (e) { console.error("Archive backfill failed", e); }
     const obj = archiveBuildObject(yearId);
     const json = JSON.stringify(obj, null, 2) + "\n";
     const sha = await sha256Hex(json);
@@ -3877,6 +3938,8 @@ cur = {
       showToast("Arkivmapp kräver Chrome/Edge i HTTPS/localhost (File System Access API).", 6500);
       return;
     }
+
+    try { await backfillMissingDocumentsForYear(yearId); } catch (e) { console.error("Archive folder backfill failed", e); }
 
     const obj = archiveBuildObject(yearId);
     const json = JSON.stringify(obj, null, 2) + "\n";
@@ -4090,17 +4153,103 @@ cur = {
     }
   }
 
-  function hasActiveDocumentForEntity({ yearId, kind, linkedType, linkedId }){
+  let documentListRenderToken = 0;
+
+  function documentKindMatchesFilter(doc, filterValue){
+    const kind = String(doc?.kind || "").trim();
+    const filter = String(filterValue || "").trim();
+    if (!filter) return true;
+    if (filter === "webshop_*") return kind.startsWith("webshop_");
+    return kind === filter;
+  }
+
+  async function getDocumentBlobPresence(docId){
+    try {
+      return !!(await idbGet("docBlob:" + docId));
+    } catch (_) {
+      return false;
+    }
+  }
+
+  async function renderDocumentRegistryList(){
+    if (!documentListTbody) return;
+    const token = ++documentListRenderToken;
+    const yearId = String((archiveYearSelect && archiveYearSelect.value) || state.activeYearId || "").trim();
+    const kindFilter = String(docListKindFilter?.value || "").trim();
+    const statusFilter = String(docListStatusFilter?.value || "").trim();
+    const linkedTypeFilter = String(docListLinkedTypeFilter?.value || "").trim();
+    const fromDate = String(docListDateFrom?.value || "").trim();
+    const toDate = String(docListDateTo?.value || "").trim();
+
+    const docsForYear = (state.documents || []).filter(doc => doc && String(doc.yearId || "") === yearId);
+
+    if (docListLinkedTypeFilter){
+      const current = String(docListLinkedTypeFilter.value || "");
+      const linkedTypes = Array.from(new Set(docsForYear.map(doc => String(doc.linkedType || "").trim()).filter(Boolean))).sort((a,b)=>a.localeCompare(b, "sv"));
+      docListLinkedTypeFilter.innerHTML = `<option value="">Alla</option>` + linkedTypes.map(value => `<option value="${escapeAttr(value)}">${escapeHtml(value)}</option>`).join("");
+      docListLinkedTypeFilter.value = linkedTypes.includes(current) ? current : "";
+    }
+
+    const filtered = docsForYear
+      .filter(doc => documentKindMatchesFilter(doc, kindFilter))
+      .filter(doc => !statusFilter || String(doc.status || "") === statusFilter)
+      .filter(doc => !linkedTypeFilter || String(doc.linkedType || "") === linkedTypeFilter)
+      .filter(doc => !fromDate || String(doc.date || "") >= fromDate)
+      .filter(doc => !toDate || String(doc.date || "") <= toDate)
+      .slice()
+      .sort((a,b)=> String(b.date || "").localeCompare(String(a.date || ""), "sv") || String(b.createdAt || "").localeCompare(String(a.createdAt || ""), "sv"));
+
+    if (!filtered.length){
+      documentListTbody.innerHTML = `<tr><td colspan="8" class="muted small">Inga dokument matchar filtret.</td></tr>`;
+      if (documentListStatus) documentListStatus.textContent = yearId ? `0 dokument för ${yearId}.` : "Välj räkenskapsår.";
+      return;
+    }
+
+    const rows = await Promise.all(filtered.map(async (doc)=>{
+      const hasBlob = await getDocumentBlobPresence(doc.id);
+      return {
+        doc,
+        hasBlob,
+        number: String(doc.number || doc.sourceMeta?.order_number || doc.sourceMeta?.order_id || "").trim() || "-",
+      };
+    }));
+    if (token !== documentListRenderToken) return;
+
+    documentListTbody.innerHTML = rows.map(({ doc, hasBlob, number }) => `
+      <tr>
+        <td>${escapeHtml(String(doc.date || "-"))}</td>
+        <td>${escapeHtml(String(doc.kind || "-"))}</td>
+        <td>${escapeHtml(number)}</td>
+        <td>${escapeHtml(String(doc.linkedType || "-"))}</td>
+        <td>${escapeHtml(String(doc.linkedId || "-"))}</td>
+        <td>${escapeHtml(String(doc.fileName || "-"))}</td>
+        <td>${hasBlob ? '<span class="status ok">finns</span>' : '<span class="status bad">saknas lokalt</span>'}</td>
+        <td>${escapeHtml(String(doc.createdAt || "-"))}</td>
+      </tr>
+    `).join("");
+
+    const localCount = rows.filter(row => row.hasBlob).length;
+    if (documentListStatus) documentListStatus.textContent = `Visar ${rows.length} dokument för ${yearId}. Lokala blobbar: ${localCount}/${rows.length}.`;
+  }
+
+  function getActiveDocumentForEntity({ yearId, kind, linkedType, linkedId }){
     const targetYearId = String(yearId || "").trim();
     const targetKind = String(kind || "").trim();
     const targetLinkedType = String(linkedType || "").trim();
     const targetLinkedId = String(linkedId || "").trim();
-    return (state.documents || []).some(doc => doc
+    return (state.documents || []).find(doc => doc
       && String(doc.status || "active") === "active"
       && String(doc.yearId || "") === targetYearId
       && String(doc.kind || "") === targetKind
       && String(doc.linkedType || "") === targetLinkedType
-      && String(doc.linkedId || "") === targetLinkedId);
+      && String(doc.linkedId || "") === targetLinkedId) || null;
+  }
+
+  async function shouldBackfillEntityDocument({ yearId, kind, linkedType, linkedId }){
+    const doc = getActiveDocumentForEntity({ yearId, kind, linkedType, linkedId });
+    if (!doc) return { shouldCreate: true, doc: null, hasBlob: false };
+    const hasBlob = await getDocumentBlobPresence(doc.id);
+    return { shouldCreate: !hasBlob, doc, hasBlob };
   }
 
   function buildWebshopBackfillPayloadFromVoucher(voucher){
@@ -4150,7 +4299,8 @@ cur = {
     const invoices = (state.invoices || []).filter(inv => inv && String(inv.yearId || "") === targetYearId);
     for (const inv of invoices){
       try {
-        if (hasActiveDocumentForEntity({ yearId: targetYearId, kind: "invoice_pdf", linkedType: "invoice", linkedId: inv.id })) {
+        const invoiceState = await shouldBackfillEntityDocument({ yearId: targetYearId, kind: "invoice_pdf", linkedType: "invoice", linkedId: inv.id });
+        if (!invoiceState.shouldCreate) {
           stats.skippedExisting++;
           continue;
         }
@@ -4177,7 +4327,8 @@ cur = {
     const vouchers = (state.vouchers || []).filter(v => v && String(v.yearId || "") === targetYearId);
     for (const v of vouchers){
       try {
-        if (hasActiveDocumentForEntity({ yearId: targetYearId, kind: "voucher_pdf", linkedType: "voucher", linkedId: v.id })) {
+        const voucherState = await shouldBackfillEntityDocument({ yearId: targetYearId, kind: "voucher_pdf", linkedType: "voucher", linkedId: v.id });
+        if (!voucherState.shouldCreate) {
           stats.skippedExisting++;
         } else {
           const blob = await generateVoucherPdfBlob(v);
@@ -4206,7 +4357,8 @@ cur = {
       try {
         const payloadKind = String(importedFrom.kind || "receipt").trim().toLowerCase();
         const webshopDocKind = payloadKind === "order" ? "webshop_order" : "webshop_receipt";
-        if (hasActiveDocumentForEntity({ yearId: targetYearId, kind: webshopDocKind, linkedType: "voucher", linkedId: v.id })) {
+        const webshopState = await shouldBackfillEntityDocument({ yearId: targetYearId, kind: webshopDocKind, linkedType: "voucher", linkedId: v.id });
+        if (!webshopState.shouldCreate) {
           stats.skippedExisting++;
           continue;
         }
@@ -5604,6 +5756,14 @@ if (!d.features) d.features = { sruEnabled: false };
   const archiveImportSha = document.getElementById("archiveImportSha");
   const btnVerifyArchive = document.getElementById("btnVerifyArchive");
   const archiveVerifyResult = document.getElementById("archiveVerifyResult");
+  const btnRefreshDocumentList = document.getElementById("btnRefreshDocumentList");
+  const docListKindFilter = document.getElementById("docListKindFilter");
+  const docListStatusFilter = document.getElementById("docListStatusFilter");
+  const docListLinkedTypeFilter = document.getElementById("docListLinkedTypeFilter");
+  const docListDateFrom = document.getElementById("docListDateFrom");
+  const docListDateTo = document.getElementById("docListDateTo");
+  const documentListStatus = document.getElementById("documentListStatus");
+  const documentListTbody = document.getElementById("documentListTbody");
 
   
   const sieImportFileName = document.getElementById("sieImportFileName");
@@ -6932,6 +7092,7 @@ if (!d.features) d.features = { sruEnabled: false };
 
     // Only hydrate settings fields if Settings tab is currently visible (avoid overriding user typing)
     try { if (sections && sections.settings && !sections.settings.hidden) renderSettings(); } catch {}
+    try { if (sections && sections.export && !sections.export.hidden && typeof renderDocumentRegistryList === "function") renderDocumentRegistryList(); } catch {}
     try { updateFsUI(); } catch {}
   }
 
@@ -6956,6 +7117,11 @@ if (!d.features) d.features = { sruEnabled: false };
     if (tabKey === "bank_inbox") safeUiCall(typeof BankImportModule !== "undefined" && BankImportModule && typeof BankImportModule.renderInbox === "function" ? BankImportModule.renderInbox : null);
     if (tabKey === "accounts") safeUiCall(typeof renderAccounts === "function" ? renderAccounts : null);
     if (tabKey === "invoices") safeUiCall(typeof renderInvoices === "function" ? renderInvoices : null);
+    if (tabKey === "export") {
+      Promise.resolve()
+        .then(()=> (typeof renderDocumentRegistryList === "function") ? renderDocumentRegistryList() : null)
+        .catch((err)=> console.error(err));
+    }
     if (tabKey === "orderstock") {
       Promise.resolve()
         .then(()=> (typeof renderOrderstock === "function") ? renderOrderstock() : null)
@@ -15161,6 +15327,12 @@ if (sOrgnr) sOrgnr.addEventListener("input", ()=>{ try { updateWsCredIdPreview()
       catch(err){ console.error(err); showToast("Kunde inte skapa saknade dokument. Se konsolen för detaljer.", 8000); }
     });
   }
+  if (btnRefreshDocumentList) btnRefreshDocumentList.addEventListener("click", ()=>{ renderDocumentRegistryList().catch(err=> console.error(err)); });
+  if (archiveYearSelect) archiveYearSelect.addEventListener("change", ()=>{ renderDocumentRegistryList().catch(err=> console.error(err)); });
+  [docListKindFilter, docListStatusFilter, docListLinkedTypeFilter, docListDateFrom, docListDateTo].filter(Boolean).forEach(el => {
+    el.addEventListener("change", ()=>{ renderDocumentRegistryList().catch(err=> console.error(err)); });
+    el.addEventListener("input", ()=>{ renderDocumentRegistryList().catch(err=> console.error(err)); });
+  });
   if (btnVerifyArchive){
     btnVerifyArchive.addEventListener("click", async (e)=>{
       e.preventDefault();

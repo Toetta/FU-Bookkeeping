@@ -2899,6 +2899,19 @@ function documentMirrorRootFolderName(){
   return `${dataFileStemForMirror()}_files`;
 }
 
+function yearsWithMirrorCandidates(){
+  const years = new Set();
+  (state.invoices || []).forEach(inv => {
+    const yearId = String(inv?.yearId || "").trim();
+    if (yearId) years.add(yearId);
+  });
+  (state.vouchers || []).forEach(v => {
+    const yearId = String(v?.yearId || "").trim();
+    if (yearId) years.add(yearId);
+  });
+  return Array.from(years).sort((a,b)=>a.localeCompare(b, "sv"));
+}
+
 function documentMirrorFolderParts(doc){
   const root = documentMirrorRootFolderName();
   const yearId = safeStemPart(doc?.yearId || "unknown", 24) || "unknown";
@@ -2939,6 +2952,17 @@ async function syncDocumentsToBackupDir(reason, options = {}){
 
   const ok = await backupEnsurePermission(!!options.requestPermission);
   if (!ok) return false;
+
+  if (options.backfill !== false && typeof backfillMissingDocumentsForYear === "function"){
+    const years = yearsWithMirrorCandidates();
+    for (const yearId of years){
+      try {
+        await backfillMissingDocumentsForYear(yearId);
+      } catch (e){
+        console.warn("Document mirror backfill failed", yearId, e);
+      }
+    }
+  }
 
   const rootName = documentMirrorRootFolderName();
   const docs = (state.documents || [])
@@ -3123,7 +3147,7 @@ async function chooseBackupFolder(){
     updateBackupUI();
     // Create today's backup immediately (still max 1/day)
     await maybeDailyAutoBackup("choose-folder");
-    try { await syncDocumentsToBackupDir("choose-folder", { requestPermission: false }); } catch (e) { console.warn("Document mirror sync failed", e); }
+    try { await syncDocumentsToBackupDir("choose-folder", { requestPermission: false, backfill: true }); } catch (e) { console.warn("Document mirror sync failed", e); }
     showToast("Backup-mapp vald. Dokument speglas nu hit i mappsystem.", 3000);
   } catch (e){
     if (e && e.name === "AbortError") return;
@@ -5779,7 +5803,7 @@ if (!d.features) d.features = { sruEnabled: false };
     if (fsDocumentMirrorTimer) clearTimeout(fsDocumentMirrorTimer);
     fsDocumentMirrorTimer = setTimeout(async ()=>{
       try {
-        await syncDocumentsToBackupDir(reason || "save", { requestPermission: false });
+        await syncDocumentsToBackupDir(reason || "save", { requestPermission: false, backfill: !((state.documents || []).length) });
       } catch (e){
         console.warn("Document mirror autosync failed", e);
       }

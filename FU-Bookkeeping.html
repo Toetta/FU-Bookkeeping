@@ -1623,6 +1623,7 @@
                 <select id="invContactSelect"></select>
               </div>
               <div id="invCustomerBox" class="muted small">Ingen kund vald.</div>
+              <div id="invWorkflowHint" class="muted small" style="margin-top:10px;"></div>
             </div>
 
             <div class="card" style="padding:10px; border-radius:14px; background:rgba(11,18,32,.90);">
@@ -2266,6 +2267,14 @@
                   <label>Momsreg.nr / VAT (valfritt)</label>
                   <input id="sVat" placeholder="SE559999999901" />
                 </div>
+                <div class="field" style="min-width:220px;">
+                  <label>Bokföringsmetod</label>
+                  <select id="sAccountingMethod">
+                    <option value="cash">Kontantmetoden</option>
+                    <option value="accrual">Faktureringsmetoden</option>
+                  </select>
+                  <div class="muted small" style="margin-top:6px;">Kontantmetoden bokför normalt när betalning sker. Faktureringsmetoden bokför när fakturan utfärdas eller skickas.</div>
+                </div>
                 <div class="field" style="min-width:160px;">
                   <label>Betalvillkor (dagar)</label>
                   <input id="sPayDays" inputmode="numeric" placeholder="30" />
@@ -2819,8 +2828,8 @@ Tack!</div>
 (function(){
  
 
-  const APP_VERSION = "1.4.32"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.43";  // user-facing revision
+  const APP_VERSION = "1.4.33"; // bump when adding new data fields
+  const APP_SEMVER = "0.3.44";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -6206,7 +6215,7 @@ cur = {
     const now = new Date();
     const y = now.getFullYear();
     return {
-      company: { name: "FU-BOOKKEEPING", orgnr: "", legalForm: "auto", currency: "SEK", defaultSign: "", addr:"", zip:"", city:"", country:"", email:"", phone:"", web:"", vat:"", payDays:30, bankgiro:"", plusgiro:"", swishPhone:"", bankAccountNo:"", iban:"", swift:"", invoiceNote:"", invoiceFooter:"", logoDataUrl:"", webshopSync: { enabled: false, apiBaseUrl: "https://api.innovatio-brutalis.se", apiKey: "", series: "W", pullLimit: 1 } },
+      company: { name: "FU-BOOKKEEPING", orgnr: "", legalForm: "auto", currency: "SEK", defaultSign: "", addr:"", zip:"", city:"", country:"", email:"", phone:"", web:"", vat:"", payDays:30, accountingMethod:"cash", bankgiro:"", plusgiro:"", swishPhone:"", bankAccountNo:"", iban:"", swift:"", invoiceNote:"", invoiceFooter:"", logoDataUrl:"", webshopSync: { enabled: false, apiBaseUrl: "https://api.innovatio-brutalis.se", apiKey: "", series: "W", pullLimit: 1 } },
       features: { sruEnabled: false },
       fileSync: { autosave: true, requireFile: true },
       fiscalYears: [
@@ -6258,6 +6267,8 @@ cur = {
   }
 
   const CUSTOMER_STATUS_OPTIONS = ["active", "inactive"];
+  const ACCOUNTING_METHOD_OPTIONS = ["cash", "accrual"];
+  const INVOICE_STATUS_OPTIONS = ["draft", "issued", "booked", "paid", "voided"];
 
   function splitCustomerTags(value){
     const items = Array.isArray(value)
@@ -6274,6 +6285,32 @@ cur = {
       result.push(tag);
     });
     return result;
+  }
+
+  function normalizeAccountingMethod(value){
+    const method = String(value || "").trim().toLowerCase();
+    return ACCOUNTING_METHOD_OPTIONS.includes(method) ? method : "cash";
+  }
+
+  function normalizeInvoiceStatusValue(value){
+    const status = String(value || "").trim().toLowerCase();
+    return INVOICE_STATUS_OPTIONS.includes(status) ? status : "draft";
+  }
+
+  function getCompanyAccountingMethod(){
+    return normalizeAccountingMethod(state.company?.accountingMethod);
+  }
+
+  function invoiceAccountingMethod(invoice){
+    return normalizeAccountingMethod(invoice?.accountingMethod || getCompanyAccountingMethod());
+  }
+
+  function isCashMethod(invoice){
+    return invoiceAccountingMethod(invoice) === "cash";
+  }
+
+  function isAccrualMethod(invoice){
+    return invoiceAccountingMethod(invoice) === "accrual";
   }
 
   function emptyCustomerAddress(){
@@ -7537,6 +7574,7 @@ if (!d.features) d.features = { sruEnabled: false };
   const sPhone = document.getElementById("sPhone");
   const sWeb = document.getElementById("sWeb");
   const sVat = document.getElementById("sVat");
+  const sAccountingMethod = document.getElementById("sAccountingMethod");
   const sPayDays = document.getElementById("sPayDays");
   const sBg = document.getElementById("sBg");
   const sPg = document.getElementById("sPg");
@@ -8394,6 +8432,7 @@ if (!d.features) d.features = { sruEnabled: false };
     state.company.phone = (sPhone?.value || "").trim();
     state.company.web = (sWeb?.value || "").trim();
     state.company.vat = (sVat?.value || "").trim();
+    state.company.accountingMethod = normalizeAccountingMethod(sAccountingMethod?.value || state.company.accountingMethod);
     state.company.payDays = Number.isFinite(payDays) && payDays > 0 ? payDays : 30;
 
     state.company.bankgiro = (sBg?.value || "").trim();
@@ -8770,6 +8809,7 @@ if (!d.features) d.features = { sruEnabled: false };
     if (sPhone) sPhone.value = c.phone || "";
     if (sWeb) sWeb.value = c.web || "";
     if (sVat) sVat.value = c.vat || "";
+    if (sAccountingMethod) sAccountingMethod.value = normalizeAccountingMethod(c.accountingMethod);
     if (sPayDays) sPayDays.value = String((c.payDays ?? 30));
 
     if (sBg) sBg.value = c.bankgiro || "";
@@ -12770,6 +12810,7 @@ if (!d.features) d.features = { sruEnabled: false };
   const invRef = document.getElementById("invRef");
   const invContactSelect = document.getElementById("invContactSelect");
   const invCustomerBox = document.getElementById("invCustomerBox");
+  const invWorkflowHint = document.getElementById("invWorkflowHint");
   const invLinesTbody = document.getElementById("invLinesTbody");
   const invTotal = document.getElementById("invTotal");
   const invRounding = document.getElementById("invRounding");
@@ -13223,6 +13264,18 @@ if (!d.features) d.features = { sruEnabled: false };
       no: nextInvoiceNo(yearId),
       date,
       due,
+      accountingMethod: getCompanyAccountingMethod(),
+      status: "issued",
+      issuedAt: nowISO(),
+      issuedBy: state.company?.defaultSign || "",
+      bookedVoucherId: "",
+      bookedAt: "",
+      bookedBy: "",
+      paidAt: "",
+      paidBy: "",
+      paymentVoucherId: "",
+      voidedAt: "",
+      voidedBy: "",
       customerId,
       selectedContactId: String(order.selectedContactSnapshot?.id || "").trim(),
       selectedContactSnapshot: order.selectedContactSnapshot ? normalizeCustomerContact(order.selectedContactSnapshot, 0) : null,
@@ -13345,7 +13398,7 @@ if (!d.features) d.features = { sruEnabled: false };
     const ok = !!invCustomerId && invLines.some(l=>l.kind==="item" && lineAmount(l).net>0);
     if (btnInvSave) btnInvSave.disabled = !ok;
     if (btnInvPrint) btnInvPrint.disabled = !ok;
-    if (btnInvToVoucher) btnInvToVoucher.disabled = !ok;
+    renderInvoiceWorkflowHint(ok);
   }
 
   function renderInvoiceLines(){
@@ -13437,7 +13490,7 @@ if (!d.features) d.features = { sruEnabled: false };
     return y;
   }
 
-  function saveInvoice(){
+  async function saveInvoice(){
     const existing = editingInvoiceId ? ((state.invoices || []).find(x => x && x.id === editingInvoiceId) || null) : null;
     const yearId = invoiceYearId();
     const date = invDate.value || todayISO();
@@ -13463,6 +13516,24 @@ if (!d.features) d.features = { sruEnabled: false };
       no,
       date,
       due,
+      accountingMethod: existing?.accountingMethod || getCompanyAccountingMethod(),
+      status: existing?.status === "voided"
+        ? "voided"
+        : existing?.status === "paid"
+          ? "paid"
+          : existing?.status === "booked" || existing?.bookedVoucherId
+            ? "booked"
+            : "issued",
+      issuedAt: String(existing?.issuedAt || nowISO()).trim() || nowISO(),
+      issuedBy: String(existing?.issuedBy || state.company?.defaultSign || "").trim(),
+      bookedVoucherId: String(existing?.bookedVoucherId || "").trim(),
+      bookedAt: String(existing?.bookedAt || "").trim(),
+      bookedBy: String(existing?.bookedBy || "").trim(),
+      paidAt: String(existing?.paidAt || "").trim(),
+      paidBy: String(existing?.paidBy || "").trim(),
+      paymentVoucherId: String(existing?.paymentVoucherId || "").trim(),
+      voidedAt: String(existing?.voidedAt || "").trim(),
+      voidedBy: String(existing?.voidedBy || "").trim(),
       customerId: invCustomerId,
       selectedContactId: String(invSelectedContactId || "").trim(),
       selectedContactSnapshot: selectedContact ? normalizeCustomerContact(selectedContact, 0) : null,
@@ -13513,6 +13584,12 @@ if (!d.features) d.features = { sruEnabled: false };
         try { showToast("Kunde inte arkivera faktura-PDF lokalt. Fakturan sparades ändå.", 5500); } catch (_) {}
       }
     })();
+
+    if (shouldBookInvoiceOnIssue(inv)) {
+      const ok = await confirmAsync("Faktureringsmetoden är vald. Fakturan ska bokföras när den utfärdas. Skapa verifikation nu?", { okText: "Bokför nu", cancelText: "Senare" });
+      if (ok) createVoucherFromInvoice(inv.id);
+      else showToast("Fakturan är sparad men inte bokförd ännu. Faktureringsmetoden kräver bokföring vid utfärdande.", 7000);
+    }
   }
 
   function invoiceTotals(inv){
@@ -13541,6 +13618,148 @@ if (!d.features) d.features = { sruEnabled: false };
       || null;
   }
 
+  function getInvoiceById(invoiceId){
+    const id = String(invoiceId || "").trim();
+    if (!id) return null;
+    return (state.invoices || []).find(invoice => invoice && String(invoice.id || "").trim() === id) || null;
+  }
+
+  function getInvoiceLifecycle(invoice){
+    const inv = (invoice && typeof invoice === "object") ? invoice : {};
+    const bookedVoucher = getVoucherForInvoice(inv);
+    const paidAt = String(inv.paidAt || inv.paymentRegisteredAt || "").trim();
+    const voidedAt = String(inv.voidedAt || "").trim();
+    const issuedAt = String(inv.issuedAt || inv.date || "").trim();
+    const fallbackStatus = bookedVoucher ? "booked" : (issuedAt ? "issued" : "draft");
+    const normalizedStatus = normalizeInvoiceStatusValue(inv.status || fallbackStatus);
+    const status = voidedAt || normalizedStatus === "voided"
+      ? "voided"
+      : paidAt || normalizedStatus === "paid"
+        ? "paid"
+        : bookedVoucher || normalizedStatus === "booked"
+          ? "booked"
+          : normalizedStatus === "issued"
+            ? "issued"
+            : "draft";
+    return {
+      ...inv,
+      accountingMethod: invoiceAccountingMethod(inv),
+      bookedVoucher,
+      bookedVoucherId: String(inv.bookedVoucherId || bookedVoucher?.id || "").trim(),
+      issuedAt,
+      paidAt,
+      voidedAt,
+      status,
+    };
+  }
+
+  function shouldBookInvoiceOnIssue(invoice){
+    const lifecycle = getInvoiceLifecycle(invoice);
+    return isAccrualMethod(lifecycle) && lifecycle.status === "issued" && !lifecycle.bookedVoucherId;
+  }
+
+  function invoiceBookingState(invoice){
+    const lifecycle = getInvoiceLifecycle(invoice);
+    if (lifecycle.status === "voided") {
+      return {
+        key: "voided",
+        badgeClass: "status bad",
+        badgeText: "Makulerad",
+        listText: "Makulerad",
+        nextStep: "Ingen bokföring. Fakturan är makulerad.",
+        allowVoucherAction: false,
+        actionLabel: "Makulerad",
+        lifecycle,
+      };
+    }
+    if (lifecycle.status === "paid") {
+      return {
+        key: "paid",
+        badgeClass: "status ok",
+        badgeText: "Betald",
+        listText: "Betald",
+        nextStep: "Betalningen är registrerad.",
+        allowVoucherAction: false,
+        actionLabel: "Betald",
+        lifecycle,
+      };
+    }
+    if (lifecycle.status === "booked") {
+      return {
+        key: "booked",
+        badgeClass: "status ok",
+        badgeText: "Bokförd",
+        listText: "Bokförd",
+        nextStep: isCashMethod(lifecycle)
+          ? "Nästa steg blir betalregistrering när den delen byggs ut."
+          : "Nästa steg blir separat betalningsverifikation när kunden betalar.",
+        allowVoucherAction: false,
+        actionLabel: "Redan bokförd",
+        lifecycle,
+      };
+    }
+    if (lifecycle.status === "draft") {
+      return {
+        key: "draft",
+        badgeClass: "status",
+        badgeText: "Utkast",
+        listText: "Utkast",
+        nextStep: isCashMethod(lifecycle)
+          ? "Spara fakturan. Bokföring sker normalt först när betalning registreras."
+          : "Spara fakturan och bokför direkt när den utfärdas.",
+        allowVoucherAction: false,
+        actionLabel: "Spara först",
+        lifecycle,
+      };
+    }
+    if (isCashMethod(lifecycle)) {
+      return {
+        key: "issued",
+        badgeClass: "status",
+        badgeText: "Sparad",
+        listText: "Sparad · ej bokförd",
+        nextStep: "Kontantmetoden: bokförs normalt när betalning registreras.",
+        allowVoucherAction: false,
+        actionLabel: "Betalningsverifikation senare",
+        lifecycle,
+      };
+    }
+    return {
+      key: "issued",
+      badgeClass: "status bad",
+      badgeText: "Ej bokförd",
+      listText: "Ej bokförd",
+      nextStep: "Faktureringsmetoden: bokför när fakturan utfärdas.",
+      allowVoucherAction: true,
+      actionLabel: "Skapa verifikation nu",
+      lifecycle,
+    };
+  }
+
+  function renderInvoiceWorkflowHint(okToSave){
+    const currentInvoice = editingInvoiceId ? getInvoiceById(editingInvoiceId) : null;
+    const draftInvoice = currentInvoice || {
+      customerId: invCustomerId,
+      selectedContactId: invSelectedContactId,
+      no: String(invNo?.value || "").trim(),
+      date: invDate?.value || todayISO(),
+      accountingMethod: getCompanyAccountingMethod(),
+      status: currentInvoice ? currentInvoice.status : "draft",
+    };
+    const booking = invoiceBookingState(draftInvoice);
+    if (invWorkflowHint) {
+      const methodLabel = isCashMethod(booking.lifecycle) ? "Kontantmetoden" : "Faktureringsmetoden";
+      invWorkflowHint.innerHTML = `<b>${escapeHtml(methodLabel)}</b> · ${escapeHtml(booking.nextStep)}`;
+    }
+    if (btnInvToVoucher) {
+      btnInvToVoucher.textContent = booking.actionLabel;
+      const hasSavedInvoice = !!(currentInvoice && currentInvoice.id);
+      const canUseButton = !!okToSave && hasSavedInvoice && booking.allowVoucherAction;
+      btnInvToVoucher.disabled = !canUseButton;
+      btnInvToVoucher.title = booking.nextStep;
+    }
+  }
+
   function renderInvoices(){
     // keep year selectors in sync
     fillYearSelectors();
@@ -13558,14 +13777,15 @@ if (!d.features) d.features = { sruEnabled: false };
           const c = getInvoiceCustomerSnapshot(inv);
           const tot = invoiceTotals(inv);
           const currency = getInvoiceCurrency(inv);
-          const bookedVoucher = getVoucherForInvoice(inv);
+          const booking = invoiceBookingState(inv);
+          const bookedVoucher = booking.lifecycle.bookedVoucher;
           const div = document.createElement("div");
           div.className = "item";
           div.innerHTML = `
             <div class="top">
               <div>
-                <div class="title">Faktura #${escapeHtml(inv.no)} · ${escapeHtml(inv.date)} · ${escapeHtml(c?.name || "(kund)")}</div>
-                <div class="meta">${bookedVoucher ? `Bokförd${bookedVoucher.series && bookedVoucher.no ? ` · ${escapeHtml(String(bookedVoucher.series) + String(bookedVoucher.no))}` : ""}` : "Ej bokförd"} · Förfaller ${escapeHtml(inv.due)} · Totalt ${fmtSEK(tot.gross)} ${escapeHtml(currency)}</div>
+                <div class="title">Faktura #${escapeHtml(inv.no)} · ${escapeHtml(inv.date)} · ${escapeHtml(c?.name || "(kund)")} <span class="${escapeAttr(booking.badgeClass)}">${escapeHtml(booking.badgeText)}</span></div>
+                <div class="meta">${escapeHtml(booking.listText)}${bookedVoucher?.series && bookedVoucher?.no ? ` · Verifikation ${escapeHtml(String(bookedVoucher.series) + String(bookedVoucher.no))}` : ""} · Förfaller ${escapeHtml(inv.due)} · Totalt ${fmtSEK(tot.gross)} ${escapeHtml(currency)}</div>
               </div>
               <div class="row">
                 <button class="btn secondary" data-act="edit" data-id="${inv.id}">Öppna</button>
@@ -13745,17 +13965,37 @@ if (!d.features) d.features = { sruEnabled: false };
     w.document.close();
   }
 
-  function createVoucherFromInvoice(){
+  function createVoucherFromInvoice(invoiceId){
     // super-enkel bokning: 1510 Debet, 3001 Kredit (netto), 2611 Kredit (moms)
-    if (!invCustomerId) return;
-    const yearId = invoiceYearId();
-    const date = invDate.value || todayISO();
+    const linkedInvoice = invoiceId
+      ? getInvoiceById(invoiceId)
+      : (editingInvoiceId ? getInvoiceById(editingInvoiceId) : null);
+    if (!linkedInvoice) {
+      showToast("Spara fakturan först så att bokföringen kopplas till rätt faktura.", 5000);
+      return;
+    }
+
+    const booking = invoiceBookingState(linkedInvoice);
+    if (isCashMethod(booking.lifecycle)) {
+      showToast("Kontantmetoden: kundfakturan bokförs normalt först när betalning registreras. Betalningssteget är förberett men ingår inte i denna patch.", 8500);
+      return;
+    }
+    if (booking.lifecycle.status === "voided") {
+      showToast("Fakturan är makulerad och ska inte bokföras.", 5500);
+      return;
+    }
+    if (booking.lifecycle.bookedVoucherId) {
+      showToast("Fakturan är redan bokförd. Skapar ingen dubblett.", 5500);
+      return;
+    }
+
+    const yearId = linkedInvoice.yearId || invoiceYearId();
+    const date = linkedInvoice.date || invDate.value || todayISO();
     const no = nextVerno(yearId, "F");
-    const linkedInvoice = editingInvoiceId ? ((state.invoices || []).find(x => x && x.id === editingInvoiceId) || null) : null;
-    const invoiceNo = String((invNo && invNo.value) || linkedInvoice?.no || "").trim();
+    const invoiceNo = String(linkedInvoice?.no || (invNo && invNo.value) || "").trim();
 
     const tmp = {
-      lines: invLines.map(l=>({kind:l.kind, qty:parseMoney(l.qty), price:parseMoney(l.price), vat:parseMoney(l.vat)}))
+      lines: (linkedInvoice.lines || []).map(l=>({kind:l.kind, qty:parseMoney(l.qty), price:parseMoney(l.price), vat:parseMoney(l.vat)}))
     };
     let net=0, vat=0;
     for (const l of tmp.lines){
@@ -13796,9 +14036,24 @@ if (!d.features) d.features = { sruEnabled: false };
     state.vouchers.push(vv);
     appendAudit({ action:"voucher.create", actor: vv.sign || undefined, entityType:"voucher", entityId: vv.id, yearId, details:{ after: summarizeVoucher(vv), source:"invoice" } });
 
+    const invoiceIndex = (state.invoices || []).findIndex(item => item && String(item.id || "").trim() === String(linkedInvoice.id || "").trim());
+    if (invoiceIndex >= 0) {
+      state.invoices[invoiceIndex] = {
+        ...state.invoices[invoiceIndex],
+        status: "booked",
+        bookedVoucherId: vv.id,
+        bookedAt: nowISO(),
+        bookedBy: state.company.defaultSign || "",
+      };
+    }
+
     state.vouchers.sort((a,b)=> (a.yearId+b.series+a.no+a.date).localeCompare(b.yearId+b.series+b.no+b.date, "sv"));
     save();
     try { renderInvoices(); } catch (e) { console.error(e); }
+    try {
+      if (editingInvoiceId && String(editingInvoiceId) === String(linkedInvoice.id || "")) loadInvoiceToEditor(linkedInvoice.id);
+      else updateInvoiceTotals();
+    } catch (e) { console.error(e); }
     showToast("Skapade verifikation (serie F). Kontrollera konton och moms innan du använder skarpt.", 6500);
   }
 

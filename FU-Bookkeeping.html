@@ -516,6 +516,7 @@
           </button>
           <div class="navFlyout" id="nav-sales" role="menu">
             <button type="button" class="tab" data-tab="invoices">Kundfakturor</button>
+            <button type="button" class="tab" data-tab="quotes">Offerter</button>
             <button type="button" class="tab" data-tab="customers">Kunder</button>
             <button type="button" class="tab" data-tab="orderstock">Orderstock</button>
           </div>
@@ -1450,6 +1451,198 @@
       </dialog>
     </section>
 
+    <section id="tab-quotes" hidden>
+      <div class="grid two" id="quoteGrid">
+        <div class="card">
+          <div class="row" style="justify-content:space-between; margin-bottom:10px;">
+            <h2>Skapa offert</h2>
+            <div class="row">
+              <button class="btn secondary" id="btnQuoteNew">Ny</button>
+              <button class="btn secondary" id="btnQuotePrint">Förhandsgranska / skriv ut</button>
+              <button class="btn secondary" id="btnQuoteMarkSent">Markera som skickad</button>
+              <button class="btn secondary" id="btnQuoteMarkAccepted">Markera som accepterad</button>
+              <button class="btn secondary" id="btnQuoteCreateOrderDraft">Skapa orderutkast</button>
+               <button class="btn secondary" id="btnQuoteOpenOrderDraft" hidden>Öppna orderutkast</button>
+              <button class="btn" id="btnQuoteSave" disabled>Spara</button>
+            </div>
+          </div>
+
+          <div class="grid" style="gap:10px;">
+            <div class="row" style="gap:10px;">
+              <div class="field" style="min-width:140px;">
+                <label>Offertdatum</label>
+                <input id="quoteDate" type="date" />
+              </div>
+              <div class="field" style="min-width:140px;">
+                <label>Giltig t.o.m.</label>
+                <input id="quoteExpiresAt" type="date" />
+              </div>
+              <div class="field" style="min-width:110px;">
+                <label>Offertnr</label>
+                <input id="quoteNo" placeholder="Auto" />
+              </div>
+              <div class="field" style="min-width:160px;">
+                <label>Status</label>
+                <select id="quoteStatus">
+                  <option value="draft">draft</option>
+                  <option value="sent">sent</option>
+                  <option value="accepted">accepted</option>
+                  <option value="rejected">rejected</option>
+                  <option value="expired">expired</option>
+                  <option value="cancelled">cancelled</option>
+                </select>
+              </div>
+              <div class="field" style="min-width:140px;">
+                <label>Valuta</label>
+                <input id="quoteCurrency" value="SEK" />
+              </div>
+              <div class="field" style="min-width:140px;">
+                <label>Momsmodell</label>
+                <input id="quoteVatScheme" value="SE_VAT" />
+              </div>
+            </div>
+
+            <div class="row" style="gap:10px;">
+              <div class="field" style="flex:1; min-width:220px;">
+                <label>Referens</label>
+                <input id="quoteRef" placeholder="t.ex. Förfrågan 24031" />
+              </div>
+              <div class="field" style="min-width:180px;">
+                <label>Kund</label>
+                <select id="quoteCustomerSelect"></select>
+              </div>
+              <div class="field" style="min-width:140px;">
+                <label>Källa</label>
+                <select id="quoteSource">
+                  <option value="fu_local">fu_local</option>
+                  <option value="admin_sync">admin_sync</option>
+                  <option value="webshop">webshop</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="card" style="padding:10px; border-radius:14px; background:rgba(11,18,32,.90);">
+              <div class="row" style="justify-content:space-between; margin-bottom:8px;">
+                <div class="muted small">Kunduppgifter</div>
+                <div id="quoteEditorStatus" class="muted small">Ny offert</div>
+              </div>
+              <div id="quoteInternalIndicators" class="row" style="gap:8px; flex-wrap:wrap; margin-bottom:8px;" hidden></div>
+              <div class="grid" style="gap:10px;">
+                <div class="row" style="gap:10px;">
+                  <div class="field" style="flex:1; min-width:220px;">
+                    <label>Kundnamn</label>
+                    <input id="quoteCustomerName" placeholder="t.ex. Mariano Vozzi" />
+                  </div>
+                  <div class="field" style="flex:1; min-width:220px;">
+                    <label>Företag</label>
+                    <input id="quoteCompanyName" placeholder="t.ex. Innovatio Brutalis AB" />
+                  </div>
+                </div>
+                <div class="row" style="gap:10px;">
+                  <div class="field" style="flex:1; min-width:220px;">
+                    <label>E-post</label>
+                    <input id="quoteCustomerEmail" placeholder="kund@exempel.se" />
+                  </div>
+                  <div class="field" style="min-width:180px;">
+                    <label>Telefon</label>
+                    <input id="quoteCustomerPhone" placeholder="070-123 45 67" />
+                  </div>
+                  <div class="field" style="min-width:180px;">
+                    <label>Org.nr</label>
+                    <input id="quoteOrgnr" placeholder="559999-9999" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card" style="padding:10px; border-radius:14px; background:rgba(11,18,32,.90);">
+              <div class="row" style="justify-content:space-between; margin-bottom:8px;">
+                <div class="muted small">Offertrader</div>
+                <div class="row">
+                  <button class="btn secondary" id="btnQuoteAddLine">+ Rad</button>
+                  <button class="btn danger" id="btnQuoteClear">Rensa</button>
+                </div>
+              </div>
+              <div style="overflow:auto;">
+                <table>
+                  <thead>
+                    <tr>
+                      <th style="width:140px;">Typ</th>
+                      <th style="width:140px;">Kategori</th>
+                      <th style="width:180px;">Titel</th>
+                      <th>Beskrivning</th>
+                      <th class="right" style="width:80px;">Antal</th>
+                      <th style="width:80px;">Enhet</th>
+                      <th class="right" style="width:120px;">A-pris exkl.</th>
+                      <th class="right" style="width:80px;">Moms %</th>
+                      <th style="width:100px;">Konto</th>
+                      <th style="width:60px;"></th>
+                    </tr>
+                  </thead>
+                  <tbody id="quoteLinesTbody"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="row" style="gap:10px; align-items:stretch;">
+              <div class="card" style="padding:10px; border-radius:14px; background:rgba(11,18,32,.90); flex:1; min-width:240px;">
+                <div class="muted small">Summering</div>
+                <div id="quoteTotalsBox" style="margin-top:8px; font-weight:700;">Summa exkl. moms: 0,00 SEK<br>Moms: 0,00 SEK<br>Totalt inkl. moms: 0,00 SEK</div>
+              </div>
+              <div class="field" style="flex:1; min-width:260px;">
+                <label>Notering</label>
+                <textarea id="quoteNotes" placeholder="Intern notering eller offerttext"></textarea>
+              </div>
+            </div>
+
+            <div id="quoteOrderDraftView" class="card" style="padding:12px; border-radius:14px; background:rgba(11,18,32,.90);" hidden>
+              <div class="row" style="justify-content:space-between; gap:10px; margin-bottom:8px; align-items:flex-start;">
+                <div>
+                  <div class="muted small">Internt orderutkast</div>
+                  <div id="quoteOrderDraftTitle" style="font-weight:700; margin-top:4px;">Inget orderutkast öppet</div>
+                </div>
+                <div class="row" style="gap:8px; align-items:center; flex-wrap:wrap; justify-content:flex-end;">
+                  <div id="quoteOrderDraftInvoiceStatus" class="status">Faktura okänd</div>
+                  <div id="quoteOrderDraftDocStatus" class="status">order_confirmation_pdf okänd</div>
+                  <button class="btn secondary" id="btnOrderDraftCreateInvoice">Skapa faktura</button>
+                </div>
+              </div>
+              <div id="quoteOrderDraftMeta" class="grid" style="gap:10px; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); margin-bottom:10px;"></div>
+              <div style="overflow:auto; margin-bottom:10px;">
+                <table>
+                  <thead>
+                    <tr>
+                      <th style="width:140px;">Typ</th>
+                      <th style="width:140px;">Kategori</th>
+                      <th style="width:180px;">Titel</th>
+                      <th>Beskrivning</th>
+                      <th class="right" style="width:80px;">Antal</th>
+                      <th style="width:80px;">Enhet</th>
+                      <th class="right" style="width:120px;">A-pris exkl.</th>
+                      <th class="right" style="width:80px;">Moms %</th>
+                    </tr>
+                  </thead>
+                  <tbody id="quoteOrderDraftLines"></tbody>
+                </table>
+              </div>
+              <div id="quoteOrderDraftEmpty" class="muted small">Öppna ett orderutkast från en accepterad offert för att se snapshot-raderna.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" id="quoteListCard">
+          <div class="row" style="justify-content:space-between; margin-bottom:10px;">
+            <h2>Offerter</h2>
+            <div class="row">
+              <select id="quoteYearSelect" aria-label="Räkenskapsår för offerter"></select>
+              <button class="btn secondary" id="btnQuoteRefresh">Uppdatera</button>
+            </div>
+          </div>
+          <div id="quoteList" class="list"></div>
+        </div>
+      </div>
+    </section>
+
 
     
     
@@ -1968,6 +2161,8 @@ Tack!</div>
               <select id="docListKindFilter">
                 <option value="">Alla</option>
                 <option value="invoice_pdf">invoice_pdf</option>
+                <option value="order_confirmation_pdf">order_confirmation_pdf</option>
+                <option value="quote_pdf">quote_pdf</option>
                 <option value="voucher_pdf">voucher_pdf</option>
                 <option value="webshop_*">webshop_*</option>
                 <option value="webshop_order">webshop_order</option>
@@ -2221,8 +2416,8 @@ Tack!</div>
 (function(){
  
 
-  const APP_VERSION = "1.4.14"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.24";  // user-facing revision
+  const APP_VERSION = "1.4.23"; // bump when adding new data fields
+  const APP_SEMVER = "0.3.34";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -2654,6 +2849,109 @@ Tack!</div>
     return { updated };
   }
 
+  const QUOTE_LINE_TYPE_OPTIONS = ["service_hourly", "service_fixed", "product", "shipping", "discount"];
+  const QUOTE_CATEGORY_OPTIONS = ["3d_scan", "cnc", "3d_print", "construction", "product_sale", "shipping_packaging", "other"];
+  const QUOTE_STATUS_OPTIONS = ["draft", "sent", "accepted", "rejected", "expired", "cancelled"];
+  const QUOTE_LOCKED_STATUSES = ["accepted", "expired", "cancelled"];
+  const QUOTE_CONTROLLED_STATUSES = ["sent", "accepted"];
+
+  function quoteDefaultAccountSuggestion(lineType){
+    const t = String(lineType || "").trim();
+    if (t === "product") return "3011";
+    if (t === "shipping") return "3520";
+    if (t === "discount") return "3730";
+    return "3041";
+  }
+
+  function quoteDefaultUnit(lineType){
+    return String(lineType || "").trim() === "service_hourly" ? "h" : "st";
+  }
+
+  function quoteRound2(value){
+    return Math.round((Number(value) || 0) * 100) / 100;
+  }
+
+  function normalizeQuoteLine(line, quoteId, index){
+    const raw = (line && typeof line === "object") ? line : {};
+    const lineType = QUOTE_LINE_TYPE_OPTIONS.includes(String(raw.lineType || "").trim()) ? String(raw.lineType || "").trim() : "service_hourly";
+    const category = QUOTE_CATEGORY_OPTIONS.includes(String(raw.category || "").trim()) ? String(raw.category || "").trim() : "other";
+    const qty = quoteRound2(raw.qty != null ? raw.qty : 1);
+    const vatRate = quoteRound2(raw.vatRate != null ? raw.vatRate : 25);
+    return {
+      id: String(raw.id || "").trim() || crypto.randomUUID(),
+      quoteId: String(raw.quoteId || quoteId || "").trim(),
+      lineType,
+      category,
+      title: clampText(String(raw.title || "").trim(), 120),
+      description: clampText(String(raw.description || "").trim(), 400),
+      qty: qty || 0,
+      unit: clampText(String(raw.unit || quoteDefaultUnit(lineType)).trim() || quoteDefaultUnit(lineType), 20),
+      unitPriceExVat: quoteRound2(raw.unitPriceExVat != null ? raw.unitPriceExVat : 0),
+      vatRate,
+      accountSuggestion: clampText(String(raw.accountSuggestion || quoteDefaultAccountSuggestion(lineType)).trim() || quoteDefaultAccountSuggestion(lineType), 20),
+      sortOrder: Number.isFinite(Number(raw.sortOrder)) ? Number(raw.sortOrder) : (Number(index) + 1)
+    };
+  }
+
+  function quoteLineTotals(line){
+    const ln = normalizeQuoteLine(line, line && line.quoteId, Number(line && line.sortOrder) || 0);
+    const subtotal = quoteRound2(ln.qty * ln.unitPriceExVat);
+    const vat = quoteRound2(subtotal * ((Number(ln.vatRate) || 0) / 100));
+    const total = quoteRound2(subtotal + vat);
+    return { subtotal, vat, total };
+  }
+
+  function quoteTotals(lines){
+    const arr = Array.isArray(lines) ? lines : [];
+    let subtotal = 0;
+    let vat = 0;
+    let total = 0;
+    arr.forEach(line => {
+      const sums = quoteLineTotals(line);
+      subtotal += sums.subtotal;
+      vat += sums.vat;
+      total += sums.total;
+    });
+    return { subtotal: quoteRound2(subtotal), vat: quoteRound2(vat), total: quoteRound2(total) };
+  }
+
+  function normalizeQuoteRecord(quote, index){
+    const raw = (quote && typeof quote === "object") ? quote : {};
+    const date = String(raw.date || "").trim() || todayISO();
+    const yearId = String(raw.yearId || "").trim() || String(date).slice(0,4) || String(new Date().getFullYear());
+    const createdAt = String(raw.createdAt || "").trim() || nowISO();
+    const source = ["fu_local", "admin_sync", "webshop"].includes(String(raw.source || "").trim()) ? String(raw.source || "").trim() : "fu_local";
+    const status = QUOTE_STATUS_OPTIONS.includes(String(raw.status || "").trim()) ? String(raw.status || "").trim() : "draft";
+    const id = String(raw.id || "").trim() || crypto.randomUUID();
+    const lines = (Array.isArray(raw.lines) ? raw.lines : []).map((line, idx)=> normalizeQuoteLine(line, id, idx));
+    return {
+      id,
+      yearId,
+      quoteNo: clampText(String(raw.quoteNo || "").trim(), 40),
+      date,
+      expiresAt: String(raw.expiresAt || "").trim() || addDays(date, 30),
+      customerId: clampText(String(raw.customerId || "").trim(), 80),
+      customerName: clampText(String(raw.customerName || "").trim(), 120),
+      customerEmail: clampText(String(raw.customerEmail || "").trim(), 120),
+      customerPhone: clampText(String(raw.customerPhone || "").trim(), 60),
+      companyName: clampText(String(raw.companyName || "").trim(), 120),
+      orgnr: clampText(String(raw.orgnr || "").trim(), 40),
+      currency: clampText(String(raw.currency || "SEK").trim() || "SEK", 12),
+      vatScheme: clampText(String(raw.vatScheme || "SE_VAT").trim() || "SE_VAT", 40),
+      status,
+      ref: clampText(String(raw.ref || "").trim(), 120),
+      notes: clampText(String(raw.notes || "").trim(), 2000),
+      source,
+      adminQuoteId: clampText(String(raw.adminQuoteId || "").trim(), 80),
+      adminToken: clampText(String(raw.adminToken || "").trim(), 120),
+      createdAt,
+      createdBy: clampText(String(raw.createdBy || "").trim(), 60),
+      updatedAt: String(raw.updatedAt || "").trim() || createdAt,
+      updatedBy: clampText(String(raw.updatedBy || "").trim(), 60),
+      lines: lines.length ? lines : [normalizeQuoteLine({}, id, 0)]
+    };
+  }
+
   function normalizeImportedState(d){
     const base = defaultData();
     const o = (d && typeof d === "object") ? d : base;
@@ -2783,7 +3081,13 @@ Tack!</div>
       return si;
     });
     if (!Array.isArray(o.invoices)) o.invoices = [];
+    if (!Array.isArray(o.quotes)) o.quotes = [];
+    if (!Array.isArray(o.orders)) o.orders = [];
+    if (!Array.isArray(o.orderConfirmations)) o.orderConfirmations = [];
     if (!Array.isArray(o.documents)) o.documents = [];
+    o.quotes = o.quotes.filter(x=>x && typeof x === "object").map((quote, idx)=> normalizeQuoteRecord(quote, idx));
+    o.orders = o.orders.filter(x=>x && typeof x === "object");
+    o.orderConfirmations = o.orderConfirmations.filter(x=>x && typeof x === "object");
     o.documents = o.documents.filter(x=>x && typeof x === "object").map(doc=>{
       if (!doc.id) doc.id = crypto.randomUUID();
       if (!doc.yearId) doc.yearId = (doc.date ? String(doc.date).slice(0,4) : o.activeYearId);
@@ -2941,7 +3245,7 @@ function yearsWithMirrorCandidates(){
 
 function documentMirrorFolderParts(doc){
   const kind = String(doc?.kind || "document").trim();
-  if (kind === "invoice_pdf" || kind === "voucher_pdf") return [documentMirrorFolderLabel(doc, "PDF")];
+  if (kind === "invoice_pdf" || kind === "order_confirmation_pdf" || kind === "quote_pdf" || kind === "voucher_pdf") return [documentMirrorFolderLabel(doc, "PDF")];
   if (kind.startsWith("webshop_")) return [documentMirrorFolderLabel(doc, "JSON")];
   return [documentMirrorFolderLabel(doc, "OTHER")];
 }
@@ -3756,9 +4060,9 @@ cur = {
     if (!inv) throw new Error("generateInvoicePdfBlob kräver en faktura.");
 
     const company = state.company || {};
-    const customer = (state.customers && inv.customerId) ? (state.customers[inv.customerId] || {}) : {};
+    const customer = getInvoiceCustomerSnapshot(inv);
     const totals = invoiceTotals(inv);
-    const currency = String(company.currency || "SEK");
+    const currency = getInvoiceCurrency(inv);
     const lines = [];
 
     lines.push(`FAKTURA ${String(inv.no || "").trim() || "(utan nummer)"}`);
@@ -3804,6 +4108,118 @@ cur = {
     if (company.invoiceFooter) {
       lines.push("");
       wrapPdfText(String(company.invoiceFooter), 72).forEach((part, idx) => lines.push(idx === 0 ? `Footer: ${part}` : `  ${part}`));
+    }
+
+    return buildMinimalPdfBlob(lines);
+  }
+
+  async function generateQuotePdfBlob(quote){
+    const q = quote && typeof quote === "object" ? quote : null;
+    if (!q) throw new Error("generateQuotePdfBlob kräver en offert.");
+
+    const company = state.company || {};
+    const totals = quoteTotals(q.lines || []);
+    const currency = String(q.currency || company.currency || "SEK").trim() || "SEK";
+    const lines = [];
+
+    lines.push(`OFFERT ${String(q.quoteNo || "").trim() || "(utan nummer)"}`);
+    lines.push(`${String(company.name || "").trim() || "FU-BOOKKEEPING"}`);
+    if (company.orgnr) lines.push(`Org.nr: ${String(company.orgnr).trim()}`);
+    lines.push("");
+    lines.push(`Offertdatum: ${String(q.date || "").trim() || todayISO()}`);
+    lines.push(`Giltig t.o.m.: ${String(q.expiresAt || "").trim() || "-"}`);
+    lines.push(`Status: ${String(q.status || "draft").trim() || "draft"}`);
+    if (q.ref) lines.push(`Referens: ${String(q.ref).trim()}`);
+    if (q.vatScheme) lines.push(`Momsmodell: ${String(q.vatScheme).trim()}`);
+    lines.push("");
+    lines.push(`Kund: ${String(q.customerName || "").trim() || "(ingen kund)"}`);
+    if (q.companyName) lines.push(`Företag: ${String(q.companyName).trim()}`);
+    if (q.orgnr) lines.push(`Kund org.nr: ${String(q.orgnr).trim()}`);
+    if (q.customerEmail) lines.push(`Kund e-post: ${String(q.customerEmail).trim()}`);
+    if (q.customerPhone) lines.push(`Kund telefon: ${String(q.customerPhone).trim()}`);
+    lines.push("");
+    lines.push("RADER");
+
+    const quoteLines = Array.isArray(q.lines) ? q.lines.slice().sort((a,b)=> Number(a?.sortOrder || 0) - Number(b?.sortOrder || 0)) : [];
+    quoteLines.forEach((ln, idx) => {
+      const qty = Number(ln?.qty || 0);
+      const price = Number(ln?.unitPriceExVat || 0);
+      const vatRate = Number(ln?.vatRate || 0);
+      const sums = quoteLineTotals(ln);
+      const title = String(ln?.title || "").trim() || "(utan titel)";
+      lines.push(`Rad ${idx + 1}: ${title}`);
+      if (ln?.description) wrapPdfText(String(ln.description), 68).forEach(part => lines.push(`  ${part}`));
+      lines.push(`  Typ ${String(ln?.lineType || "").trim() || "service_hourly"}  Kategori ${String(ln?.category || "").trim() || "other"}`);
+      lines.push(`  Antal ${qty} ${String(ln?.unit || "").trim() || quoteDefaultUnit(ln?.lineType)}  A-pris ${fmtSEK(price)}  Moms ${vatRate}%  Belopp ${fmtSEK(sums.total)} ${currency}`);
+      if (ln?.accountSuggestion) lines.push(`  Konto ${String(ln.accountSuggestion).trim()}`);
+    });
+
+    lines.push("");
+    lines.push(`Summa exkl. moms: ${fmtSEK(totals.subtotal)} ${currency}`);
+    lines.push(`Moms: ${fmtSEK(totals.vat)} ${currency}`);
+    lines.push(`Totalt inkl. moms: ${fmtSEK(totals.total)} ${currency}`);
+    if (q.notes) {
+      lines.push("");
+      wrapPdfText(String(q.notes), 72).forEach((part, idx) => lines.push(idx === 0 ? `Notering: ${part}` : `  ${part}`));
+    }
+
+    return buildMinimalPdfBlob(lines);
+  }
+
+  async function generateOrderConfirmationPdfBlob(order){
+    const o = order && typeof order === "object" ? order : null;
+    if (!o) throw new Error("generateOrderConfirmationPdfBlob kräver en order.");
+
+    const company = state.company || {};
+    const orderLines = Array.isArray(o.lines) ? o.lines.slice().sort((a,b)=> Number(a?.sortOrder || 0) - Number(b?.sortOrder || 0)) : [];
+    const currency = String(o.currency || company.currency || "SEK").trim() || "SEK";
+    let subtotal = 0;
+    let vat = 0;
+    const lines = [];
+
+    const orderRef = String(o.orderNo || o.order_number || o.sourceQuoteNo || o.id || "").trim() || "(utan nummer)";
+    lines.push(`ORDERBEKRAFTELSE ${orderRef}`);
+    lines.push(`${String(company.name || "").trim() || "FU-BOOKKEEPING"}`);
+    if (company.orgnr) lines.push(`Org.nr: ${String(company.orgnr).trim()}`);
+    lines.push("");
+    lines.push(`Orderdatum: ${String((o.createdAt || o.created_at || todayISO())).slice(0,10) || todayISO()}`);
+    lines.push(`Status: ${String(o.status || "draft").trim() || "draft"}`);
+    if (o.sourceQuoteNo) lines.push(`Källoffert: ${String(o.sourceQuoteNo).trim()}`);
+    if (o.payment_reference) lines.push(`Referens: ${String(o.payment_reference).trim()}`);
+    lines.push("");
+    lines.push(`Kund: ${String(o.customerName || o.customer?.full_name || "").trim() || "(ingen kund)"}`);
+    if (o.companyName || o.customer?.company_name) lines.push(`Företag: ${String(o.companyName || o.customer?.company_name || "").trim()}`);
+    if (o.orgnr || o.customer?.orgnr) lines.push(`Kund org.nr: ${String(o.orgnr || o.customer?.orgnr || "").trim()}`);
+    if (o.customerEmail || o.customer?.email) lines.push(`Kund e-post: ${String(o.customerEmail || o.customer?.email || "").trim()}`);
+    if (o.customerPhone || o.customer?.phone) lines.push(`Kund telefon: ${String(o.customerPhone || o.customer?.phone || "").trim()}`);
+    lines.push("");
+    lines.push("RADER");
+
+    orderLines.forEach((ln, idx) => {
+      const qty = Number(ln?.qty || 0);
+      const price = Number(ln?.unitPriceExVat ?? ln?.unit_price_ex_vat ?? 0);
+      const vatRate = Number(ln?.vatRate ?? ln?.vat_rate ?? 0);
+      const net = quoteRound2(qty * price);
+      const lineVat = quoteRound2(net * (vatRate / 100));
+      const gross = quoteRound2(net + lineVat);
+      subtotal += net;
+      vat += lineVat;
+      const title = String(ln?.title || ln?.description || "Rad").trim() || "Rad";
+      lines.push(`Rad ${idx + 1}: ${title}`);
+      if (ln?.description) wrapPdfText(String(ln.description), 68).forEach(part => lines.push(`  ${part}`));
+      lines.push(`  Antal ${qty} ${String(ln?.unit || "").trim() || quoteDefaultUnit(ln?.lineType)}  A-pris ${fmtSEK(price)}  Moms ${vatRate}%  Belopp ${fmtSEK(gross)} ${currency}`);
+    });
+
+    subtotal = quoteRound2(subtotal);
+    vat = quoteRound2(vat);
+    const total = quoteRound2(subtotal + vat);
+    lines.push("");
+    lines.push(`Summa exkl. moms: ${fmtSEK(subtotal)} ${currency}`);
+    lines.push(`Moms: ${fmtSEK(vat)} ${currency}`);
+    lines.push(`Totalt inkl. moms: ${fmtSEK(total)} ${currency}`);
+    if (o.quoteSnapshot?.notes) {
+      lines.push("");
+      wrapPdfText(String(o.quoteSnapshot.notes), 72).forEach((part, idx) => lines.push(idx === 0 ? `Notering: ${part}` : `  ${part}`));
     }
 
     return buildMinimalPdfBlob(lines);
@@ -3931,6 +4347,50 @@ cur = {
     });
     save({ renderAll:false });
     return record;
+  }
+
+  async function registerGeneratedQuoteDocument({ quote, blob, createdBy } = {}){
+    const q = quote && typeof quote === "object" ? quote : null;
+    if (!q) throw new Error("registerGeneratedQuoteDocument kräver en offert.");
+    if (!(blob instanceof Blob)) throw new Error("registerGeneratedQuoteDocument kräver en Blob.");
+
+    const quoteNo = String(q.quoteNo || q.id || "quote").trim();
+    const quoteDate = String(q.date || todayISO()).trim() || todayISO();
+    const fileName = safeFileName(`${normalizeDateForFileName(quoteDate)}_OFFERT_${safeStemPart(quoteNo, 48) || "quote"}.pdf`);
+
+    return registerGeneratedPdfDocument({
+      kind: "quote_pdf",
+      number: quoteNo,
+      date: quoteDate,
+      linkedType: "quote",
+      linkedId: String(q.id || "").trim(),
+      blob,
+      yearId: String(q.yearId || String(quoteDate).slice(0,4) || state.activeYearId || "").trim(),
+      fileName,
+      createdBy: createdBy != null ? createdBy : (q.updatedBy || q.createdBy || state.company?.defaultSign || "")
+    });
+  }
+
+  async function registerGeneratedOrderConfirmationDocument({ order, blob, createdBy } = {}){
+    const o = order && typeof order === "object" ? order : null;
+    if (!o) throw new Error("registerGeneratedOrderConfirmationDocument kräver en order.");
+    if (!(blob instanceof Blob)) throw new Error("registerGeneratedOrderConfirmationDocument kräver en Blob.");
+
+    const orderNo = String(o.orderNo || o.order_number || o.sourceQuoteNo || o.id || "order").trim();
+    const orderDate = String((o.createdAt || o.created_at || todayISO())).slice(0,10) || todayISO();
+    const fileName = safeFileName(`${normalizeDateForFileName(orderDate)}_ORDERBEKRAFTELSE_${safeStemPart(orderNo, 48) || "order"}.pdf`);
+
+    return registerGeneratedPdfDocument({
+      kind: "order_confirmation_pdf",
+      number: orderNo,
+      date: orderDate,
+      linkedType: "order",
+      linkedId: String(o.id || "").trim(),
+      blob,
+      yearId: String(o.yearId || String(orderDate).slice(0,4) || state.activeYearId || "").trim(),
+      fileName,
+      createdBy: createdBy != null ? createdBy : (o.updatedBy || o.createdBy || state.company?.defaultSign || "")
+    });
   }
 
   async function registerGeneratedWebshopDocument({ kind, number, date, linkedType, linkedId, payload, yearId, fileName, createdBy, sourceMeta }){
@@ -4182,6 +4642,8 @@ cur = {
       const kind = String(doc?.kind || "document").trim();
       const number = safeStemPart(doc?.number || doc?.linkedId || doc?.id || "document", 80) || "document";
       if (kind === "invoice_pdf") return ["documents", "invoices", number];
+      if (kind === "order_confirmation_pdf") return ["documents", "orders", number];
+      if (kind === "quote_pdf") return ["documents", "quotes", number];
       if (kind.startsWith("webshop_")) return ["documents", "webshop", safeStemPart(kind, 48) || "webshop", number];
       return ["documents", safeStemPart(kind, 48) || "other", number];
     }
@@ -4700,6 +5162,7 @@ cur = {
     fillSelect(carryFrom, ys[0]?.id || active);
     fillSelect(carryTo, active);
     fillSelect(invYearSelect, active);
+    fillSelect(quoteYearSelect, active);
     fillSelect(siYearSelect, active);
     fillSelect(lockYear, active);
     fillSelect(sruYearSelect, active);
@@ -5203,6 +5666,9 @@ cur = {
       suppliers: {},
       supplierInvoices: [],
       invoices: [],
+      quotes: [],
+      orders: [],
+      orderConfirmations: [],
       documents: [],
       locks: {},
       compliance: { immutableVouchers: true },
@@ -5360,6 +5826,9 @@ if (!d.features) d.features = { sruEnabled: false };
       if (!d.suppliers) d.suppliers = {};
       if (!d.supplierInvoices) d.supplierInvoices = [];
       if (!d.invoices) d.invoices = [];
+      if (!d.quotes) d.quotes = [];
+      if (!d.orders) d.orders = [];
+      if (!d.orderConfirmations) d.orderConfirmations = [];
       if (!d.documents) d.documents = [];
       
       
@@ -5506,6 +5975,7 @@ if (!d.features) d.features = { sruEnabled: false };
       "btnBankImportOpen","btnBankImportOpen2","btnBankInboxRefresh",
       "btnBankImportRun","btnBankPostCreate","btnBankBulkConfirm",
       "btnInvNew","btnInvSave","btnInvPickCustomer","btnInvAddItem","btnInvAddComment","btnInvClear","btnInvToVoucher",
+      "btnQuoteNew","btnQuoteSave","btnQuoteAddLine","btnQuoteClear","btnQuoteMarkSent","btnQuoteMarkAccepted",
       "btnSupNew","btnSupSave","btnSiNew","btnSiSave","btnSiToVoucher","btnCustomerSave",
       "btnImportSie","btnExportSie4"
     ];
@@ -6013,6 +6483,7 @@ if (!d.features) d.features = { sruEnabled: false };
     suppliers: document.getElementById("tab-suppliers"),
     supplier_invoices: document.getElementById("tab-supplier_invoices"),
     invoices: document.getElementById("tab-invoices"),
+    quotes: document.getElementById("tab-quotes"),
     orderstock: document.getElementById("tab-orderstock"),
     export: document.getElementById("tab-export"),
     settings: document.getElementById("tab-settings"),
@@ -7441,6 +7912,7 @@ if (!d.features) d.features = { sruEnabled: false };
     safeUiCall(typeof renderSuppliers === "function" ? renderSuppliers : null);
     safeUiCall(typeof renderSupplierInvoices === "function" ? renderSupplierInvoices : null);
     safeUiCall(typeof renderInvoices === "function" ? renderInvoices : null);
+    safeUiCall(typeof renderQuotes === "function" ? renderQuotes : null);
 
     // Only hydrate settings fields if Settings tab is currently visible (avoid overriding user typing)
     try { if (sections && sections.settings && !sections.settings.hidden) renderSettings(); } catch {}
@@ -7470,6 +7942,7 @@ if (!d.features) d.features = { sruEnabled: false };
     if (tabKey === "bank_inbox") safeUiCall(typeof BankImportModule !== "undefined" && BankImportModule && typeof BankImportModule.renderInbox === "function" ? BankImportModule.renderInbox : null);
     if (tabKey === "accounts") safeUiCall(typeof renderAccounts === "function" ? renderAccounts : null);
     if (tabKey === "invoices") safeUiCall(typeof renderInvoices === "function" ? renderInvoices : null);
+    if (tabKey === "quotes") safeUiCall(typeof renderQuotes === "function" ? renderQuotes : null);
     if (tabKey === "export") {
       Promise.resolve()
         .then(()=> (typeof renderDocumentRegistryList === "function") ? renderDocumentRegistryList() : null)
@@ -9998,6 +10471,1037 @@ if (!d.features) d.features = { sruEnabled: false };
     }
   }
 
+  // --- Quote helpers ---
+  const quoteGrid = document.getElementById("quoteGrid");
+  const quoteListCard = document.getElementById("quoteListCard");
+  const quoteYearSelect = document.getElementById("quoteYearSelect");
+  const quoteList = document.getElementById("quoteList");
+  const quoteDate = document.getElementById("quoteDate");
+  const quoteExpiresAt = document.getElementById("quoteExpiresAt");
+  const quoteNo = document.getElementById("quoteNo");
+  const quoteStatus = document.getElementById("quoteStatus");
+  const quoteCurrency = document.getElementById("quoteCurrency");
+  const quoteVatScheme = document.getElementById("quoteVatScheme");
+  const quoteRef = document.getElementById("quoteRef");
+  const quoteCustomerSelect = document.getElementById("quoteCustomerSelect");
+  const quoteSource = document.getElementById("quoteSource");
+  const quoteEditorStatus = document.getElementById("quoteEditorStatus");
+  const quoteCustomerName = document.getElementById("quoteCustomerName");
+  const quoteInternalIndicators = document.getElementById("quoteInternalIndicators");
+  const quoteOrderDraftView = document.getElementById("quoteOrderDraftView");
+  const quoteOrderDraftTitle = document.getElementById("quoteOrderDraftTitle");
+  const quoteOrderDraftInvoiceStatus = document.getElementById("quoteOrderDraftInvoiceStatus");
+  const quoteOrderDraftDocStatus = document.getElementById("quoteOrderDraftDocStatus");
+  const quoteOrderDraftMeta = document.getElementById("quoteOrderDraftMeta");
+  const quoteOrderDraftLines = document.getElementById("quoteOrderDraftLines");
+  const quoteOrderDraftEmpty = document.getElementById("quoteOrderDraftEmpty");
+  const quoteCompanyName = document.getElementById("quoteCompanyName");
+  const quoteCustomerEmail = document.getElementById("quoteCustomerEmail");
+  const quoteCustomerPhone = document.getElementById("quoteCustomerPhone");
+  const quoteOrgnr = document.getElementById("quoteOrgnr");
+  const quoteLinesTbody = document.getElementById("quoteLinesTbody");
+  const quoteTotalsBox = document.getElementById("quoteTotalsBox");
+  const quoteNotes = document.getElementById("quoteNotes");
+  const btnQuoteNew = document.getElementById("btnQuoteNew");
+  const btnQuotePrint = document.getElementById("btnQuotePrint");
+  const btnQuoteMarkSent = document.getElementById("btnQuoteMarkSent");
+  const btnQuoteMarkAccepted = document.getElementById("btnQuoteMarkAccepted");
+  const btnQuoteCreateOrderDraft = document.getElementById("btnQuoteCreateOrderDraft");
+  const btnQuoteOpenOrderDraft = document.getElementById("btnQuoteOpenOrderDraft");
+  const btnOrderDraftCreateInvoice = document.getElementById("btnOrderDraftCreateInvoice");
+  const btnQuoteSave = document.getElementById("btnQuoteSave");
+  const btnQuoteAddLine = document.getElementById("btnQuoteAddLine");
+  const btnQuoteClear = document.getElementById("btnQuoteClear");
+  const btnQuoteRefresh = document.getElementById("btnQuoteRefresh");
+
+  let editingQuoteId = null;
+  let quoteLines = [];
+  let openOrderDraftId = null;
+
+  function getActiveOrderForQuote(quoteId){
+    const id = String(quoteId || "").trim();
+    if (!id) return null;
+    return (state.orders || []).find(order => order
+      && String(order.quoteId || order.sourceQuoteId || "").trim() === id
+      && String(order.entryType || order.entry_type || "").trim() === "custom_quote"
+      && !["cancelled", "voided", "deleted"].includes(String(order.status || "draft").trim())) || null;
+  }
+
+  function getOrderDraftForView(){
+    const activeId = String(openOrderDraftId || "").trim();
+    if (activeId) {
+      const order = (state.orders || []).find(x => x && String(x.id || "").trim() === activeId) || null;
+      if (order) return order;
+    }
+    const quoteId = String(editingQuoteId || "").trim();
+    if (!quoteId) return null;
+    return getActiveOrderForQuote(quoteId);
+  }
+
+  function getActiveInvoiceForOrder(orderId){
+    const id = String(orderId || "").trim();
+    if (!id) return null;
+    return (state.invoices || []).find(inv => inv
+      && String(inv.orderId || "").trim() === id
+      && !["cancelled", "voided", "deleted"].includes(String(inv.status || "active").trim())) || null;
+  }
+
+  function syncOrderInvoiceLink(orderId, invoiceRecord){
+    const id = String(orderId || "").trim();
+    if (!id) return null;
+    const idx = (state.orders || []).findIndex(order => order && String(order.id || "").trim() === id);
+    if (idx < 0) return null;
+    const current = state.orders[idx] || {};
+    const invoice = (invoiceRecord && typeof invoiceRecord === "object") ? invoiceRecord : null;
+    const next = {
+      ...current,
+      invoiceId: String(invoice?.id || current.invoiceId || "").trim(),
+      invoiceNo: String(invoice?.no || current.invoiceNo || "").trim(),
+      sourceInvoiceNo: String(invoice?.no || current.sourceInvoiceNo || "").trim(),
+      invoiceStatus: String(invoice?.status || current.invoiceStatus || "active").trim(),
+      invoicedAt: String(invoice?.date || current.invoicedAt || "").trim()
+    };
+    state.orders[idx] = next;
+    return next;
+  }
+
+  function renderOrderDraftView(order){
+    if (!quoteOrderDraftView || !quoteOrderDraftMeta || !quoteOrderDraftLines || !quoteOrderDraftEmpty || !quoteOrderDraftTitle || !quoteOrderDraftDocStatus || !quoteOrderDraftInvoiceStatus) return;
+    const o = order && typeof order === "object" ? order : null;
+    if (!o) {
+      openOrderDraftId = null;
+      quoteOrderDraftView.hidden = true;
+      quoteOrderDraftTitle.textContent = "Inget orderutkast öppet";
+      quoteOrderDraftDocStatus.className = "status";
+      quoteOrderDraftDocStatus.textContent = "order_confirmation_pdf okänd";
+      quoteOrderDraftInvoiceStatus.className = "status";
+      quoteOrderDraftInvoiceStatus.textContent = "Faktura okänd";
+      if (btnOrderDraftCreateInvoice) btnOrderDraftCreateInvoice.disabled = true;
+      quoteOrderDraftMeta.innerHTML = "";
+      quoteOrderDraftLines.innerHTML = "";
+      quoteOrderDraftEmpty.hidden = false;
+      quoteOrderDraftEmpty.textContent = "Öppna ett orderutkast från en accepterad offert för att se snapshot-raderna.";
+      return;
+    }
+
+    openOrderDraftId = String(o.id || "").trim() || null;
+    const orderNoValue = String(o.orderNo || o.order_number || o.id || "").trim() || "(utan nummer)";
+    const doc = getActiveDocumentForEntity({
+      yearId: o.yearId,
+      kind: "order_confirmation_pdf",
+      linkedType: "order",
+      linkedId: o.id
+    });
+    const activeInvoice = getActiveInvoiceForOrder(o.id);
+    const snapshotLines = Array.isArray(o.lines) ? o.lines.slice() : [];
+
+    quoteOrderDraftView.hidden = false;
+    quoteOrderDraftTitle.textContent = `Orderutkast ${orderNoValue}`;
+    quoteOrderDraftInvoiceStatus.className = activeInvoice ? "status ok" : "status";
+    quoteOrderDraftInvoiceStatus.textContent = activeInvoice
+      ? `Faktura finns · ${String(activeInvoice.no || activeInvoice.id || "").trim()}`
+      : "Ingen aktiv faktura";
+    quoteOrderDraftDocStatus.className = doc ? "status ok" : "status bad";
+    quoteOrderDraftDocStatus.textContent = doc
+      ? `order_confirmation_pdf finns${doc.number ? ` · ${String(doc.number).trim()}` : ""}`
+      : "order_confirmation_pdf saknas";
+    if (btnOrderDraftCreateInvoice) btnOrderDraftCreateInvoice.disabled = !!activeInvoice;
+    quoteOrderDraftMeta.innerHTML = [
+      ["Ordernr", orderNoValue],
+      ["Status", String(o.status || "draft").trim() || "draft"],
+      ["Kund", String(o.customerName || o.companyName || o.customer?.full_name || o.customer?.company_name || "-").trim() || "-"],
+      ["Offert", `${String(o.quoteId || o.sourceQuoteId || "-").trim() || "-"}${String(o.sourceQuoteNo || "").trim() ? ` / ${String(o.sourceQuoteNo).trim()}` : ""}`],
+      ["Skapad", formatOrderstockDateTime(o.createdAt || o.created_at || "")],
+      ["Faktura", activeInvoice ? String(activeInvoice.no || activeInvoice.id || "-").trim() || "-" : "Ingen aktiv faktura"],
+      ["Bekräftelse", doc ? "Aktiv" : "Ingen aktiv PDF"]
+    ].map(([label, value]) => `
+      <div class="card" style="padding:8px; border-radius:12px; background:rgba(17,24,38,.55);">
+        <div class="muted small">${escapeHtml(label)}</div>
+        <div style="margin-top:4px; font-weight:700;">${escapeHtml(String(value || "-"))}</div>
+      </div>
+    `).join("");
+
+    quoteOrderDraftLines.innerHTML = snapshotLines.map(line => {
+      const qty = quoteRound2(Number(line?.qty) || 0);
+      const unitPrice = quoteRound2(Number(line?.unitPriceExVat ?? line?.unit_price_ex_vat) || 0);
+      const vatRate = quoteRound2(Number(line?.vatRate ?? line?.vat_rate) || 0);
+      return `
+        <tr>
+          <td>${escapeHtml(String(line?.lineType || "-"))}</td>
+          <td>${escapeHtml(String(line?.category || "-"))}</td>
+          <td>${escapeHtml(String(line?.title || ""))}</td>
+          <td>${escapeHtml(String(line?.description || ""))}</td>
+          <td class="right">${escapeHtml(String(qty).replace(".", ","))}</td>
+          <td>${escapeHtml(String(line?.unit || ""))}</td>
+          <td class="right">${fmtSEK(unitPrice)}</td>
+          <td class="right">${escapeHtml(String(vatRate).replace(".", ","))}</td>
+        </tr>
+      `;
+    }).join("");
+    quoteOrderDraftEmpty.hidden = snapshotLines.length > 0;
+    if (!snapshotLines.length) {
+      quoteOrderDraftEmpty.textContent = "Orderutkastet saknar snapshot-rader.";
+    }
+  }
+
+  function openOrderDraftFromEditor(){
+    const order = getOrderDraftForView();
+    if (!editingQuoteId) {
+      showToast("Öppna en accepterad offert först.", 5000);
+      return;
+    }
+    if (!order) {
+      renderOrderDraftView(null);
+      updateQuoteInternalIndicators();
+      showToast("Det finns inget orderutkast att öppna för offerten.", 5000);
+      return;
+    }
+    renderOrderDraftView(order);
+    if (quoteOrderDraftView && quoteOrderDraftView.scrollIntoView) {
+      quoteOrderDraftView.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  }
+
+  function createInvoiceFromOpenOrderDraft(){
+    const order = getOrderDraftForView();
+    if (!order) {
+      showToast("Öppna ett orderutkast först.", 5000);
+      return;
+    }
+    try {
+      const result = createInvoiceFromOrder(order.id);
+      const invoice = result?.invoice || null;
+      const latestOrder = (state.orders || []).find(x => x && String(x.id || "").trim() === String(order.id || "").trim()) || order;
+      renderOrderDraftView(latestOrder);
+      updateQuoteInternalIndicators();
+      const ref = String(invoice?.no || invoice?.id || "").trim();
+      showToast(result?.created
+        ? (ref ? `Faktura skapades: ${ref}.` : "Faktura skapades.")
+        : (ref ? `Faktura finns redan: ${ref}.` : "Faktura finns redan."), 5000);
+    } catch (err) {
+      console.error(err);
+      showToast(err && err.message ? String(err.message) : "Kunde inte skapa faktura från orderutkastet.", 7000);
+    }
+  }
+
+  function updateQuoteInternalIndicators(){
+    if (!quoteInternalIndicators) return;
+    const quote = editingQuoteId ? (state.quotes || []).find(x => x && x.id === editingQuoteId) : null;
+    if (!quote || String(quote.status || "").trim() !== "accepted"){
+      quoteInternalIndicators.hidden = true;
+      quoteInternalIndicators.innerHTML = "";
+      if (btnQuoteOpenOrderDraft) btnQuoteOpenOrderDraft.hidden = true;
+      renderOrderDraftView(null);
+      return;
+    }
+    const order = getActiveOrderForQuote(quote.id);
+    const quotePdf = getActiveDocumentForEntity({
+      yearId: quote.yearId,
+      kind: "quote_pdf",
+      linkedType: "quote",
+      linkedId: quote.id
+    });
+    quoteInternalIndicators.hidden = false;
+    const orderRef = order ? String(order.sourceQuoteNo || order.orderNo || order.order_number || order.id || "").trim() : "";
+    if (btnQuoteOpenOrderDraft) btnQuoteOpenOrderDraft.hidden = !order;
+    quoteInternalIndicators.innerHTML = `
+      <span class="${order ? "status ok" : "status"}">${order ? `Orderutkast finns${orderRef ? ` · ${escapeHtml(orderRef)}` : ""}` : "Inget orderutkast"}</span>
+      <span class="${quotePdf ? "status ok" : "status"}">${quotePdf ? "quote_pdf finns" : "quote_pdf saknas"}</span>
+    `;
+    if (order && String(openOrderDraftId || "").trim() === String(order.id || "").trim()) {
+      renderOrderDraftView(order);
+    } else if (!order) {
+      renderOrderDraftView(null);
+    }
+  }
+
+  function nextQuoteNo(yearId){
+    const nums = (state.quotes || [])
+      .filter(q => String(q?.yearId || "") === String(yearId || ""))
+      .map(q => Number(q.quoteNo))
+      .filter(n => Number.isFinite(n));
+    const max = nums.length ? Math.max(...nums) : 1000;
+    return String(max + 1);
+  }
+
+  function quoteYearId(){
+    const raw = String((quoteDate && quoteDate.value) || "").trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw.slice(0, 4);
+    return String((quoteYearSelect && quoteYearSelect.value) || state.activeYearId || new Date().getFullYear());
+  }
+
+  function makeDefaultQuoteLine(index){
+    return normalizeQuoteLine({
+      lineType: "service_hourly",
+      category: "construction",
+      title: "",
+      description: "",
+      qty: 1,
+      unit: "h",
+      unitPriceExVat: 0,
+      vatRate: 25,
+      accountSuggestion: "3041",
+      sortOrder: Number(index || 0) + 1
+    }, editingQuoteId || "", Number(index || 0));
+  }
+
+  function renderQuoteCustomerOptions(prefer){
+    if (!quoteCustomerSelect) return;
+    const prev = String(prefer ?? quoteCustomerSelect.value ?? "").trim();
+    const keys = Object.keys(state.customers || {}).sort((a,b)=> (state.customers[a]?.name || "").localeCompare(state.customers[b]?.name || "", "sv"));
+    quoteCustomerSelect.innerHTML = `<option value="">(ingen vald)</option>`;
+    keys.forEach(id => {
+      const c = state.customers[id] || {};
+      const opt = document.createElement("option");
+      opt.value = id;
+      opt.textContent = `${c.name || "(namn)"}${c.orgnr ? " · " + c.orgnr : ""}`;
+      quoteCustomerSelect.appendChild(opt);
+    });
+    quoteCustomerSelect.value = keys.includes(prev) ? prev : "";
+  }
+
+  function applyQuoteCustomerSelection(){
+    const customerId = String((quoteCustomerSelect && quoteCustomerSelect.value) || "").trim();
+    if (!customerId) return;
+    const c = state.customers?.[customerId];
+    if (!c) return;
+    if (quoteCustomerName) quoteCustomerName.value = c.name || "";
+    if (quoteCompanyName) quoteCompanyName.value = c.name || "";
+    if (quoteCustomerEmail) quoteCustomerEmail.value = c.email || "";
+    if (quoteCustomerPhone) quoteCustomerPhone.value = "";
+    if (quoteOrgnr) quoteOrgnr.value = c.orgnr || "";
+    updateQuoteTotals();
+  }
+
+  function setQuoteEditorStatus(text){
+    if (quoteEditorStatus) quoteEditorStatus.textContent = text || "";
+  }
+
+  function currentQuoteActor(){
+    return clampText(String(state.company?.defaultSign || "").trim(), 60);
+  }
+
+  function isQuoteLockedStatus(status){
+    return QUOTE_LOCKED_STATUSES.includes(String(status || "").trim());
+  }
+
+  function isQuoteControlledStatus(status){
+    return QUOTE_CONTROLLED_STATUSES.includes(String(status || "").trim());
+  }
+
+  function currentStoredQuoteStatus(){
+    const existing = editingQuoteId ? (state.quotes || []).find(x => x && x.id === editingQuoteId) : null;
+    return String(existing?.status || "draft").trim() || "draft";
+  }
+
+  function isQuoteEditorLocked(){
+    return isQuoteLockedStatus(String((quoteStatus && quoteStatus.value) || currentStoredQuoteStatus() || "draft").trim());
+  }
+
+  function buildQuoteFromEditor(overrides, options){
+    const extra = (overrides && typeof overrides === "object") ? overrides : {};
+    const opts = (options && typeof options === "object") ? options : {};
+    const date = String((quoteDate && quoteDate.value) || "").trim() || todayISO();
+    const yearId = quoteYearId();
+    const existing = editingQuoteId ? (state.quotes || []).find(x => x && x.id === editingQuoteId) : null;
+    const id = existing?.id || crypto.randomUUID();
+    const actor = currentQuoteActor();
+    const createdAt = existing?.createdAt || nowISO();
+    const createdBy = existing?.createdBy || actor;
+    let quoteNoValue = String((quoteNo && quoteNo.value) || "").trim();
+    if (!quoteNoValue && opts.assignNumber !== false) quoteNoValue = nextQuoteNo(yearId);
+    const raw = {
+      ...existing,
+      id,
+      yearId,
+      quoteNo: quoteNoValue,
+      date,
+      expiresAt: String((quoteExpiresAt && quoteExpiresAt.value) || "").trim() || addDays(date, 30),
+      customerId: String((quoteCustomerSelect && quoteCustomerSelect.value) || "").trim(),
+      customerName: String((quoteCustomerName && quoteCustomerName.value) || "").trim(),
+      customerEmail: String((quoteCustomerEmail && quoteCustomerEmail.value) || "").trim(),
+      customerPhone: String((quoteCustomerPhone && quoteCustomerPhone.value) || "").trim(),
+      companyName: String((quoteCompanyName && quoteCompanyName.value) || "").trim(),
+      orgnr: String((quoteOrgnr && quoteOrgnr.value) || "").trim(),
+      currency: String((quoteCurrency && quoteCurrency.value) || state.company?.currency || "SEK").trim(),
+      vatScheme: String((quoteVatScheme && quoteVatScheme.value) || "SE_VAT").trim(),
+      status: String((quoteStatus && quoteStatus.value) || existing?.status || "draft").trim(),
+      ref: String((quoteRef && quoteRef.value) || "").trim(),
+      notes: String((quoteNotes && quoteNotes.value) || "").trim(),
+      source: String((quoteSource && quoteSource.value) || existing?.source || "fu_local").trim(),
+      adminQuoteId: String(existing?.adminQuoteId || "").trim(),
+      adminToken: String(existing?.adminToken || "").trim(),
+      createdAt,
+      createdBy,
+      updatedAt: nowISO(),
+      updatedBy: actor,
+      lines: quoteLines.map((line, idx) => normalizeQuoteLine({ ...line, quoteId: id, sortOrder: idx + 1 }, id, idx))
+    };
+    return normalizeQuoteRecord({ ...raw, ...extra });
+  }
+
+  function upsertQuoteRecord(quote){
+    state.quotes = Array.isArray(state.quotes) ? state.quotes : [];
+    const idx = state.quotes.findIndex(x => x && x.id === quote.id);
+    if (idx >= 0) state.quotes[idx] = quote; else state.quotes.push(quote);
+    state.quotes.sort((a,b)=> (String(a.yearId||"") + String(a.quoteNo||"") + String(a.date||"")).localeCompare(String(b.yearId||"") + String(b.quoteNo||"") + String(b.date||""), "sv"));
+    save();
+    loadQuoteToEditor(quote.id);
+    renderQuotes();
+  }
+
+  async function ensureQuotePdfForQuote(quote, options){
+    const q = quote && typeof quote === "object" ? quote : null;
+    if (!q || !q.id) return null;
+    const opts = (options && typeof options === "object") ? options : {};
+    const forceRefresh = !!opts.forceRefresh;
+    const createdBy = opts.createdBy != null ? opts.createdBy : currentQuoteActor();
+    try {
+      const docState = await shouldBackfillEntityDocument({
+        yearId: q.yearId,
+        kind: "quote_pdf",
+        linkedType: "quote",
+        linkedId: q.id
+      });
+      if (!forceRefresh && docState && !docState.shouldCreate) return docState.doc || null;
+      const blob = await generateQuotePdfBlob(q);
+      return await registerGeneratedQuoteDocument({ quote: q, blob, createdBy });
+    } catch (err) {
+      console.error("Quote PDF ensure failed", q?.id, err);
+      return null;
+    }
+  }
+
+  function syncQuoteOrderDraftLink(quoteId, order){
+    const id = String(quoteId || "").trim();
+    const targetOrder = order && typeof order === "object" ? order : null;
+    if (!id || !targetOrder) return null;
+    const idx = (state.quotes || []).findIndex(q => q && q.id === id);
+    if (idx < 0) return null;
+    const current = state.quotes[idx] || {};
+    const updated = {
+      ...current,
+      orderDraftId: String(targetOrder.id || "").trim(),
+      orderDraftNo: String(targetOrder.orderNo || targetOrder.order_number || targetOrder.sourceQuoteNo || targetOrder.id || "").trim(),
+      orderDraftStatus: String(targetOrder.status || "draft").trim() || "draft",
+      orderDraftCreatedAt: String(targetOrder.createdAt || targetOrder.created_at || nowISO()).trim(),
+    };
+    state.quotes[idx] = updated;
+    return updated;
+  }
+
+  function syncOrderConfirmationLink(orderId, documentRecord){
+    const id = String(orderId || "").trim();
+    const doc = documentRecord && typeof documentRecord === "object" ? documentRecord : null;
+    if (!id) return null;
+    const idx = (state.orders || []).findIndex(order => order && String(order.id || "").trim() === id);
+    if (idx < 0) return null;
+    const current = state.orders[idx] || {};
+    const updated = {
+      ...current,
+      orderConfirmationDocumentId: String(doc?.id || current.orderConfirmationDocumentId || "").trim(),
+      orderConfirmationDocumentNo: String(doc?.number || current.orderConfirmationDocumentNo || current.orderNo || current.order_number || "").trim(),
+    };
+    state.orders[idx] = updated;
+    return updated;
+  }
+
+  async function ensureOrderConfirmationPdfForOrder(order, options){
+    const o = order && typeof order === "object" ? order : null;
+    if (!o || !o.id) return null;
+    const opts = (options && typeof options === "object") ? options : {};
+    const forceRefresh = !!opts.forceRefresh;
+    const createdBy = opts.createdBy != null ? opts.createdBy : currentQuoteActor();
+    try {
+      const docState = await shouldBackfillEntityDocument({
+        yearId: o.yearId,
+        kind: "order_confirmation_pdf",
+        linkedType: "order",
+        linkedId: o.id
+      });
+      let doc = (!forceRefresh && docState && !docState.shouldCreate) ? (docState.doc || null) : null;
+      if (!doc) {
+        const blob = await generateOrderConfirmationPdfBlob(o);
+        doc = await registerGeneratedOrderConfirmationDocument({ order: o, blob, createdBy });
+      }
+      if (doc) {
+        syncOrderConfirmationLink(o.id, doc);
+        save({ renderAll:false });
+      }
+      return doc;
+    } catch (err) {
+      console.error("Order confirmation PDF ensure failed", o?.id, err);
+      return null;
+    }
+  }
+
+  function renderQuoteStatusBadge(status){
+    const value = String(status || "draft").trim() || "draft";
+    if (isQuoteLockedStatus(value)){
+      return `<span class="badge lock">🔒 <b>${escapeHtml(value)}</b></span>`;
+    }
+    if (value === "sent") return `<span class="status ok">${escapeHtml(value)}</span>`;
+    return `<span class="status">${escapeHtml(value)}</span>`;
+  }
+
+  function renderQuotePrintHtml(quote){
+    const totals = quoteTotals(quote.lines || []);
+    const currency = escapeHtml(quote.currency || state.company?.currency || "SEK");
+    const rows = (quote.lines || []).map((line, idx) => {
+      const sums = quoteLineTotals(line);
+      const title = String(line.title || line.description || "Rad").trim() || "Rad";
+      const desc = String(line.description || "").trim();
+      return `<tr>
+        <td>
+          <div style="font-weight:700;">${escapeHtml(title)}</div>
+          ${desc && desc !== title ? `<div class="muted">${escapeHtml(desc)}</div>` : ""}
+          <div class="muted">${escapeHtml(line.lineType || "")} · ${escapeHtml(line.category || "")} · Konto ${escapeHtml(line.accountSuggestion || "-")}</div>
+        </td>
+        <td style="text-align:right;">${escapeHtml(String(line.qty ?? 0).replace(".", ","))}</td>
+        <td style="text-align:right;">${escapeHtml(line.unit || "")}</td>
+        <td style="text-align:right;">${fmtSEK(Number(line.unitPriceExVat) || 0)}</td>
+        <td style="text-align:right;">${fmtSEK(sums.total)}</td>
+      </tr>`;
+    }).join("");
+
+    return `
+      <div class="row" style="margin-bottom:18px;">
+        <div>
+          ${state.company.logoDataUrl ? `<img alt="Logotyp" src="${state.company.logoDataUrl}" style="max-height:72px; max-width:260px; object-fit:contain; margin-bottom:10px;">` : ""}
+          <h1 style="margin:0 0 8px 0;">Offert ${escapeHtml(quote.quoteNo || "") || "(utan nr)"}</h1>
+          <div class="muted">Offertdatum: ${escapeHtml(quote.date || "")}</div>
+          <div class="muted">Giltig t.o.m.: ${escapeHtml(quote.expiresAt || "")}</div>
+          <div class="muted">Status: ${escapeHtml(quote.status || "draft")}</div>
+          ${quote.ref ? `<div class="muted">Referens: ${escapeHtml(quote.ref)}</div>` : ""}
+        </div>
+        <div style="min-width:260px; text-align:right;">
+          <div style="font-weight:800;">${escapeHtml(state.company.name || "")}</div>
+          ${state.company.orgnr ? `<div class="muted">Org.nr: ${escapeHtml(state.company.orgnr)}</div>` : ""}
+          ${state.company.vat ? `<div class="muted">Momsreg.nr: ${escapeHtml(state.company.vat)}</div>` : ""}
+          ${[state.company.addr, [state.company.zip, state.company.city].filter(Boolean).join(" "), state.company.country].filter(x => x && String(x).trim()).map(x => `<div class="muted">${escapeHtml(x)}</div>`).join("")}
+          ${state.company.email ? `<div class="muted">${escapeHtml(state.company.email)}</div>` : ""}
+          ${state.company.phone ? `<div class="muted">${escapeHtml(state.company.phone)}</div>` : ""}
+          ${state.company.web ? `<div class="muted">${escapeHtml(state.company.web)}</div>` : ""}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="muted" style="margin-bottom:6px;">Kund</div>
+        <div style="font-weight:800;">${escapeHtml(quote.companyName || quote.customerName || "(kund)")}</div>
+        ${quote.customerName && quote.companyName && quote.customerName !== quote.companyName ? `<div class="muted">Kontakt: ${escapeHtml(quote.customerName)}</div>` : ""}
+        ${quote.orgnr ? `<div class="muted">Org.nr: ${escapeHtml(quote.orgnr)}</div>` : ""}
+        ${quote.customerEmail ? `<div class="muted">${escapeHtml(quote.customerEmail)}</div>` : ""}
+        ${quote.customerPhone ? `<div class="muted">${escapeHtml(quote.customerPhone)}</div>` : ""}
+      </div>
+
+      <div class="card">
+        <table>
+          <thead><tr><th>Rad</th><th style="text-align:right;">Antal</th><th style="text-align:right;">Enhet</th><th style="text-align:right;">A-pris exkl.</th><th style="text-align:right;">Belopp</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+
+      <div class="card" style="max-width:420px; margin-left:auto;">
+        <div class="row"><span>Summa exkl. moms</span><span>${fmtSEK(totals.subtotal)} ${currency}</span></div>
+        <div class="row"><span>Moms</span><span>${fmtSEK(totals.vat)} ${currency}</span></div>
+        <div class="row" style="font-weight:900; font-size:18px;"><span>Totalt inkl. moms</span><span>${fmtSEK(totals.total)} ${currency}</span></div>
+      </div>
+
+      ${quote.notes ? `<div class="card"><div style="font-weight:800; margin-bottom:6px;">Notering</div><div style="white-space:pre-wrap;">${escapeHtml(quote.notes)}</div></div>` : ""}
+    `;
+  }
+
+  function previewQuotePrint(){
+    if (!quoteCanSave()){
+      showToast("Fyll i kund och minst en rad innan du förhandsgranskar offerten.", 5000);
+      return;
+    }
+    const quote = buildQuoteFromEditor({}, { assignNumber: false });
+    const storedQuote = editingQuoteId ? (state.quotes || []).find(x => x && x.id === editingQuoteId) : null;
+    if (storedQuote && storedQuote.id){
+      void ensureQuotePdfForQuote(storedQuote, {
+        createdBy: currentQuoteActor(),
+        forceRefresh: isQuoteLockedStatus(storedQuote.status)
+      });
+    }
+    printHtmlDocument(`Offert ${escapeHtml(quote.quoteNo || "") || ""}`, renderQuotePrintHtml(quote));
+  }
+
+  async function setQuoteStatusControlled(targetStatus, successMessage){
+    if (isQuoteEditorLocked()){
+      showToast("Offerten är låst och kan inte ändras.", 5000);
+      return;
+    }
+    if (!quoteCanSave()){
+      showToast("Fyll i kund och minst en rad innan du ändrar offertstatus.", 5000);
+      return;
+    }
+    const nextStatus = String(targetStatus || "").trim();
+    if (!QUOTE_STATUS_OPTIONS.includes(nextStatus)) return;
+    const currentStatus = String((quoteStatus && quoteStatus.value) || currentStoredQuoteStatus() || "draft").trim();
+    if (currentStatus === nextStatus){
+      showToast(`Offerten har redan status ${nextStatus}.`, 3500);
+      return;
+    }
+    const quote = buildQuoteFromEditor({ status: nextStatus });
+    upsertQuoteRecord(quote);
+    void ensureQuotePdfForQuote(quote, { createdBy: currentQuoteActor(), forceRefresh: true });
+    showToast(successMessage || `Offertstatus ändrades till ${nextStatus}.`, 3500);
+  }
+
+  async function markQuoteAsSent(){
+    return setQuoteStatusControlled("sent", "Offerten markerades som skickad.");
+  }
+
+  async function markQuoteAsAccepted(){
+    return setQuoteStatusControlled("accepted", "Offerten markerades som accepterad.");
+  }
+
+  async function createOrderDraftFromEditor(){
+    const quoteId = String(editingQuoteId || "").trim();
+    if (!quoteId) {
+      showToast("Öppna en accepterad offert först.", 5000);
+      return;
+    }
+    try {
+      const existing = getActiveOrderForQuote(quoteId);
+      if (existing) {
+        const ref = String(existing.sourceQuoteNo || existing.orderNo || existing.order_number || existing.id || "").trim();
+        updateQuoteInternalIndicators();
+        showToast(ref ? `Orderutkast finns redan: ${ref}.` : "Orderutkast finns redan.", 4500);
+        return;
+      }
+      const order = createOrderFromQuote(quoteId);
+      const ref = String(order?.sourceQuoteNo || order?.orderNo || order?.order_number || order?.id || "").trim();
+      openOrderDraftId = String(order?.id || "").trim() || null;
+      renderOrderDraftView(order);
+      updateQuoteInternalIndicators();
+      showToast(ref ? `Orderutkast skapades: ${ref}.` : "Orderutkast skapades.", 4500);
+    } catch (err) {
+      console.error(err);
+      const msg = err && err.message ? String(err.message) : "Kunde inte skapa orderutkast.";
+      showToast(msg, 7000);
+    }
+  }
+
+  function applyQuoteEditorLock(){
+    const locked = isQuoteEditorLocked();
+    const statusValue = String((quoteStatus && quoteStatus.value) || currentStoredQuoteStatus() || "draft").trim() || "draft";
+    const hasActiveOrderDraft = !!getActiveOrderForQuote(editingQuoteId);
+
+    [quoteNo, quoteCurrency, quoteVatScheme, quoteRef, quoteCustomerName, quoteCompanyName, quoteCustomerEmail, quoteCustomerPhone, quoteOrgnr, quoteNotes]
+      .filter(Boolean)
+      .forEach(el => { el.readOnly = !!locked; });
+
+    [quoteDate, quoteExpiresAt, quoteStatus, quoteCustomerSelect, quoteSource]
+      .filter(Boolean)
+      .forEach(el => { el.disabled = !!locked; });
+
+    if (btnQuoteAddLine) btnQuoteAddLine.disabled = !!locked;
+    if (btnQuoteClear) btnQuoteClear.disabled = !!locked;
+    if (btnQuoteSave) btnQuoteSave.disabled = !!locked || !quoteCanSave();
+    if (btnQuoteMarkSent) btnQuoteMarkSent.disabled = !!locked || statusValue === "sent" || statusValue === "accepted" || !quoteCanSave();
+    if (btnQuoteMarkAccepted) btnQuoteMarkAccepted.disabled = !!locked || statusValue === "accepted" || !quoteCanSave();
+    if (btnQuoteCreateOrderDraft) btnQuoteCreateOrderDraft.disabled = statusValue !== "accepted" || hasActiveOrderDraft;
+    if (btnQuoteOpenOrderDraft) btnQuoteOpenOrderDraft.disabled = !hasActiveOrderDraft;
+    if (btnQuotePrint) btnQuotePrint.disabled = !quoteCanSave();
+
+    const baseStatus = editingQuoteId
+      ? `Redigerar offert ${String((quoteNo && quoteNo.value) || "").trim() || "(utan nr)"}`
+      : "Ny offert";
+    const statusText = locked && statusValue === "accepted"
+      ? `${baseStatus} · låst (${statusValue}) · PDF säkras vid statusbyte/förhandsgranskning`
+      : (locked ? `${baseStatus} · låst (${statusValue})` : baseStatus);
+    setQuoteEditorStatus(statusText);
+    updateQuoteInternalIndicators();
+  }
+
+  function quoteCanSave(){
+    const hasCustomer = !!String((quoteCustomerName && quoteCustomerName.value) || (quoteCompanyName && quoteCompanyName.value) || "").trim();
+    const hasLines = quoteLines.some(line => String(line?.title || line?.description || "").trim());
+    return hasCustomer && hasLines;
+  }
+
+  function updateQuoteTotals(){
+    const totals = quoteTotals(quoteLines);
+    const currency = String((quoteCurrency && quoteCurrency.value) || state.company?.currency || "SEK").trim() || "SEK";
+    if (quoteTotalsBox){
+      quoteTotalsBox.innerHTML = `Summa exkl. moms: ${fmtSEK(totals.subtotal)} ${escapeHtml(currency)}<br>Moms: ${fmtSEK(totals.vat)} ${escapeHtml(currency)}<br>Totalt inkl. moms: ${fmtSEK(totals.total)} ${escapeHtml(currency)}`;
+    }
+    applyQuoteEditorLock();
+  }
+
+  function renderQuoteLines(){
+    if (!quoteLinesTbody) return;
+    const locked = isQuoteEditorLocked();
+    quoteLinesTbody.innerHTML = "";
+    quoteLines.forEach((line, idx) => {
+      const tr = document.createElement("tr");
+
+      const tdType = document.createElement("td");
+      const selType = document.createElement("select");
+      QUOTE_LINE_TYPE_OPTIONS.forEach(value => {
+        const opt = document.createElement("option");
+        opt.value = value;
+        opt.textContent = value;
+        selType.appendChild(opt);
+      });
+      selType.value = line.lineType || "service_hourly";
+      selType.disabled = locked;
+      selType.addEventListener("change", ()=>{
+        const prevType = line.lineType;
+        line.lineType = selType.value;
+        if (!String(line.accountSuggestion || "").trim() || String(line.accountSuggestion || "").trim() === quoteDefaultAccountSuggestion(prevType)) {
+          line.accountSuggestion = quoteDefaultAccountSuggestion(line.lineType);
+        }
+        if (!String(line.unit || "").trim() || String(line.unit || "").trim() === quoteDefaultUnit(prevType)) {
+          line.unit = quoteDefaultUnit(line.lineType);
+        }
+        renderQuoteLines();
+        updateQuoteTotals();
+      });
+      tdType.appendChild(selType);
+
+      const tdCategory = document.createElement("td");
+      const selCategory = document.createElement("select");
+      QUOTE_CATEGORY_OPTIONS.forEach(value => {
+        const opt = document.createElement("option");
+        opt.value = value;
+        opt.textContent = value;
+        selCategory.appendChild(opt);
+      });
+      selCategory.value = line.category || "other";
+      selCategory.disabled = locked;
+      selCategory.addEventListener("change", ()=>{ line.category = selCategory.value; updateQuoteTotals(); });
+      tdCategory.appendChild(selCategory);
+
+      const tdTitle = document.createElement("td");
+      const inpTitle = document.createElement("input");
+      inpTitle.value = line.title || "";
+      inpTitle.placeholder = "Rubrik";
+      inpTitle.readOnly = locked;
+      inpTitle.addEventListener("input", ()=>{ line.title = inpTitle.value; updateQuoteTotals(); });
+      tdTitle.appendChild(inpTitle);
+
+      const tdDesc = document.createElement("td");
+      const inpDesc = document.createElement("input");
+      inpDesc.value = line.description || "";
+      inpDesc.placeholder = "Beskrivning";
+      inpDesc.readOnly = locked;
+      inpDesc.addEventListener("input", ()=>{ line.description = inpDesc.value; updateQuoteTotals(); });
+      tdDesc.appendChild(inpDesc);
+
+      const tdQty = document.createElement("td"); tdQty.className = "right";
+      const inpQty = document.createElement("input");
+      inpQty.inputMode = "decimal";
+      inpQty.value = String(line.qty ?? 1).replace(".", ",");
+      inpQty.readOnly = locked;
+      inpQty.addEventListener("input", ()=>{ line.qty = quoteRound2(parseMoney(inpQty.value)); updateQuoteTotals(); });
+      tdQty.appendChild(inpQty);
+
+      const tdUnit = document.createElement("td");
+      const inpUnit = document.createElement("input");
+      inpUnit.value = line.unit || "";
+      inpUnit.readOnly = locked;
+      inpUnit.addEventListener("input", ()=>{ line.unit = inpUnit.value; updateQuoteTotals(); });
+      tdUnit.appendChild(inpUnit);
+
+      const tdPrice = document.createElement("td"); tdPrice.className = "right";
+      const inpPrice = document.createElement("input");
+      inpPrice.inputMode = "decimal";
+      inpPrice.value = String(line.unitPriceExVat ?? 0).replace(".", ",");
+      inpPrice.readOnly = locked;
+      inpPrice.addEventListener("input", ()=>{ line.unitPriceExVat = quoteRound2(parseMoney(inpPrice.value)); updateQuoteTotals(); });
+      tdPrice.appendChild(inpPrice);
+
+      const tdVat = document.createElement("td"); tdVat.className = "right";
+      const inpVat = document.createElement("input");
+      inpVat.inputMode = "decimal";
+      inpVat.value = String(line.vatRate ?? 25).replace(".", ",");
+      inpVat.readOnly = locked;
+      inpVat.addEventListener("input", ()=>{ line.vatRate = quoteRound2(parseMoney(inpVat.value)); updateQuoteTotals(); });
+      tdVat.appendChild(inpVat);
+
+      const tdAccount = document.createElement("td");
+      const inpAccount = document.createElement("input");
+      inpAccount.value = line.accountSuggestion || "";
+      inpAccount.readOnly = locked;
+      inpAccount.addEventListener("input", ()=>{ line.accountSuggestion = inpAccount.value; updateQuoteTotals(); });
+      tdAccount.appendChild(inpAccount);
+
+      const tdX = document.createElement("td");
+      const bx = document.createElement("button");
+      bx.className = "btn secondary";
+      bx.textContent = "✕";
+      bx.disabled = locked;
+      bx.addEventListener("click", ()=>{
+        quoteLines.splice(idx, 1);
+        if (!quoteLines.length) quoteLines = [makeDefaultQuoteLine(0)];
+        renderQuoteLines();
+        updateQuoteTotals();
+      });
+      tdX.appendChild(bx);
+
+      tr.appendChild(tdType);
+      tr.appendChild(tdCategory);
+      tr.appendChild(tdTitle);
+      tr.appendChild(tdDesc);
+      tr.appendChild(tdQty);
+      tr.appendChild(tdUnit);
+      tr.appendChild(tdPrice);
+      tr.appendChild(tdVat);
+      tr.appendChild(tdAccount);
+      tr.appendChild(tdX);
+      quoteLinesTbody.appendChild(tr);
+    });
+    applyQuoteEditorLock();
+  }
+
+  function newQuote(){
+    editingQuoteId = null;
+    openOrderDraftId = null;
+    if (quoteDate) quoteDate.value = todayISO();
+    if (quoteExpiresAt) quoteExpiresAt.value = addDays((quoteDate && quoteDate.value) || todayISO(), 30);
+    if (quoteNo) quoteNo.value = "";
+    if (quoteStatus) quoteStatus.value = "draft";
+    if (quoteCurrency) quoteCurrency.value = state.company?.currency || "SEK";
+    if (quoteVatScheme) quoteVatScheme.value = "SE_VAT";
+    if (quoteRef) quoteRef.value = "";
+    renderQuoteCustomerOptions("");
+    if (quoteSource) quoteSource.value = "fu_local";
+    if (quoteCustomerName) quoteCustomerName.value = "";
+    if (quoteCompanyName) quoteCompanyName.value = "";
+    if (quoteCustomerEmail) quoteCustomerEmail.value = "";
+    if (quoteCustomerPhone) quoteCustomerPhone.value = "";
+    if (quoteOrgnr) quoteOrgnr.value = "";
+    if (quoteNotes) quoteNotes.value = "";
+    quoteLines = [makeDefaultQuoteLine(0)];
+    renderOrderDraftView(null);
+    renderQuoteLines();
+    updateQuoteTotals();
+  }
+
+  function loadQuoteToEditor(id){
+    const quote = (state.quotes || []).find(x => x && x.id === id);
+    if (!quote) return;
+    editingQuoteId = quote.id;
+    openOrderDraftId = null;
+    if (quoteYearSelect) quoteYearSelect.value = quote.yearId || state.activeYearId;
+    if (quoteDate) quoteDate.value = quote.date || todayISO();
+    if (quoteExpiresAt) quoteExpiresAt.value = quote.expiresAt || addDays(quote.date || todayISO(), 30);
+    if (quoteNo) quoteNo.value = quote.quoteNo || "";
+    if (quoteStatus) quoteStatus.value = quote.status || "draft";
+    if (quoteCurrency) quoteCurrency.value = quote.currency || state.company?.currency || "SEK";
+    if (quoteVatScheme) quoteVatScheme.value = quote.vatScheme || "SE_VAT";
+    if (quoteRef) quoteRef.value = quote.ref || "";
+    renderQuoteCustomerOptions(quote.customerId || "");
+    if (quoteSource) quoteSource.value = quote.source || "fu_local";
+    if (quoteCustomerName) quoteCustomerName.value = quote.customerName || "";
+    if (quoteCompanyName) quoteCompanyName.value = quote.companyName || "";
+    if (quoteCustomerEmail) quoteCustomerEmail.value = quote.customerEmail || "";
+    if (quoteCustomerPhone) quoteCustomerPhone.value = quote.customerPhone || "";
+    if (quoteOrgnr) quoteOrgnr.value = quote.orgnr || "";
+    if (quoteNotes) quoteNotes.value = quote.notes || "";
+    quoteLines = (quote.lines || []).map((line, idx) => normalizeQuoteLine(line, quote.id, idx));
+    if (!quoteLines.length) quoteLines = [makeDefaultQuoteLine(0)];
+    renderOrderDraftView(null);
+    renderQuoteLines();
+    updateQuoteTotals();
+  }
+
+  function saveQuote(){
+    if (isQuoteEditorLocked()){
+      showToast("Offerten är låst och kan inte sparas.", 5000);
+      return;
+    }
+    const actor = currentQuoteActor();
+    const quote = buildQuoteFromEditor();
+    upsertQuoteRecord(quote);
+    void ensureQuotePdfForQuote(quote, { createdBy: actor });
+    showToast("Offerten sparades.", 3500);
+  }
+
+  function createOrderFromQuote(quoteId){
+    const id = String(quoteId || "").trim();
+    if (!id) throw new Error("Saknar quoteId för orderförberedelse.");
+    state.orders = Array.isArray(state.orders) ? state.orders : [];
+    const quote = (state.quotes || []).find(x => x && x.id === id);
+    if (!quote) throw new Error("Offerten hittades inte.");
+    if (String(quote.status || "").trim() !== "accepted") throw new Error("Endast accepterade offerter kan förberedas för order.");
+    const existing = getActiveOrderForQuote(quote.id);
+    if (existing) {
+      syncQuoteOrderDraftLink(quote.id, existing);
+      save({ renderAll:false });
+      if (editingQuoteId === quote.id) updateQuoteInternalIndicators();
+      return existing;
+    }
+
+    const actor = currentQuoteActor();
+    const timestamp = nowISO();
+    const orderNo = `ORD-${String(quote.quoteNo || quote.id || "order").trim()}`;
+    const order = {
+      id: crypto.randomUUID(),
+      yearId: quote.yearId || state.activeYearId || "",
+      quoteId: quote.id,
+      sourceQuoteId: quote.id,
+      sourceQuoteNo: quote.quoteNo || "",
+      orderNo,
+      order_number: orderNo,
+      entryType: "custom_quote",
+      entry_type: "custom_quote",
+      status: "draft",
+      source: "quote_acceptance",
+      createdAt: timestamp,
+      created_at: timestamp,
+      updatedAt: timestamp,
+      updated_at: timestamp,
+      createdBy: actor,
+      updatedBy: actor,
+      currency: quote.currency || state.company?.currency || "SEK",
+      vatScheme: quote.vatScheme || "SE_VAT",
+      vat_scheme: quote.vatScheme || "SE_VAT",
+      payment_reference: quote.ref || quote.quoteNo || quote.id,
+      customerId: quote.customerId || "",
+      customerName: quote.customerName || "",
+      companyName: quote.companyName || "",
+      customerEmail: quote.customerEmail || "",
+      customerPhone: quote.customerPhone || "",
+      orgnr: quote.orgnr || "",
+      email: quote.customerEmail || "",
+      phone: quote.customerPhone || "",
+      customer: {
+        full_name: quote.customerName || quote.companyName || "",
+        company_name: quote.companyName || "",
+        email: quote.customerEmail || "",
+        phone: quote.customerPhone || "",
+        orgnr: quote.orgnr || ""
+      },
+      quoteSnapshot: {
+        id: quote.id,
+        quoteNo: quote.quoteNo || "",
+        date: quote.date || "",
+        status: quote.status || "accepted",
+        acceptedAt: quote.updatedAt || quote.createdAt || timestamp,
+        ref: quote.ref || "",
+        notes: quote.notes || ""
+      },
+      lines: (quote.lines || []).map((line, idx) => {
+        const qty = quoteRound2(Number(line?.qty) || 0);
+        return {
+          id: crypto.randomUUID(),
+          sourceQuoteLineId: String(line?.id || "").trim(),
+          sortOrder: Number(line?.sortOrder || idx + 1),
+          lineType: String(line?.lineType || "service_fixed").trim(),
+          category: String(line?.category || "other").trim(),
+          title: String(line?.title || "").trim(),
+          description: String(line?.description || "").trim(),
+          qty,
+          unit: String(line?.unit || "").trim(),
+          unitPriceExVat: quoteRound2(Number(line?.unitPriceExVat) || 0),
+          unit_price_ex_vat: quoteRound2(Number(line?.unitPriceExVat) || 0),
+          vatRate: quoteRound2(Number(line?.vatRate) || 0),
+          vat_rate: quoteRound2(Number(line?.vatRate) || 0),
+          accountSuggestion: String(line?.accountSuggestion || "").trim(),
+          account_suggestion: String(line?.accountSuggestion || "").trim(),
+          fulfilled_quantity: 0,
+          remaining_quantity: qty
+        };
+      })
+    };
+
+    state.orders.push(order);
+    syncQuoteOrderDraftLink(quote.id, order);
+    save();
+    void ensureOrderConfirmationPdfForOrder(order, { createdBy: actor, forceRefresh: true });
+    if (editingQuoteId === quote.id) updateQuoteInternalIndicators();
+    return order;
+  }
+
+  async function deleteQuote(id){
+    if (!(await confirmAsync("Ta bort offerten?"))) return;
+    state.quotes = (state.quotes || []).filter(q => q && q.id !== id);
+    save();
+    if (editingQuoteId === id) newQuote();
+    renderQuotes();
+  }
+
+  function renderQuotes(){
+    fillYearSelectors();
+    renderQuoteCustomerOptions((quoteCustomerSelect && quoteCustomerSelect.value) || "");
+    if (quoteYearSelect) quoteYearSelect.value = quoteYearSelect.value || state.activeYearId;
+
+    const yid = String((quoteYearSelect && quoteYearSelect.value) || state.activeYearId || "").trim();
+    const list = (state.quotes || [])
+      .filter(q => q && String(q.yearId || "") === yid)
+      .slice()
+      .sort((a,b)=> (String(a.quoteNo||"") + String(a.date||"")).localeCompare(String(b.quoteNo||"") + String(b.date||""), "sv"));
+
+    if (!quoteList) return;
+    quoteList.innerHTML = "";
+    if (!list.length){
+      quoteList.innerHTML = `<div class="muted small">Inga offerter i detta år ännu.</div>`;
+      return;
+    }
+
+    list.forEach(quote => {
+      const totals = quoteTotals(quote.lines || []);
+      const badge = renderQuoteStatusBadge(quote.status || "draft");
+      const div = document.createElement("div");
+      div.className = "item";
+      div.innerHTML = `
+        <div class="top">
+          <div>
+            <div class="title">Offert #${escapeHtml(quote.quoteNo || "(utan nr)")} · ${escapeHtml(quote.date || "")} · ${escapeHtml(quote.companyName || quote.customerName || "(kund)")}</div>
+            <div class="meta">${badge} · Giltig t.o.m. ${escapeHtml(quote.expiresAt || "")} · Totalt ${fmtSEK(totals.total)} ${escapeHtml(quote.currency || state.company?.currency || "SEK")}</div>
+          </div>
+          <div class="row">
+            <button class="btn secondary" data-act="edit" data-id="${escapeAttr(quote.id)}">Öppna</button>
+            <button class="btn danger" data-act="del" data-id="${escapeAttr(quote.id)}">Ta bort</button>
+          </div>
+        </div>
+      `;
+      div.addEventListener("click", async (e)=>{
+        const b = e.target && e.target.closest ? e.target.closest("button[data-act]") : null;
+        if (!b) return;
+        const act = b.dataset.act;
+        const id = b.dataset.id;
+        if (act === "edit") loadQuoteToEditor(id);
+        if (act === "del") await deleteQuote(id);
+      });
+      quoteList.appendChild(div);
+    });
+  }
+
+  function wireQuoteEvents(){
+    if (btnQuoteNew) btnQuoteNew.addEventListener("click", (e)=>{ e.preventDefault(); newQuote(); });
+    if (btnQuotePrint) btnQuotePrint.addEventListener("click", (e)=>{ e.preventDefault(); previewQuotePrint(); });
+    if (btnQuoteMarkSent) btnQuoteMarkSent.addEventListener("click", (e)=>{ e.preventDefault(); markQuoteAsSent(); });
+    if (btnQuoteMarkAccepted) btnQuoteMarkAccepted.addEventListener("click", (e)=>{ e.preventDefault(); markQuoteAsAccepted(); });
+    if (btnQuoteCreateOrderDraft) btnQuoteCreateOrderDraft.addEventListener("click", (e)=>{ e.preventDefault(); createOrderDraftFromEditor(); });
+    if (btnQuoteOpenOrderDraft) btnQuoteOpenOrderDraft.addEventListener("click", (e)=>{ e.preventDefault(); openOrderDraftFromEditor(); });
+    if (btnOrderDraftCreateInvoice) btnOrderDraftCreateInvoice.addEventListener("click", (e)=>{ e.preventDefault(); createInvoiceFromOpenOrderDraft(); });
+    if (btnQuoteSave) btnQuoteSave.addEventListener("click", (e)=>{ e.preventDefault(); saveQuote(); });
+    if (btnQuoteAddLine) btnQuoteAddLine.addEventListener("click", (e)=>{ e.preventDefault(); quoteLines.push(makeDefaultQuoteLine(quoteLines.length)); renderQuoteLines(); updateQuoteTotals(); });
+    if (btnQuoteClear) btnQuoteClear.addEventListener("click", async (e)=>{ e.preventDefault(); if (!(await confirmAsync("Rensa offerten?"))) return; newQuote(); });
+    if (btnQuoteRefresh) btnQuoteRefresh.addEventListener("click", (e)=>{ e.preventDefault(); renderQuotes(); });
+    if (quoteYearSelect) quoteYearSelect.addEventListener("change", renderQuotes);
+    if (quoteCustomerSelect) quoteCustomerSelect.addEventListener("change", ()=>{ applyQuoteCustomerSelection(); renderQuotes(); });
+    if (quoteStatus) quoteStatus.addEventListener("change", ()=>{
+      const previousStatus = currentStoredQuoteStatus();
+      const requestedStatus = String(quoteStatus.value || "").trim();
+      if (isQuoteControlledStatus(requestedStatus) && requestedStatus !== previousStatus){
+        quoteStatus.value = previousStatus;
+        const actionLabel = requestedStatus === "accepted" ? "Markera som accepterad" : "Markera som skickad";
+        showToast(`Använd \"${actionLabel}\" för att sätta status till ${requestedStatus}.`, 5500);
+      }
+      updateQuoteTotals();
+    });
+    [quoteDate, quoteExpiresAt, quoteNo, quoteCurrency, quoteVatScheme, quoteRef, quoteSource, quoteCustomerName, quoteCompanyName, quoteCustomerEmail, quoteCustomerPhone, quoteOrgnr, quoteNotes].filter(Boolean).forEach(el => {
+      el.addEventListener("input", updateQuoteTotals);
+      el.addEventListener("change", updateQuoteTotals);
+    });
+  }
+
   // --- Invoice helpers ---
   const invGrid = document.getElementById("invGrid");
   const invListCard = document.getElementById("invListCard");
@@ -10123,6 +11627,68 @@ if (!d.features) d.features = { sruEnabled: false };
     return d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate());
   }
 
+  function getInvoiceCurrency(invoice){
+    return String(invoice?.currency || state.company?.currency || "SEK").trim() || "SEK";
+  }
+
+  function getInvoiceCustomerSnapshot(invoice){
+    const inv = (invoice && typeof invoice === "object") ? invoice : {};
+    const customer = (state.customers && inv.customerId) ? (state.customers[inv.customerId] || {}) : {};
+    return {
+      name: String(inv.customerName || inv.companyName || customer.name || "").trim(),
+      addr: String(inv.customerAddr || customer.addr || "").trim(),
+      email: String(inv.customerEmail || customer.email || "").trim(),
+      orgnr: String(inv.customerOrgnr || inv.orgnr || customer.orgnr || "").trim(),
+      phone: String(inv.customerPhone || customer.phone || "").trim()
+    };
+  }
+
+  function ensureInvoiceCustomerFromOrder(order){
+    const o = (order && typeof order === "object") ? order : null;
+    if (!o) throw new Error("Saknar order för kundkoppling.");
+    state.customers = state.customers || {};
+
+    const snapshot = {
+      name: String(o.companyName || o.customerName || o.customer?.company_name || o.customer?.full_name || "").trim(),
+      addr: "",
+      email: String(o.customerEmail || o.email || o.customer?.email || "").trim(),
+      orgnr: String(o.orgnr || o.customer?.orgnr || "").trim(),
+      phone: String(o.customerPhone || o.phone || o.customer?.phone || "").trim()
+    };
+    if (!snapshot.name) throw new Error("Orderutkastet saknar kundnamn för fakturering.");
+
+    const existingId = String(o.customerId || "").trim();
+    if (existingId && state.customers[existingId]) {
+      const current = state.customers[existingId] || {};
+      state.customers[existingId] = {
+        ...current,
+        name: String(current.name || snapshot.name).trim(),
+        addr: String(current.addr || snapshot.addr || "").trim(),
+        email: String(current.email || snapshot.email || "").trim(),
+        orgnr: String(current.orgnr || snapshot.orgnr || "").trim(),
+      };
+      return {
+        customerId: existingId,
+        customer: {
+          ...snapshot,
+          name: String(state.customers[existingId].name || snapshot.name).trim(),
+          addr: String(state.customers[existingId].addr || snapshot.addr || "").trim(),
+          email: String(state.customers[existingId].email || snapshot.email || "").trim(),
+          orgnr: String(state.customers[existingId].orgnr || snapshot.orgnr || "").trim(),
+        }
+      };
+    }
+
+    const customerId = existingId || crypto.randomUUID();
+    state.customers[customerId] = {
+      name: snapshot.name,
+      addr: snapshot.addr,
+      email: snapshot.email,
+      orgnr: snapshot.orgnr,
+    };
+    return { customerId, customer: snapshot };
+  }
+
   function nextInvoiceNo(yearId){
     const nums = (state.invoices||[])
       .filter(i => i.yearId === yearId)
@@ -10130,6 +11696,103 @@ if (!d.features) d.features = { sruEnabled: false };
       .filter(n => Number.isFinite(n));
     const max = nums.length ? Math.max(...nums) : 1000;
     return String(max + 1);
+  }
+
+  function createInvoiceFromOrder(orderId){
+    const id = String(orderId || "").trim();
+    if (!id) throw new Error("Saknar orderId för fakturaskapande.");
+    state.invoices = Array.isArray(state.invoices) ? state.invoices : [];
+    const order = (state.orders || []).find(x => x && String(x.id || "").trim() === id);
+    if (!order) throw new Error("Orderutkastet hittades inte.");
+
+    const existing = getActiveInvoiceForOrder(order.id);
+    if (existing) {
+      syncOrderInvoiceLink(order.id, existing);
+      save({ renderAll:false });
+      return { invoice: existing, created: false };
+    }
+
+    const snapshotLines = Array.isArray(order.lines) ? order.lines.slice() : [];
+    if (!snapshotLines.length) throw new Error("Orderutkastet saknar rader att fakturera.");
+    if (snapshotLines.some(line => Number(line?.qty || 0) < 0 || Number((line?.unitPriceExVat ?? line?.unit_price_ex_vat) || 0) < 0 || Number((line?.vatRate ?? line?.vat_rate) || 0) < 0)) {
+      throw new Error("Första fakturaflödet stödjer bara helfakturering med icke-negativa orderrader.");
+    }
+
+    const { customerId, customer } = ensureInvoiceCustomerFromOrder(order);
+    const yearId = String(order.yearId || state.activeYearId || new Date().getFullYear()).trim();
+    const date = todayISO();
+    const due = addDays(date, (state.company?.payDays || 30));
+    const sourceOrderNo = String(order.orderNo || order.order_number || order.id || "").trim();
+    const sourceQuoteNo = String(order.sourceQuoteNo || order.quoteSnapshot?.quoteNo || "").trim();
+    const ref = clampText([
+      sourceQuoteNo ? `Offert ${sourceQuoteNo}` : "",
+      sourceOrderNo ? `Order ${sourceOrderNo}` : ""
+    ].filter(Boolean).join(" / "), 120);
+    const lines = snapshotLines.map(line => ({
+      kind: "item",
+      desc: clampText([
+        String(line?.title || "").trim(),
+        String(line?.description || "").trim()
+      ].filter(Boolean).join(" - ") || String(line?.lineType || "Orderrad").trim() || "Orderrad", 200),
+      qty: quoteRound2(Number(line?.qty) || 0),
+      price: quoteRound2(Number(line?.unitPriceExVat ?? line?.unit_price_ex_vat) || 0),
+      vat: quoteRound2(Number(line?.vatRate ?? line?.vat_rate) || 0)
+    }));
+
+    if (!lines.some(line => line.kind === "item" && lineAmount(line).net > 0)) {
+      throw new Error("Orderutkastet innehåller inga fakturerbara rader i första helfaktureringen.");
+    }
+
+    const invoice = {
+      id: crypto.randomUUID(),
+      yearId,
+      no: nextInvoiceNo(yearId),
+      date,
+      due,
+      customerId,
+      customerName: customer.name,
+      companyName: customer.name,
+      customerAddr: customer.addr,
+      customerEmail: customer.email,
+      customerPhone: customer.phone,
+      customerOrgnr: customer.orgnr,
+      orgnr: customer.orgnr,
+      currency: String(order.currency || state.company?.currency || "SEK").trim() || "SEK",
+      ref,
+      orderId: order.id,
+      sourceOrderNo,
+      sourceQuoteNo,
+      lines,
+    };
+
+    state.invoices.push(invoice);
+    state.invoices.sort((a,b)=> (String(a.yearId || "") + String(a.no || "") + String(a.date || "")).localeCompare(String(b.yearId || "") + String(b.no || "") + String(b.date || ""), "sv"));
+    syncOrderInvoiceLink(order.id, invoice);
+    save();
+    renderInvoices();
+
+    (async ()=>{
+      try {
+        const blob = await generateInvoicePdfBlob(invoice);
+        const docFileName = safeFileName(`${normalizeDateForFileName(invoice.date || date)}_invoice_${safeStemPart(invoice.no || invoice.id || "invoice", 48) || "invoice"}.pdf`);
+        await registerGeneratedPdfDocument({
+          kind: "invoice_pdf",
+          number: invoice.no || invoice.id,
+          date: invoice.date || date,
+          linkedType: "invoice",
+          linkedId: invoice.id,
+          blob,
+          yearId: invoice.yearId,
+          fileName: docFileName,
+          createdBy: state.company?.defaultSign || "",
+        });
+      } catch (err) {
+        console.error("Invoice PDF archive failed", err);
+        try { showToast("Kunde inte arkivera faktura-PDF lokalt. Fakturan skapades ändå.", 5500); } catch (_) {}
+      }
+    })();
+
+    return { invoice, created: true };
   }
 
   function newInvoice(){
@@ -10147,14 +11810,15 @@ if (!d.features) d.features = { sruEnabled: false };
 
   function renderInvoiceCustomer(){
     if (!invCustomerBox) return;
-    if (!invCustomerId){
+    const currentInvoice = editingInvoiceId ? ((state.invoices || []).find(x => x && x.id === editingInvoiceId) || null) : null;
+    const snapshot = getInvoiceCustomerSnapshot(currentInvoice);
+    if (!invCustomerId && !snapshot.name){
       invCustomerBox.textContent = "Ingen kund vald.";
       return;
     }
-    const c = state.customers?.[invCustomerId];
-    if (!c){
+    const c = (invCustomerId ? state.customers?.[invCustomerId] : null) || snapshot;
+    if (!c || !String(c.name || "").trim()){
       invCustomerBox.textContent = "Ingen kund vald.";
-      invCustomerId = null;
       return;
     }
     invCustomerBox.innerHTML = `<div style="font-weight:800;">${escapeHtml(c.name||"(namn)")}</div>
@@ -10284,11 +11948,13 @@ if (!d.features) d.features = { sruEnabled: false };
   }
 
   function saveInvoice(){
+    const existing = editingInvoiceId ? ((state.invoices || []).find(x => x && x.id === editingInvoiceId) || null) : null;
     const yearId = invoiceYearId();
     const date = invDate.value || todayISO();
     const due = invDue.value || addDays(date, (state.company.payDays||30));
     const no = (invNo.value || "").trim() || nextInvoiceNo(yearId);
     const ref = clampText(invRef.value || "");
+    const customerRecord = invCustomerId ? (state.customers?.[invCustomerId] || {}) : {};
 
     const lines = invLines.map(l => ({
       kind: l.kind,
@@ -10299,12 +11965,21 @@ if (!d.features) d.features = { sruEnabled: false };
     }));
 
     const inv = {
+      ...existing,
       id: editingInvoiceId ?? crypto.randomUUID(),
       yearId,
       no,
       date,
       due,
       customerId: invCustomerId,
+      customerName: String(customerRecord.name || existing?.customerName || existing?.companyName || "").trim(),
+      companyName: String(customerRecord.name || existing?.companyName || existing?.customerName || "").trim(),
+      customerAddr: String(customerRecord.addr || existing?.customerAddr || "").trim(),
+      customerEmail: String(customerRecord.email || existing?.customerEmail || "").trim(),
+      customerPhone: String(existing?.customerPhone || "").trim(),
+      customerOrgnr: String(customerRecord.orgnr || existing?.customerOrgnr || existing?.orgnr || "").trim(),
+      orgnr: String(customerRecord.orgnr || existing?.customerOrgnr || existing?.orgnr || "").trim(),
+      currency: getInvoiceCurrency(existing),
       ref,
       lines
     };
@@ -10367,15 +12042,16 @@ if (!d.features) d.features = { sruEnabled: false };
         invoiceList.innerHTML = `<div class="muted small">Inga fakturor i detta år ännu.</div>`;
       } else {
         list.forEach(inv=>{
-          const c = state.customers?.[inv.customerId];
+          const c = getInvoiceCustomerSnapshot(inv);
           const tot = invoiceTotals(inv);
+          const currency = getInvoiceCurrency(inv);
           const div = document.createElement("div");
           div.className = "item";
           div.innerHTML = `
             <div class="top">
               <div>
                 <div class="title">Faktura #${escapeHtml(inv.no)} · ${escapeHtml(inv.date)} · ${escapeHtml(c?.name || "(kund)")}</div>
-                <div class="meta">Förfaller ${escapeHtml(inv.due)} · Totalt ${fmtSEK(tot.gross)} ${escapeHtml(state.company.currency||"SEK")}</div>
+                <div class="meta">Förfaller ${escapeHtml(inv.due)} · Totalt ${fmtSEK(tot.gross)} ${escapeHtml(currency)}</div>
               </div>
               <div class="row">
                 <button class="btn secondary" data-act="edit" data-id="${inv.id}">Öppna</button>
@@ -10434,8 +12110,9 @@ if (!d.features) d.features = { sruEnabled: false };
   function printInvoice(id){
     const inv = (state.invoices||[]).find(x=>x.id===id);
     if (!inv) return;
-    const c = state.customers?.[inv.customerId] || {};
+    const c = getInvoiceCustomerSnapshot(inv);
     const tot = invoiceTotals(inv);
+    const currency = getInvoiceCurrency(inv);
 
     const rows = (inv.lines||[]).map(l=>{
       if (l.kind !== "item"){
@@ -10506,9 +12183,9 @@ if (!d.features) d.features = { sruEnabled: false };
       </table>
 
       <div class="sum"><div>
-        <div class="kv"><span>Summa exkl. moms</span><span>${fmtSEK(tot.net)} ${escapeHtml(state.company.currency||"SEK")}</span></div>
-        <div class="kv"><span>Moms</span><span>${fmtSEK(tot.vat)} ${escapeHtml(state.company.currency||"SEK")}</span></div>
-        <div class="kv" style="font-weight:900; font-size:18px;"><span>Att betala</span><span>${fmtSEK(tot.gross)} ${escapeHtml(state.company.currency||"SEK")}</span></div>
+        <div class="kv"><span>Summa exkl. moms</span><span>${fmtSEK(tot.net)} ${escapeHtml(currency)}</span></div>
+        <div class="kv"><span>Moms</span><span>${fmtSEK(tot.vat)} ${escapeHtml(currency)}</span></div>
+        <div class="kv" style="font-weight:900; font-size:18px;"><span>Att betala</span><span>${fmtSEK(tot.gross)} ${escapeHtml(currency)}</span></div>
       </div></div>
 
       <div class="paygrid">
@@ -10525,7 +12202,7 @@ if (!d.features) d.features = { sruEnabled: false };
         <div class="box">
           <div style="font-weight:800; margin-bottom:6px;">Villkor</div>
           <div class="kv"><span>Förfallodatum</span><span>${escapeHtml(inv.due)}</span></div>
-          <div class="kv"><span>Belopp</span><span>${fmtSEK(tot.gross)} ${escapeHtml(state.company.currency||"SEK")}</span></div>
+          <div class="kv"><span>Belopp</span><span>${fmtSEK(tot.gross)} ${escapeHtml(currency)}</span></div>
           ${state.company.payDays?`<div class="muted" style="margin-top:6px;">Betalvillkor: ${escapeHtml(String(state.company.payDays))} dagar</div>`:""}
         </div>
       </div>
@@ -14721,7 +16398,6 @@ function reportSaldolista(yearId, from, to){
               </td>
               <td style="padding:6px; border-bottom:1px solid rgba(255,255,255,.08); text-align:right;">
                 <input data-f="qty" data-i="${idx}" value="${escapeAttr(it.qty==null?"":String(it.qty).replace(".",","))}" inputmode="decimal" style="width:100%; text-align:right;" />
-              </td>
               <td style="padding:6px; border-bottom:1px solid rgba(255,255,255,.08); text-align:right;">
                 <input data-f="unit" data-i="${idx}" value="${escapeAttr(it.unit==null?"":String(it.unit).replace(".",","))}" inputmode="decimal" style="width:100%; text-align:right;" />
               </td>
@@ -15480,6 +17156,7 @@ state.invoices = state.invoices || [];
 state.features = state.features || { sruEnabled: false };
 
 try { if (invYearSelect) invYearSelect.value = state.activeYearId; } catch (e){ console.error(e); }
+try { if (quoteYearSelect) quoteYearSelect.value = state.activeYearId; } catch (e){ console.error(e); }
 try { if (invDate) invDate.value = todayISO(); } catch (e){ console.error(e); }
 try { if (invDue) invDue.value = addDays(todayISO(), (state.company.payDays||30)); } catch (e){ console.error(e); }
 
@@ -15489,6 +17166,10 @@ try { if (typeof renderSuppliers === "function") renderSuppliers(); } catch (e){
 try { if (typeof wireSupplierInvoiceEvents === "function") wireSupplierInvoiceEvents(); } catch (e){ console.error(e); }
 try { if (typeof newSupplierInvoice === "function") newSupplierInvoice(); } catch (e){ console.error(e); }
 try { if (typeof renderSupplierInvoices === "function") renderSupplierInvoices(); } catch (e){ console.error(e); }
+
+try { if (typeof wireQuoteEvents === "function") wireQuoteEvents(); } catch (e){ console.error(e); }
+try { if (typeof newQuote === "function") newQuote(); } catch (e){ console.error(e); }
+try { if (typeof renderQuotes === "function") renderQuotes(); } catch (e){ console.error(e); }
 
 try { if (typeof wireInvoiceEvents === "function") wireInvoiceEvents(); } catch (e){ console.error(e); }
 try { if (typeof newInvoice === "function") newInvoice(); } catch (e){ console.error(e); }

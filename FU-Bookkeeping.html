@@ -1,4 +1,4 @@
-<!doctype html>
+Om du vill, kan jag ta nästa lilla patch för betalregistrering så att kontantmetoden får sitt riktiga bokföringssteg också.<!doctype html>
 <html lang="sv">
 <head>
   <meta charset="utf-8" />
@@ -2828,8 +2828,8 @@ Tack!</div>
 (function(){
  
 
-  const APP_VERSION = "1.4.33"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.44";  // user-facing revision
+  const APP_VERSION = "1.4.34"; // bump when adding new data fields
+  const APP_SEMVER = "0.3.45";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -13611,11 +13611,23 @@ if (!d.features) d.features = { sruEnabled: false };
     if (!inv) return null;
     const invoiceId = String(inv.id || "").trim();
     const invoiceNo = String(inv.no || "").trim();
-    const activeVouchers = (state.vouchers || []).filter(voucher => voucher && String(voucher.status || "active").trim() !== "deleted");
+    const activeVouchers = (state.vouchers || []).filter(voucher => voucher && String(voucher.status || "active").trim() !== "deleted" && String(voucher.invoiceEvent || "issue").trim() !== "payment");
     return activeVouchers.find(voucher => voucher && String(voucher.invoiceId || "").trim() === invoiceId)
       || activeVouchers.find(voucher => voucher && invoiceNo && String(voucher.invoiceNo || "").trim() === invoiceNo)
       || activeVouchers.find(voucher => voucher && invoiceNo && String(voucher.text || "").trim() === `Faktura ${invoiceNo}`)
       || null;
+  }
+
+  function getPaymentVoucherForInvoice(invoice){
+    const inv = (invoice && typeof invoice === "object") ? invoice : null;
+    if (!inv) return null;
+    const invoiceId = String(inv.id || "").trim();
+    const paymentVoucherId = String(inv.paymentVoucherId || "").trim();
+    if (paymentVoucherId) {
+      const byId = (state.vouchers || []).find(voucher => voucher && String(voucher.id || "").trim() === paymentVoucherId && String(voucher.status || "active").trim() !== "deleted");
+      if (byId) return byId;
+    }
+    return (state.vouchers || []).find(voucher => voucher && String(voucher.status || "active").trim() !== "deleted" && String(voucher.invoiceEvent || "").trim() === "payment" && String(voucher.invoiceId || "").trim() === invoiceId) || null;
   }
 
   function getInvoiceById(invoiceId){
@@ -13627,6 +13639,7 @@ if (!d.features) d.features = { sruEnabled: false };
   function getInvoiceLifecycle(invoice){
     const inv = (invoice && typeof invoice === "object") ? invoice : {};
     const bookedVoucher = getVoucherForInvoice(inv);
+    const paymentVoucher = getPaymentVoucherForInvoice(inv);
     const paidAt = String(inv.paidAt || inv.paymentRegisteredAt || "").trim();
     const voidedAt = String(inv.voidedAt || "").trim();
     const issuedAt = String(inv.issuedAt || inv.date || "").trim();
@@ -13645,12 +13658,25 @@ if (!d.features) d.features = { sruEnabled: false };
       ...inv,
       accountingMethod: invoiceAccountingMethod(inv),
       bookedVoucher,
+      paymentVoucher,
       bookedVoucherId: String(inv.bookedVoucherId || bookedVoucher?.id || "").trim(),
+      paymentVoucherId: String(inv.paymentVoucherId || paymentVoucher?.id || "").trim(),
       issuedAt,
       paidAt,
       voidedAt,
       status,
     };
+  }
+
+  function getDefaultInvoicePaymentAccount(){
+    return String(state.bankImport?.settings?.defaultBankAccount || "1930").trim() || "1930";
+  }
+
+  function isIsoDateString(value){
+    const iso = String(value || "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false;
+    const dt = new Date(`${iso}T00:00:00`);
+    return Number.isFinite(dt.getTime()) && todayISO(dt) === iso;
   }
 
   function shouldBookInvoiceOnIssue(invoice){
@@ -13681,6 +13707,7 @@ if (!d.features) d.features = { sruEnabled: false };
         nextStep: "Betalningen är registrerad.",
         allowVoucherAction: false,
         actionLabel: "Betald",
+        actionType: null,
         lifecycle,
       };
     }
@@ -13691,10 +13718,11 @@ if (!d.features) d.features = { sruEnabled: false };
         badgeText: "Bokförd",
         listText: "Bokförd",
         nextStep: isCashMethod(lifecycle)
-          ? "Nästa steg blir betalregistrering när den delen byggs ut."
+          ? "Registrera betalningen när kunden har betalat."
           : "Nästa steg blir separat betalningsverifikation när kunden betalar.",
-        allowVoucherAction: false,
-        actionLabel: "Redan bokförd",
+        allowVoucherAction: true,
+        actionLabel: "Registrera betalning",
+        actionType: "register_payment",
         lifecycle,
       };
     }
@@ -13709,6 +13737,7 @@ if (!d.features) d.features = { sruEnabled: false };
           : "Spara fakturan och bokför direkt när den utfärdas.",
         allowVoucherAction: false,
         actionLabel: "Spara först",
+        actionType: null,
         lifecycle,
       };
     }
@@ -13719,8 +13748,9 @@ if (!d.features) d.features = { sruEnabled: false };
         badgeText: "Sparad",
         listText: "Sparad · ej bokförd",
         nextStep: "Kontantmetoden: bokförs normalt när betalning registreras.",
-        allowVoucherAction: false,
-        actionLabel: "Betalningsverifikation senare",
+        allowVoucherAction: true,
+        actionLabel: "Registrera betalning",
+        actionType: "register_payment",
         lifecycle,
       };
     }
@@ -13732,6 +13762,7 @@ if (!d.features) d.features = { sruEnabled: false };
       nextStep: "Faktureringsmetoden: bokför när fakturan utfärdas.",
       allowVoucherAction: true,
       actionLabel: "Skapa verifikation nu",
+      actionType: "book_invoice",
       lifecycle,
     };
   }
@@ -14025,6 +14056,7 @@ if (!d.features) d.features = { sruEnabled: false };
       sign: state.company.defaultSign || "",
       invoiceId: String(linkedInvoice?.id || "").trim(),
       invoiceNo,
+      invoiceEvent: "issue",
       lines: [
         { account:"1510", text:"Faktura", amount: +gross },
         { account:"3001", text:"Försäljning", amount: -net },
@@ -14055,6 +14087,105 @@ if (!d.features) d.features = { sruEnabled: false };
       else updateInvoiceTotals();
     } catch (e) { console.error(e); }
     showToast("Skapade verifikation (serie F). Kontrollera konton och moms innan du använder skarpt.", 6500);
+  }
+
+  async function registerInvoicePayment(invoiceId){
+    const linkedInvoice = invoiceId
+      ? getInvoiceById(invoiceId)
+      : (editingInvoiceId ? getInvoiceById(editingInvoiceId) : null);
+    if (!linkedInvoice) {
+      showToast("Spara eller öppna fakturan först.", 5000);
+      return;
+    }
+
+    const lifecycle = getInvoiceLifecycle(linkedInvoice);
+    if (lifecycle.status === "voided") return showToast("Fakturan är makulerad och kan inte betalregistreras.", 5500);
+    if (lifecycle.status === "paid" || lifecycle.paymentVoucherId) return showToast("Betalningen är redan registrerad.", 5500);
+    if (isAccrualMethod(lifecycle) && !lifecycle.bookedVoucherId) return showToast("Bokför fakturan först innan betalningen registreras.", 6500);
+
+    const paymentDate = await promptAsync("Betalningsdatum (YYYY-MM-DD)", {
+      defaultValue: todayISO(),
+      placeholder: "2026-04-03",
+      okText: "Fortsätt",
+      cancelText: "Avbryt"
+    });
+    if (paymentDate == null) return;
+    const paymentDateIso = String(paymentDate || "").trim();
+    if (!isIsoDateString(paymentDateIso)) return showToast("Ange betalningsdatum som YYYY-MM-DD.", 5500);
+
+    const bankAccount = await promptAsync("Inbetalningskonto", {
+      defaultValue: getDefaultInvoicePaymentAccount(),
+      placeholder: "1930",
+      okText: "Registrera betalning",
+      cancelText: "Avbryt"
+    });
+    if (bankAccount == null) return;
+    const bankAccountNo = String(bankAccount || "").trim();
+    if (!bankAccountNo) return showToast("Ange konto för inbetalningen, t.ex. 1930.", 5500);
+
+    const totals = invoiceTotals(linkedInvoice);
+    if (!(totals.gross > 0)) return showToast("Fakturan saknar bokförbart belopp.", 5500);
+
+    if (!state.accounts[bankAccountNo]) state.accounts[bankAccountNo] = { name: bankAccountNo === "1930" ? "Företagskonto/bank" : `Inbetalningskonto ${bankAccountNo}`, type: "asset" };
+    if (!state.accounts["1510"]) state.accounts["1510"] = { name:"Kundfordringar", type:"asset" };
+    if (!state.accounts["3001"]) state.accounts["3001"] = { name:"Försäljning", type:"income" };
+    if (!state.accounts["2611"]) state.accounts["2611"] = { name:"Utgående moms", type:"liability" };
+
+    const yearId = linkedInvoice.yearId || invoiceYearId();
+    const no = nextVerno(yearId, "F");
+    const invoiceNo = String(linkedInvoice.no || "").trim();
+    const lines = isCashMethod(lifecycle)
+      ? [
+          { account: bankAccountNo, text: "Inbetalning", amount: +totals.gross },
+          { account: "3001", text: "Försäljning", amount: -totals.net },
+          { account: "2611", text: "Moms", amount: -totals.vat }
+        ]
+      : [
+          { account: bankAccountNo, text: "Inbetalning", amount: +totals.gross },
+          { account: "1510", text: "Kundfordran", amount: -totals.gross }
+        ];
+
+    const vv = {
+      id: crypto.randomUUID(),
+      yearId,
+      series: "F",
+      no,
+      date: paymentDateIso,
+      text: clampText(`Betalning faktura ${invoiceNo || ""}`.trim() || "Betalning kundfaktura"),
+      regDate: todayISO(),
+      sign: state.company.defaultSign || "",
+      invoiceId: String(linkedInvoice.id || "").trim(),
+      invoiceNo,
+      invoiceEvent: "payment",
+      paymentAccount: bankAccountNo,
+      lines: lines.filter(line => Math.abs(line.amount) > 0.00001),
+      correctionOf: null,
+      status: "active"
+    };
+    state.vouchers.push(vv);
+    appendAudit({ action:"voucher.create", actor: vv.sign || undefined, entityType:"voucher", entityId: vv.id, yearId, details:{ after: summarizeVoucher(vv), source:"invoice_payment" } });
+
+    const invoiceIndex = (state.invoices || []).findIndex(item => item && String(item.id || "").trim() === String(linkedInvoice.id || "").trim());
+    if (invoiceIndex >= 0) {
+      state.invoices[invoiceIndex] = {
+        ...state.invoices[invoiceIndex],
+        status: "paid",
+        paidAt: paymentDateIso,
+        paidBy: state.company.defaultSign || "",
+        paymentVoucherId: vv.id,
+      };
+    }
+
+    state.vouchers.sort((a,b)=> (a.yearId+b.series+a.no+a.date).localeCompare(b.yearId+b.series+b.no+b.date, "sv"));
+    save();
+    try { renderInvoices(); } catch (e) { console.error(e); }
+    try {
+      if (editingInvoiceId && String(editingInvoiceId) === String(linkedInvoice.id || "")) loadInvoiceToEditor(linkedInvoice.id);
+      else updateInvoiceTotals();
+    } catch (e) { console.error(e); }
+    showToast(isCashMethod(lifecycle)
+      ? "Betalning registrerad och bokförd enligt kontantmetoden."
+      : "Betalning registrerad mot kundfordran.", 6500);
   }
 
   function isMeaningfulCustomerContact(contact){
@@ -15319,7 +15450,19 @@ if (!d.features) d.features = { sruEnabled: false };
         printInvoice(tmpId);
       }
     });
-    if (btnInvToVoucher) btnInvToVoucher.addEventListener("click", async ()=>{ if (!(await confirmAsync("Skapa en verifikation för fakturan (serie F)?"))) return; createVoucherFromInvoice(); });
+    if (btnInvToVoucher) btnInvToVoucher.addEventListener("click", async ()=>{
+      const currentInvoice = editingInvoiceId ? getInvoiceById(editingInvoiceId) : null;
+      if (!currentInvoice) return showToast("Spara och öppna fakturan först.", 4500);
+      const booking = invoiceBookingState(currentInvoice);
+      if (!booking.allowVoucherAction || !booking.actionType) return showToast(booking.nextStep, 5000);
+      if (booking.actionType === "register_payment") {
+        if (!(await confirmAsync("Registrera betalning och skapa verifikation för inbetalningen?", { okText: "Registrera", cancelText: "Avbryt", okKind: "secondary" }))) return;
+        await registerInvoicePayment(currentInvoice.id);
+        return;
+      }
+      if (!(await confirmAsync("Skapa en verifikation för fakturan (serie F)?"))) return;
+      createVoucherFromInvoice(currentInvoice.id);
+    });
     if (btnInvRefresh) btnInvRefresh.addEventListener("click", renderInvoices);
     if (invYearSelect) invYearSelect.addEventListener("change", renderInvoices);
 

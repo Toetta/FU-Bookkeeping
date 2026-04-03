@@ -366,6 +366,59 @@
     }
     .modal .actions{ display:flex; justify-content:flex-end; gap:10px; margin-top:12px; flex-wrap:wrap; }
 
+    body.quote-workspace-open{ overflow:hidden; }
+    .quote-grid-list-only{ grid-template-columns: 1fr !important; }
+    #quoteWorkspaceBackdrop{ z-index:9997; }
+    #quoteWorkspaceCard.quote-workspace-open{
+      position:fixed;
+      inset:12px;
+      z-index:9999;
+      margin:0;
+      padding:0;
+      overflow:auto;
+      background:rgba(var(--card2-rgb),.985);
+      border-color:rgba(96,165,250,.25);
+      box-shadow:0 24px 80px rgba(0,0,0,.45);
+    }
+    .quote-workspace-shell{ display:grid; gap:12px; min-height:min(920px, calc(100vh - 24px)); padding:14px; }
+    .quote-workspace-header{ display:flex; justify-content:space-between; gap:12px; align-items:flex-start; flex-wrap:wrap; }
+    .quote-workspace-columns{ display:grid; grid-template-columns:minmax(260px,.95fr) minmax(0,1.4fr) minmax(280px,1fr); gap:12px; min-height:0; }
+    .quote-workspace-column{ display:grid; gap:12px; align-content:start; min-width:0; }
+    .quote-workspace-column.main{ min-width:0; }
+    .quote-section{ border:1px solid var(--line); border-radius:16px; background:rgba(var(--card-rgb),.92); overflow:hidden; }
+    .quote-section[open]{ box-shadow:0 10px 30px rgba(0,0,0,.16); }
+    .quote-section > summary{ list-style:none; cursor:pointer; padding:12px 14px; font-weight:800; color:var(--text); background:rgba(11,18,32,.55); }
+    .quote-section > summary::-webkit-details-marker{ display:none; }
+    .quote-section-body{ padding:14px; display:grid; gap:12px; }
+    .quote-workspace-footer{
+      position:sticky;
+      bottom:0;
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      flex-wrap:wrap;
+      padding:12px 14px;
+      border-top:1px solid var(--line);
+      background:rgba(var(--card2-rgb),.985);
+      z-index:2;
+    }
+    .quote-workspace-footer .row{ gap:8px; }
+    .quote-appendix-list,
+    .quote-attachment-list{ display:grid; gap:10px; }
+    .quote-meta-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(150px,1fr)); gap:10px; }
+    .quote-meta-grid.compact{ grid-template-columns:repeat(auto-fit, minmax(180px,1fr)); }
+    @media (max-width: 1180px){
+      .quote-workspace-columns{ grid-template-columns:1fr; }
+    }
+    @media (max-width: 900px){
+      #quoteWorkspaceCard.quote-workspace-open{ inset:0; border-radius:0; max-height:none; }
+      .quote-workspace-shell{ min-height:100vh; padding:12px; }
+      .quote-workspace-footer{ padding-bottom:calc(12px + env(safe-area-inset-bottom, 0px)); }
+      .quote-workspace-footer > *{ width:100%; }
+      .quote-workspace-footer .row{ width:100%; }
+      .quote-workspace-footer .row > *{ flex:1 1 140px; }
+    }
+
     /* Splash screen (shown before app starts on custom domains) */
     body.splashActive header,
     body.splashActive main{ display:none; }
@@ -1452,190 +1505,299 @@
     </section>
 
     <section id="tab-quotes" hidden>
-      <div class="grid two" id="quoteGrid">
-        <div class="card">
-          <div class="row" style="justify-content:space-between; margin-bottom:10px;">
-            <h2>Skapa offert</h2>
-            <div class="row">
-              <button class="btn secondary" id="btnQuoteNew">Ny</button>
-              <button class="btn secondary" id="btnQuotePrint">Förhandsgranska / skriv ut</button>
-              <button class="btn secondary" id="btnQuoteMarkSent">Markera som skickad</button>
-              <button class="btn secondary" id="btnQuoteMarkAccepted">Markera som accepterad</button>
-              <button class="btn secondary" id="btnQuoteCreateOrderDraft">Skapa orderutkast</button>
-               <button class="btn secondary" id="btnQuoteOpenOrderDraft" hidden>Öppna orderutkast</button>
-              <button class="btn" id="btnQuoteSave" disabled>Spara</button>
-            </div>
-          </div>
-
-          <div class="grid" style="gap:10px;">
-            <div class="row" style="gap:10px;">
-              <div class="field" style="min-width:140px;">
-                <label>Offertdatum</label>
-                <input id="quoteDate" type="date" />
+      <div id="quoteWorkspaceBackdrop" class="modal-backdrop" hidden></div>
+      <div class="grid quote-grid-list-only" id="quoteGrid">
+        <div class="card" id="quoteWorkspaceCard" hidden>
+          <div class="quote-workspace-shell">
+            <div class="quote-workspace-header">
+              <div>
+                <h2 style="font-size:16px; color:var(--text); margin-bottom:6px;">Quote Workspace</h2>
+                <div class="muted small">Stor arbetsyta för kund, rader, fritext, villkor och bilagor.</div>
               </div>
-              <div class="field" style="min-width:140px;">
-                <label>Giltig t.o.m.</label>
-                <input id="quoteExpiresAt" type="date" />
-              </div>
-              <div class="field" style="min-width:110px;">
-                <label>Offertnr</label>
-                <input id="quoteNo" placeholder="Auto" />
-              </div>
-              <div class="field" style="min-width:160px;">
-                <label>Status</label>
-                <select id="quoteStatus">
-                  <option value="draft">draft</option>
-                  <option value="sent">sent</option>
-                  <option value="accepted">accepted</option>
-                  <option value="rejected">rejected</option>
-                  <option value="expired">expired</option>
-                  <option value="cancelled">cancelled</option>
-                </select>
-              </div>
-              <div class="field" style="min-width:140px;">
-                <label>Valuta</label>
-                <input id="quoteCurrency" value="SEK" />
-              </div>
-              <div class="field" style="min-width:140px;">
-                <label>Momsmodell</label>
-                <input id="quoteVatScheme" value="SE_VAT" />
+              <div class="row" style="justify-content:flex-end;">
+                <div id="quoteEditorStatus" class="pill">Ny offert</div>
+                <button class="btn secondary" id="btnQuoteWorkspaceClose" type="button">Stäng</button>
               </div>
             </div>
 
-            <div class="row" style="gap:10px;">
-              <div class="field" style="flex:1; min-width:220px;">
-                <label>Referens</label>
-                <input id="quoteRef" placeholder="t.ex. Förfrågan 24031" />
-              </div>
-              <div class="field" style="min-width:180px;">
-                <label>Kund</label>
-                <select id="quoteCustomerSelect"></select>
-              </div>
-              <div class="field" style="min-width:140px;">
-                <label>Källa</label>
-                <select id="quoteSource">
-                  <option value="fu_local">fu_local</option>
-                  <option value="admin_sync">admin_sync</option>
-                  <option value="webshop">webshop</option>
-                </select>
-              </div>
-            </div>
-
-            <div class="card" style="padding:10px; border-radius:14px; background:rgba(11,18,32,.90);">
-              <div class="row" style="justify-content:space-between; margin-bottom:8px;">
-                <div class="muted small">Kunduppgifter</div>
-                <div id="quoteEditorStatus" class="muted small">Ny offert</div>
-              </div>
-              <div id="quoteInternalIndicators" class="row" style="gap:8px; flex-wrap:wrap; margin-bottom:8px;" hidden></div>
-              <div class="grid" style="gap:10px;">
-                <div class="row" style="gap:10px;">
-                  <div class="field" style="flex:1; min-width:220px;">
-                    <label>Kundnamn</label>
-                    <input id="quoteCustomerName" placeholder="t.ex. Mariano Vozzi" />
+            <div class="quote-workspace-columns">
+              <div class="quote-workspace-column">
+                <details class="quote-section" open>
+                  <summary>Kund</summary>
+                  <div class="quote-section-body">
+                    <div class="field">
+                      <label>Kundregister</label>
+                      <select id="quoteCustomerSelect"></select>
+                    </div>
+                    <div class="quote-meta-grid compact">
+                      <div class="field">
+                        <label>Kundnamn</label>
+                        <input id="quoteCustomerName" placeholder="t.ex. Mariano Vozzi" />
+                      </div>
+                      <div class="field">
+                        <label>Företag</label>
+                        <input id="quoteCompanyName" placeholder="t.ex. Innovatio Brutalis AB" />
+                      </div>
+                      <div class="field">
+                        <label>E-post</label>
+                        <input id="quoteCustomerEmail" placeholder="kund@exempel.se" />
+                      </div>
+                      <div class="field">
+                        <label>Telefon</label>
+                        <input id="quoteCustomerPhone" placeholder="070-123 45 67" />
+                      </div>
+                      <div class="field">
+                        <label>Org.nr</label>
+                        <input id="quoteOrgnr" placeholder="559999-9999" />
+                      </div>
+                    </div>
                   </div>
-                  <div class="field" style="flex:1; min-width:220px;">
-                    <label>Företag</label>
-                    <input id="quoteCompanyName" placeholder="t.ex. Innovatio Brutalis AB" />
+                </details>
+
+                <details class="quote-section" open>
+                  <summary>Offertuppgifter</summary>
+                  <div class="quote-section-body">
+                    <div class="quote-meta-grid">
+                      <div class="field">
+                        <label>Offertdatum</label>
+                        <input id="quoteDate" type="date" />
+                      </div>
+                      <div class="field">
+                        <label>Giltig t.o.m.</label>
+                        <input id="quoteExpiresAt" type="date" />
+                      </div>
+                      <div class="field">
+                        <label>Offertnr</label>
+                        <input id="quoteNo" placeholder="Auto" />
+                      </div>
+                      <div class="field">
+                        <label>Status</label>
+                        <select id="quoteStatus">
+                          <option value="draft">draft</option>
+                          <option value="sent">sent</option>
+                          <option value="accepted">accepted</option>
+                          <option value="rejected">rejected</option>
+                          <option value="expired">expired</option>
+                          <option value="cancelled">cancelled</option>
+                        </select>
+                      </div>
+                      <div class="field">
+                        <label>Valuta</label>
+                        <input id="quoteCurrency" value="SEK" />
+                      </div>
+                      <div class="field">
+                        <label>Momsmodell</label>
+                        <input id="quoteVatScheme" value="SE_VAT" />
+                      </div>
+                    </div>
+                    <div class="field">
+                      <label>Referens / projekt</label>
+                      <input id="quoteRef" placeholder="t.ex. Förfrågan 24031" />
+                    </div>
+                    <div class="field">
+                      <label>Källa</label>
+                      <select id="quoteSource">
+                        <option value="fu_local">fu_local</option>
+                        <option value="admin_sync">admin_sync</option>
+                        <option value="webshop">webshop</option>
+                      </select>
+                    </div>
                   </div>
-                </div>
-                <div class="row" style="gap:10px;">
-                  <div class="field" style="flex:1; min-width:220px;">
-                    <label>E-post</label>
-                    <input id="quoteCustomerEmail" placeholder="kund@exempel.se" />
+                </details>
+              </div>
+
+              <div class="quote-workspace-column main">
+                <details class="quote-section" open>
+                  <summary>Artiklar och tjänster</summary>
+                  <div class="quote-section-body">
+                    <div class="row" style="justify-content:space-between;">
+                      <div class="muted small">Offertrader med tjänster, produkter och rabatter.</div>
+                      <div class="row">
+                        <button class="btn secondary" id="btnQuoteAddLine">+ Rad</button>
+                        <button class="btn danger" id="btnQuoteClear">Rensa</button>
+                      </div>
+                    </div>
+                    <div style="overflow:auto;">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th style="width:140px;">Typ</th>
+                            <th style="width:140px;">Kategori</th>
+                            <th style="width:180px;">Titel</th>
+                            <th>Beskrivning</th>
+                            <th class="right" style="width:80px;">Antal</th>
+                            <th style="width:80px;">Enhet</th>
+                            <th class="right" style="width:120px;">A-pris exkl.</th>
+                            <th class="right" style="width:80px;">Moms %</th>
+                            <th style="width:100px;">Konto</th>
+                            <th style="width:60px;"></th>
+                          </tr>
+                        </thead>
+                        <tbody id="quoteLinesTbody"></tbody>
+                      </table>
+                    </div>
                   </div>
-                  <div class="field" style="min-width:180px;">
-                    <label>Telefon</label>
-                    <input id="quoteCustomerPhone" placeholder="070-123 45 67" />
+                </details>
+
+                <details class="quote-section" open>
+                  <summary>Fritext / omfattning</summary>
+                  <div class="quote-section-body">
+                    <div class="field">
+                      <label>Intro / projektbeskrivning</label>
+                      <textarea id="quoteIntroText" placeholder="Kort beskrivning av projektet eller uppdraget."></textarea>
+                    </div>
+                    <div class="field">
+                      <label>Omfattning / antaganden / avgränsningar</label>
+                      <textarea id="quoteScopeText" placeholder="Vad som ingår, vad som inte ingår och viktiga antaganden."></textarea>
+                    </div>
                   </div>
-                  <div class="field" style="min-width:180px;">
-                    <label>Org.nr</label>
-                    <input id="quoteOrgnr" placeholder="559999-9999" />
+                </details>
+
+                <details class="quote-section" open>
+                  <summary>Leverans / tidplan</summary>
+                  <div class="quote-section-body">
+                    <div class="field">
+                      <label>Leverans och tidplan</label>
+                      <textarea id="quoteDeliveryText" placeholder="Leveranstider, milstolpar, uppstart och beroenden."></textarea>
+                    </div>
                   </div>
+                </details>
+
+                <details class="quote-section" open>
+                  <summary>Appendix</summary>
+                  <div class="quote-section-body">
+                    <div class="row" style="justify-content:space-between;">
+                      <div class="muted small">Separata textblock som kan refereras i offerten.</div>
+                      <button class="btn secondary" id="btnQuoteAppendixAdd" type="button">+ Appendix</button>
+                    </div>
+                    <div id="quoteAppendixList" class="quote-appendix-list"></div>
+                  </div>
+                </details>
+
+                <details class="quote-section" open>
+                  <summary>Intern notering</summary>
+                  <div class="quote-section-body">
+                    <div class="field">
+                      <label>Intern notering (inte i kund-PDF)</label>
+                      <textarea id="quoteNotes" placeholder="Internt stöd för uppföljning, risker eller nästa steg."></textarea>
+                    </div>
+                  </div>
+                </details>
+              </div>
+
+              <div class="quote-workspace-column">
+                <details class="quote-section" open>
+                  <summary>Summering</summary>
+                  <div class="quote-section-body">
+                    <div id="quoteInternalIndicators" class="row" style="gap:8px; flex-wrap:wrap;" hidden></div>
+                    <div class="card" style="padding:10px; border-radius:14px; background:rgba(11,18,32,.90);">
+                      <div class="muted small">Summering</div>
+                      <div id="quoteTotalsBox" style="margin-top:8px; font-weight:700;">Summa exkl. moms: 0,00 SEK<br>Moms: 0,00 SEK<br>Totalt inkl. moms: 0,00 SEK</div>
+                    </div>
+                  </div>
+                </details>
+
+                <details class="quote-section" open>
+                  <summary>Villkor</summary>
+                  <div class="quote-section-body">
+                    <div class="field">
+                      <label>Kort sammanfattning av villkor</label>
+                      <textarea id="quoteTermsSummaryText" placeholder="Summera standardvillkor, projektspecifika villkor och vad bilagorna täcker."></textarea>
+                    </div>
+                  </div>
+                </details>
+
+                <details class="quote-section" open>
+                  <summary>Bilagor</summary>
+                  <div class="quote-section-body">
+                    <div class="quote-meta-grid compact">
+                      <div class="field">
+                        <label>Titel</label>
+                        <input id="quoteAttachmentTitle" placeholder="t.ex. Bilaga A - Villkor" />
+                      </div>
+                      <div class="field">
+                        <label>Typ</label>
+                        <select id="quoteAttachmentKind">
+                          <option value="terms_pdf">terms_pdf</option>
+                          <option value="appendix_pdf">appendix_pdf</option>
+                          <option value="image">image</option>
+                          <option value="other">other</option>
+                        </select>
+                      </div>
+                    </div>
+                    <label class="row muted small" style="gap:8px; align-items:center;">
+                      <input id="quoteAttachmentIncludeInPdf" type="checkbox" checked />
+                      Visa som referens i offert-PDF
+                    </label>
+                    <label class="btn secondary" style="display:inline-flex; align-items:center; justify-content:center; gap:8px; cursor:pointer;">
+                      Välj fil
+                      <input id="quoteAttachmentFiles" type="file" accept="application/pdf,image/*" hidden />
+                    </label>
+                    <button class="btn" id="btnQuoteAttachmentUpload" type="button">Lägg till bilaga</button>
+                    <div id="quoteAttachmentList" class="quote-attachment-list"></div>
+                  </div>
+                </details>
+
+                <div id="quoteOrderDraftView" class="card" style="padding:12px; border-radius:14px; background:rgba(11,18,32,.90);" hidden>
+                  <div class="row" style="justify-content:space-between; gap:10px; margin-bottom:8px; align-items:flex-start;">
+                    <div>
+                      <div class="muted small">Internt orderutkast</div>
+                      <div id="quoteOrderDraftTitle" style="font-weight:700; margin-top:4px;">Inget orderutkast öppet</div>
+                    </div>
+                    <div class="row" style="gap:8px; align-items:center; flex-wrap:wrap; justify-content:flex-end;">
+                      <div id="quoteOrderDraftInvoiceStatus" class="status">Faktura okänd</div>
+                      <div id="quoteOrderDraftDocStatus" class="status">order_confirmation_pdf okänd</div>
+                      <button class="btn secondary" id="btnOrderDraftCreateInvoice">Skapa faktura</button>
+                    </div>
+                  </div>
+                  <div id="quoteOrderDraftMeta" class="grid" style="gap:10px; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); margin-bottom:10px;"></div>
+                  <div style="overflow:auto; margin-bottom:10px;">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th style="width:140px;">Typ</th>
+                          <th style="width:140px;">Kategori</th>
+                          <th style="width:180px;">Titel</th>
+                          <th>Beskrivning</th>
+                          <th class="right" style="width:80px;">Antal</th>
+                          <th style="width:80px;">Enhet</th>
+                          <th class="right" style="width:120px;">A-pris exkl.</th>
+                          <th class="right" style="width:80px;">Moms %</th>
+                        </tr>
+                      </thead>
+                      <tbody id="quoteOrderDraftLines"></tbody>
+                    </table>
+                  </div>
+                  <div id="quoteOrderDraftEmpty" class="muted small">Öppna ett orderutkast från en accepterad offert för att se snapshot-raderna.</div>
                 </div>
               </div>
             </div>
 
-            <div class="card" style="padding:10px; border-radius:14px; background:rgba(11,18,32,.90);">
-              <div class="row" style="justify-content:space-between; margin-bottom:8px;">
-                <div class="muted small">Offertrader</div>
-                <div class="row">
-                  <button class="btn secondary" id="btnQuoteAddLine">+ Rad</button>
-                  <button class="btn danger" id="btnQuoteClear">Rensa</button>
-                </div>
+            <div class="quote-workspace-footer">
+              <div class="muted small">Arbetsyta för offert: spara lokalt, förhandsgranska, skicka och gå vidare till order.</div>
+              <div class="row" style="justify-content:flex-end;">
+                <button class="btn secondary" id="btnQuoteNew">Ny</button>
+                <button class="btn secondary" id="btnQuotePrint">Förhandsgranska</button>
+                <button class="btn secondary" id="btnQuoteMarkSent">Markera som skickad</button>
+                <button class="btn secondary" id="btnQuoteMarkAccepted">Markera som accepterad</button>
+                <button class="btn secondary" id="btnQuoteCreateOrderDraft">Skapa orderutkast</button>
+                <button class="btn secondary" id="btnQuoteOpenOrderDraft" hidden>Öppna orderutkast</button>
+                <button class="btn" id="btnQuoteSave" disabled>Spara</button>
               </div>
-              <div style="overflow:auto;">
-                <table>
-                  <thead>
-                    <tr>
-                      <th style="width:140px;">Typ</th>
-                      <th style="width:140px;">Kategori</th>
-                      <th style="width:180px;">Titel</th>
-                      <th>Beskrivning</th>
-                      <th class="right" style="width:80px;">Antal</th>
-                      <th style="width:80px;">Enhet</th>
-                      <th class="right" style="width:120px;">A-pris exkl.</th>
-                      <th class="right" style="width:80px;">Moms %</th>
-                      <th style="width:100px;">Konto</th>
-                      <th style="width:60px;"></th>
-                    </tr>
-                  </thead>
-                  <tbody id="quoteLinesTbody"></tbody>
-                </table>
-              </div>
-            </div>
-
-            <div class="row" style="gap:10px; align-items:stretch;">
-              <div class="card" style="padding:10px; border-radius:14px; background:rgba(11,18,32,.90); flex:1; min-width:240px;">
-                <div class="muted small">Summering</div>
-                <div id="quoteTotalsBox" style="margin-top:8px; font-weight:700;">Summa exkl. moms: 0,00 SEK<br>Moms: 0,00 SEK<br>Totalt inkl. moms: 0,00 SEK</div>
-              </div>
-              <div class="field" style="flex:1; min-width:260px;">
-                <label>Notering</label>
-                <textarea id="quoteNotes" placeholder="Intern notering eller offerttext"></textarea>
-              </div>
-            </div>
-
-            <div id="quoteOrderDraftView" class="card" style="padding:12px; border-radius:14px; background:rgba(11,18,32,.90);" hidden>
-              <div class="row" style="justify-content:space-between; gap:10px; margin-bottom:8px; align-items:flex-start;">
-                <div>
-                  <div class="muted small">Internt orderutkast</div>
-                  <div id="quoteOrderDraftTitle" style="font-weight:700; margin-top:4px;">Inget orderutkast öppet</div>
-                </div>
-                <div class="row" style="gap:8px; align-items:center; flex-wrap:wrap; justify-content:flex-end;">
-                  <div id="quoteOrderDraftInvoiceStatus" class="status">Faktura okänd</div>
-                  <div id="quoteOrderDraftDocStatus" class="status">order_confirmation_pdf okänd</div>
-                  <button class="btn secondary" id="btnOrderDraftCreateInvoice">Skapa faktura</button>
-                </div>
-              </div>
-              <div id="quoteOrderDraftMeta" class="grid" style="gap:10px; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); margin-bottom:10px;"></div>
-              <div style="overflow:auto; margin-bottom:10px;">
-                <table>
-                  <thead>
-                    <tr>
-                      <th style="width:140px;">Typ</th>
-                      <th style="width:140px;">Kategori</th>
-                      <th style="width:180px;">Titel</th>
-                      <th>Beskrivning</th>
-                      <th class="right" style="width:80px;">Antal</th>
-                      <th style="width:80px;">Enhet</th>
-                      <th class="right" style="width:120px;">A-pris exkl.</th>
-                      <th class="right" style="width:80px;">Moms %</th>
-                    </tr>
-                  </thead>
-                  <tbody id="quoteOrderDraftLines"></tbody>
-                </table>
-              </div>
-              <div id="quoteOrderDraftEmpty" class="muted small">Öppna ett orderutkast från en accepterad offert för att se snapshot-raderna.</div>
             </div>
           </div>
         </div>
 
         <div class="card" id="quoteListCard">
-          <div class="row" style="justify-content:space-between; margin-bottom:10px;">
-            <h2>Offerter</h2>
+          <div class="row" style="justify-content:space-between; margin-bottom:10px; gap:10px; align-items:flex-start;">
+            <div>
+              <h2>Offerter</h2>
+              <div class="muted small">Öppna en offert i Quote Workspace för att arbeta med kund, rader, textblock, villkor och bilagor.</div>
+            </div>
             <div class="row">
               <select id="quoteYearSelect" aria-label="Räkenskapsår för offerter"></select>
               <button class="btn secondary" id="btnQuoteRefresh">Uppdatera</button>
+              <button class="btn" id="btnQuoteWorkspaceNew" type="button">Ny offert</button>
             </div>
           </div>
           <div id="quoteList" class="list"></div>
@@ -2163,6 +2325,7 @@ Tack!</div>
                 <option value="invoice_pdf">invoice_pdf</option>
                 <option value="order_confirmation_pdf">order_confirmation_pdf</option>
                 <option value="quote_pdf">quote_pdf</option>
+                <option value="quote_attachment">quote_attachment</option>
                 <option value="voucher_pdf">voucher_pdf</option>
                 <option value="webshop_*">webshop_*</option>
                 <option value="webshop_order">webshop_order</option>
@@ -2416,8 +2579,8 @@ Tack!</div>
 (function(){
  
 
-  const APP_VERSION = "1.4.23"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.34";  // user-facing revision
+  const APP_VERSION = "1.4.24"; // bump when adding new data fields
+  const APP_SEMVER = "0.3.35";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -2851,6 +3014,7 @@ Tack!</div>
 
   const QUOTE_LINE_TYPE_OPTIONS = ["service_hourly", "service_fixed", "product", "shipping", "discount"];
   const QUOTE_CATEGORY_OPTIONS = ["3d_scan", "cnc", "3d_print", "construction", "product_sale", "shipping_packaging", "other"];
+  const QUOTE_ATTACHMENT_KIND_OPTIONS = ["terms_pdf", "appendix_pdf", "image", "other"];
   const QUOTE_STATUS_OPTIONS = ["draft", "sent", "accepted", "rejected", "expired", "cancelled"];
   const QUOTE_LOCKED_STATUSES = ["accepted", "expired", "cancelled"];
   const QUOTE_CONTROLLED_STATUSES = ["sent", "accepted"];
@@ -2869,6 +3033,33 @@ Tack!</div>
 
   function quoteRound2(value){
     return Math.round((Number(value) || 0) * 100) / 100;
+  }
+
+  function normalizeQuoteAppendix(appendix, index){
+    const raw = (appendix && typeof appendix === "object") ? appendix : {};
+    return {
+      id: String(raw.id || "").trim() || crypto.randomUUID(),
+      title: clampText(String(raw.title || "").trim(), 120),
+      text: clampText(String(raw.text || "").trim(), 8000),
+      includeInQuotePdf: raw.includeInQuotePdf !== false,
+      sortOrder: Number.isFinite(Number(raw.sortOrder)) ? Number(raw.sortOrder) : (Number(index) + 1)
+    };
+  }
+
+  function normalizeQuoteAttachment(attachment, index){
+    const raw = (attachment && typeof attachment === "object") ? attachment : {};
+    const kind = QUOTE_ATTACHMENT_KIND_OPTIONS.includes(String(raw.kind || "").trim()) ? String(raw.kind || "").trim() : "other";
+    return {
+      id: String(raw.id || "").trim() || crypto.randomUUID(),
+      quoteId: clampText(String(raw.quoteId || "").trim(), 80),
+      kind,
+      title: clampText(String(raw.title || "").trim(), 160),
+      fileName: clampText(String(raw.fileName || "").trim(), 180),
+      mime: clampText(String(raw.mime || "").trim(), 120),
+      documentId: clampText(String(raw.documentId || "").trim(), 80),
+      includeInQuotePdf: raw.includeInQuotePdf !== false,
+      sortOrder: Number.isFinite(Number(raw.sortOrder)) ? Number(raw.sortOrder) : (Number(index) + 1)
+    };
   }
 
   function normalizeQuoteLine(line, quoteId, index){
@@ -2924,6 +3115,9 @@ Tack!</div>
     const status = QUOTE_STATUS_OPTIONS.includes(String(raw.status || "").trim()) ? String(raw.status || "").trim() : "draft";
     const id = String(raw.id || "").trim() || crypto.randomUUID();
     const lines = (Array.isArray(raw.lines) ? raw.lines : []).map((line, idx)=> normalizeQuoteLine(line, id, idx));
+    const internalNote = clampText(String(raw.internalNote || raw.notes || "").trim(), 4000);
+    const appendices = (Array.isArray(raw.appendices) ? raw.appendices : []).map((appendix, idx)=> normalizeQuoteAppendix(appendix, idx));
+    const attachments = (Array.isArray(raw.attachments) ? raw.attachments : []).map((attachment, idx)=> normalizeQuoteAttachment({ ...attachment, quoteId: id }, idx));
     return {
       id,
       yearId,
@@ -2940,7 +3134,14 @@ Tack!</div>
       vatScheme: clampText(String(raw.vatScheme || "SE_VAT").trim() || "SE_VAT", 40),
       status,
       ref: clampText(String(raw.ref || "").trim(), 120),
-      notes: clampText(String(raw.notes || "").trim(), 2000),
+      introText: clampText(String(raw.introText || "").trim(), 6000),
+      scopeText: clampText(String(raw.scopeText || "").trim(), 9000),
+      deliveryText: clampText(String(raw.deliveryText || "").trim(), 6000),
+      termsSummaryText: clampText(String(raw.termsSummaryText || "").trim(), 6000),
+      internalNote,
+      notes: internalNote,
+      appendices,
+      attachments,
       source,
       adminQuoteId: clampText(String(raw.adminQuoteId || "").trim(), 80),
       adminToken: clampText(String(raw.adminToken || "").trim(), 120),
@@ -3246,6 +3447,7 @@ function yearsWithMirrorCandidates(){
 function documentMirrorFolderParts(doc){
   const kind = String(doc?.kind || "document").trim();
   if (kind === "invoice_pdf" || kind === "order_confirmation_pdf" || kind === "quote_pdf" || kind === "voucher_pdf") return [documentMirrorFolderLabel(doc, "PDF")];
+  if (kind === "quote_attachment") return [documentMirrorFolderLabel(doc, "QUOTE_ATTACHMENTS")];
   if (kind.startsWith("webshop_")) return [documentMirrorFolderLabel(doc, "JSON")];
   return [documentMirrorFolderLabel(doc, "OTHER")];
 }
@@ -4113,6 +4315,23 @@ cur = {
     return buildMinimalPdfBlob(lines);
   }
 
+  function quotePublicSections(quote){
+    const q = quote && typeof quote === "object" ? quote : {};
+    const sections = [
+      { title: "Projektbeskrivning", text: String(q.introText || "").trim() },
+      { title: "Omfattning", text: String(q.scopeText || "").trim() },
+      { title: "Leverans och tidplan", text: String(q.deliveryText || "").trim() },
+      { title: "Villkor", text: String(q.termsSummaryText || "").trim() },
+    ].filter(section => section.text);
+    const appendices = (Array.isArray(q.appendices) ? q.appendices : [])
+      .map((appendix, idx) => normalizeQuoteAppendix(appendix, idx))
+      .filter(appendix => appendix.includeInQuotePdf && (appendix.title || appendix.text));
+    const attachments = (Array.isArray(q.attachments) ? q.attachments : [])
+      .map((attachment, idx) => normalizeQuoteAttachment(attachment, idx))
+      .filter(attachment => attachment.includeInQuotePdf && (attachment.title || attachment.fileName));
+    return { sections, appendices, attachments };
+  }
+
   async function generateQuotePdfBlob(quote){
     const q = quote && typeof quote === "object" ? quote : null;
     if (!q) throw new Error("generateQuotePdfBlob kräver en offert.");
@@ -4120,6 +4339,7 @@ cur = {
     const company = state.company || {};
     const totals = quoteTotals(q.lines || []);
     const currency = String(q.currency || company.currency || "SEK").trim() || "SEK";
+    const publicSections = quotePublicSections(q);
     const lines = [];
 
     lines.push(`OFFERT ${String(q.quoteNo || "").trim() || "(utan nummer)"}`);
@@ -4137,6 +4357,25 @@ cur = {
     if (q.orgnr) lines.push(`Kund org.nr: ${String(q.orgnr).trim()}`);
     if (q.customerEmail) lines.push(`Kund e-post: ${String(q.customerEmail).trim()}`);
     if (q.customerPhone) lines.push(`Kund telefon: ${String(q.customerPhone).trim()}`);
+    if (publicSections.sections.length || publicSections.appendices.length || publicSections.attachments.length) lines.push("");
+    publicSections.sections.forEach(section => {
+      lines.push(section.title.toUpperCase());
+      wrapPdfText(section.text, 72).forEach(part => lines.push(`  ${part}`));
+      lines.push("");
+    });
+    publicSections.appendices.forEach((appendix, idx) => {
+      const title = appendix.title || `Appendix ${idx + 1}`;
+      lines.push(title.toUpperCase());
+      if (appendix.text) wrapPdfText(appendix.text, 72).forEach(part => lines.push(`  ${part}`));
+      lines.push("");
+    });
+    if (publicSections.attachments.length) {
+      lines.push("BILAGOR");
+      publicSections.attachments.forEach((attachment, idx) => {
+        lines.push(`  Bilaga ${idx + 1}: ${String(attachment.title || attachment.fileName || "Bilaga").trim()}`);
+      });
+      lines.push("");
+    }
     lines.push("");
     lines.push("RADER");
 
@@ -4158,10 +4397,6 @@ cur = {
     lines.push(`Summa exkl. moms: ${fmtSEK(totals.subtotal)} ${currency}`);
     lines.push(`Moms: ${fmtSEK(totals.vat)} ${currency}`);
     lines.push(`Totalt inkl. moms: ${fmtSEK(totals.total)} ${currency}`);
-    if (q.notes) {
-      lines.push("");
-      wrapPdfText(String(q.notes), 72).forEach((part, idx) => lines.push(idx === 0 ? `Notering: ${part}` : `  ${part}`));
-    }
 
     return buildMinimalPdfBlob(lines);
   }
@@ -4391,6 +4626,47 @@ cur = {
       fileName,
       createdBy: createdBy != null ? createdBy : (o.updatedBy || o.createdBy || state.company?.defaultSign || "")
     });
+  }
+
+  async function registerUploadedQuoteAttachmentDocument({ quote, file, kind, title, includeInQuotePdf } = {}){
+    const q = quote && typeof quote === "object" ? quote : null;
+    const blob = file instanceof Blob ? file : null;
+    if (!q || !q.id) throw new Error("registerUploadedQuoteAttachmentDocument kräver en sparad offert.");
+    if (!blob) throw new Error("registerUploadedQuoteAttachmentDocument kräver en fil eller Blob.");
+
+    state.documents = Array.isArray(state.documents) ? state.documents : [];
+    const quoteNo = String(q.quoteNo || q.id || "quote").trim();
+    const date = String(q.date || todayISO()).trim() || todayISO();
+    const mime = String(blob.type || "application/octet-stream").trim() || "application/octet-stream";
+    const docId = crypto.randomUUID();
+    const safeName = safeFileName(String(file?.name || title || "quote-attachment").trim() || "quote-attachment");
+    const record = {
+      id: docId,
+      yearId: String(q.yearId || String(date).slice(0,4) || state.activeYearId || "").trim(),
+      kind: "quote_attachment",
+      number: clampText(String(title || safeName || quoteNo).trim(), 80),
+      date,
+      linkedType: "quote",
+      linkedId: String(q.id || "").trim(),
+      fileName: safeName,
+      mime,
+      size: Number(blob.size || 0) || 0,
+      sha256: "",
+      sourceMeta: {
+        attachment_kind: QUOTE_ATTACHMENT_KIND_OPTIONS.includes(String(kind || "").trim()) ? String(kind || "").trim() : "other",
+        attachment_title: clampText(String(title || "").trim(), 160),
+        include_in_quote_pdf: !!includeInQuotePdf,
+        quote_no: quoteNo,
+      },
+      createdAt: nowISO(),
+      createdBy: currentQuoteActor(),
+      status: "active"
+    };
+    await idbSet("docBlob:" + docId, blob);
+    state.documents.push(record);
+    appendAudit({ action:"document.create", actor: record.createdBy || undefined, entityType:"document", entityId: docId, yearId: record.yearId, details:{ kind: record.kind, linkedType: record.linkedType, linkedId: record.linkedId, fileName: record.fileName } });
+    save({ renderAll:false });
+    return record;
   }
 
   async function registerGeneratedWebshopDocument({ kind, number, date, linkedType, linkedId, payload, yearId, fileName, createdBy, sourceMeta }){
@@ -4644,6 +4920,7 @@ cur = {
       if (kind === "invoice_pdf") return ["documents", "invoices", number];
       if (kind === "order_confirmation_pdf") return ["documents", "orders", number];
       if (kind === "quote_pdf") return ["documents", "quotes", number];
+      if (kind === "quote_attachment") return ["documents", "quotes", "attachments", number];
       if (kind.startsWith("webshop_")) return ["documents", "webshop", safeStemPart(kind, 48) || "webshop", number];
       return ["documents", safeStemPart(kind, 48) || "other", number];
     }
@@ -10473,6 +10750,10 @@ if (!d.features) d.features = { sruEnabled: false };
 
   // --- Quote helpers ---
   const quoteGrid = document.getElementById("quoteGrid");
+  const quoteWorkspaceBackdrop = document.getElementById("quoteWorkspaceBackdrop");
+  const quoteWorkspaceCard = document.getElementById("quoteWorkspaceCard");
+  const btnQuoteWorkspaceClose = document.getElementById("btnQuoteWorkspaceClose");
+  const btnQuoteWorkspaceNew = document.getElementById("btnQuoteWorkspaceNew");
   const quoteListCard = document.getElementById("quoteListCard");
   const quoteYearSelect = document.getElementById("quoteYearSelect");
   const quoteList = document.getElementById("quoteList");
@@ -10485,6 +10766,18 @@ if (!d.features) d.features = { sruEnabled: false };
   const quoteRef = document.getElementById("quoteRef");
   const quoteCustomerSelect = document.getElementById("quoteCustomerSelect");
   const quoteSource = document.getElementById("quoteSource");
+  const quoteIntroText = document.getElementById("quoteIntroText");
+  const quoteScopeText = document.getElementById("quoteScopeText");
+  const quoteDeliveryText = document.getElementById("quoteDeliveryText");
+  const quoteTermsSummaryText = document.getElementById("quoteTermsSummaryText");
+  const quoteAppendixList = document.getElementById("quoteAppendixList");
+  const btnQuoteAppendixAdd = document.getElementById("btnQuoteAppendixAdd");
+  const quoteAttachmentTitle = document.getElementById("quoteAttachmentTitle");
+  const quoteAttachmentKind = document.getElementById("quoteAttachmentKind");
+  const quoteAttachmentIncludeInPdf = document.getElementById("quoteAttachmentIncludeInPdf");
+  const quoteAttachmentFiles = document.getElementById("quoteAttachmentFiles");
+  const btnQuoteAttachmentUpload = document.getElementById("btnQuoteAttachmentUpload");
+  const quoteAttachmentList = document.getElementById("quoteAttachmentList");
   const quoteEditorStatus = document.getElementById("quoteEditorStatus");
   const quoteCustomerName = document.getElementById("quoteCustomerName");
   const quoteInternalIndicators = document.getElementById("quoteInternalIndicators");
@@ -10516,7 +10809,10 @@ if (!d.features) d.features = { sruEnabled: false };
 
   let editingQuoteId = null;
   let quoteLines = [];
+  let quoteAppendices = [];
+  let quoteAttachments = [];
   let openOrderDraftId = null;
+  let quoteWorkspaceOpen = false;
 
   function getActiveOrderForQuote(quoteId){
     const id = String(quoteId || "").trim();
@@ -10536,6 +10832,172 @@ if (!d.features) d.features = { sruEnabled: false };
     const quoteId = String(editingQuoteId || "").trim();
     if (!quoteId) return null;
     return getActiveOrderForQuote(quoteId);
+  }
+
+  function setQuoteWorkspaceOpen(open){
+    quoteWorkspaceOpen = !!open;
+    try { document.body.classList.toggle("quote-workspace-open", quoteWorkspaceOpen); } catch {}
+    if (quoteWorkspaceBackdrop) quoteWorkspaceBackdrop.hidden = !quoteWorkspaceOpen;
+    if (quoteWorkspaceCard) {
+      quoteWorkspaceCard.hidden = !quoteWorkspaceOpen;
+      quoteWorkspaceCard.classList.toggle("quote-workspace-open", quoteWorkspaceOpen);
+    }
+    if (quoteGrid) quoteGrid.classList.toggle("quote-grid-list-only", !quoteWorkspaceOpen);
+  }
+
+  function openQuoteWorkspace(){
+    setQuoteWorkspaceOpen(true);
+  }
+
+  function closeQuoteWorkspace(){
+    setQuoteWorkspaceOpen(false);
+  }
+
+  function renderQuoteAppendices(){
+    if (!quoteAppendixList) return;
+    const locked = isQuoteEditorLocked();
+    quoteAppendixList.innerHTML = "";
+    if (!quoteAppendices.length){
+      quoteAppendixList.innerHTML = `<div class="muted small">Inga appendices ännu. Lägg till bilaga eller projektspecifik text här.</div>`;
+      return;
+    }
+    quoteAppendices.forEach((appendix, idx) => {
+      const wrap = document.createElement("div");
+      wrap.className = "card";
+      wrap.style.padding = "10px";
+      wrap.style.borderRadius = "14px";
+      wrap.style.background = "rgba(11,18,32,.72)";
+      wrap.innerHTML = `
+        <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <div class="muted small">Appendix ${idx + 1}</div>
+          <button class="btn danger" type="button" data-quote-appendix-remove="${escapeAttr(appendix.id)}">Ta bort</button>
+        </div>
+        <div class="field" style="margin-bottom:10px;">
+          <label>Titel</label>
+          <input type="text" value="${escapeAttr(appendix.title || "")}" data-quote-appendix-title="${escapeAttr(appendix.id)}" />
+        </div>
+        <div class="field" style="margin-bottom:10px;">
+          <label>Text</label>
+          <textarea data-quote-appendix-text="${escapeAttr(appendix.id)}">${escapeHtml(appendix.text || "")}</textarea>
+        </div>
+        <label class="row muted small" style="gap:8px; align-items:center;">
+          <input type="checkbox" ${appendix.includeInQuotePdf ? "checked" : ""} data-quote-appendix-include="${escapeAttr(appendix.id)}" />
+          Visa appendix i offert-PDF
+        </label>
+      `;
+      const removeBtn = wrap.querySelector("button[data-quote-appendix-remove]");
+      const titleInput = wrap.querySelector("input[data-quote-appendix-title]");
+      const textInput = wrap.querySelector("textarea[data-quote-appendix-text]");
+      const includeInput = wrap.querySelector("input[data-quote-appendix-include]");
+      if (removeBtn) {
+        removeBtn.disabled = locked;
+        removeBtn.addEventListener("click", ()=>{
+          quoteAppendices = quoteAppendices.filter(item => item.id !== appendix.id).map((item, itemIdx) => normalizeQuoteAppendix({ ...item, sortOrder: itemIdx + 1 }, itemIdx));
+          renderQuoteAppendices();
+        });
+      }
+      if (titleInput) {
+        titleInput.readOnly = locked;
+        titleInput.addEventListener("input", ()=>{
+          appendix.title = clampText(String(titleInput.value || "").trim(), 120);
+        });
+      }
+      if (textInput) {
+        textInput.readOnly = locked;
+        textInput.addEventListener("input", ()=>{
+          appendix.text = clampText(String(textInput.value || "").trim(), 8000);
+        });
+      }
+      if (includeInput) {
+        includeInput.disabled = locked;
+        includeInput.addEventListener("change", ()=>{
+          appendix.includeInQuotePdf = !!includeInput.checked;
+        });
+      }
+      quoteAppendixList.appendChild(wrap);
+    });
+  }
+
+  function renderQuoteAttachmentList(){
+    if (!quoteAttachmentList) return;
+    const locked = isQuoteEditorLocked();
+    quoteAttachmentList.innerHTML = "";
+    if (!quoteAttachments.length){
+      quoteAttachmentList.innerHTML = `<div class="muted small">Inga bilagor kopplade ännu.</div>`;
+      return;
+    }
+    quoteAttachments
+      .slice()
+      .sort((a,b)=> Number(a.sortOrder || 0) - Number(b.sortOrder || 0))
+      .forEach(attachment => {
+        const row = document.createElement("div");
+        row.className = "card";
+        row.style.padding = "10px";
+        row.style.borderRadius = "14px";
+        row.style.background = "rgba(11,18,32,.72)";
+        row.innerHTML = `
+          <div class="row" style="justify-content:space-between; align-items:flex-start; gap:10px;">
+            <div>
+              <div style="font-weight:700;">${escapeHtml(attachment.title || attachment.fileName || "Bilaga")}</div>
+              <div class="muted small">${escapeHtml(attachment.kind || "other")} · ${escapeHtml(attachment.fileName || "")}</div>
+              <div class="muted small">${attachment.includeInQuotePdf ? "Visas i offert-PDF" : "Endast arkiverad"}</div>
+            </div>
+            <button class="btn danger" type="button" data-quote-attachment-remove="${escapeAttr(attachment.id)}">Ta bort</button>
+          </div>
+        `;
+        const removeBtn = row.querySelector("button[data-quote-attachment-remove]");
+        if (removeBtn) {
+          removeBtn.disabled = locked;
+          removeBtn.addEventListener("click", ()=>{
+            quoteAttachments = quoteAttachments.filter(item => item.id !== attachment.id).map((item, idx) => normalizeQuoteAttachment({ ...item, sortOrder: idx + 1 }, idx));
+            renderQuoteAttachmentList();
+          });
+        }
+        quoteAttachmentList.appendChild(row);
+      });
+  }
+
+  async function uploadQuoteAttachmentFiles(){
+    if (isQuoteEditorLocked()) {
+      showToast("Offerten är låst. Bilagor kan inte ändras.", 5000);
+      return;
+    }
+    const files = Array.from(quoteAttachmentFiles?.files || []);
+    if (!files.length) {
+      showToast("Välj minst en bilagefil först.", 4500);
+      return;
+    }
+    const draftQuote = buildQuoteFromEditor({}, { assignNumber: false });
+    upsertQuoteRecord(draftQuote);
+    openQuoteWorkspace();
+    const activeQuote = (state.quotes || []).find(x => x && x.id === draftQuote.id) || draftQuote;
+    const kind = String((quoteAttachmentKind && quoteAttachmentKind.value) || "other").trim();
+    const includeInQuotePdf = !!(quoteAttachmentIncludeInPdf && quoteAttachmentIncludeInPdf.checked);
+    const titleSeed = String((quoteAttachmentTitle && quoteAttachmentTitle.value) || "").trim();
+    let added = 0;
+    for (let idx = 0; idx < files.length; idx++) {
+      const file = files[idx];
+      const resolvedTitle = files.length === 1 && titleSeed ? titleSeed : (String(file?.name || "").trim() || `${kind}-${idx + 1}`);
+      const doc = await registerUploadedQuoteAttachmentDocument({ quote: activeQuote, file, kind, title: resolvedTitle, includeInQuotePdf });
+      quoteAttachments.push(normalizeQuoteAttachment({
+        quoteId: activeQuote.id,
+        kind,
+        title: resolvedTitle,
+        fileName: doc.fileName,
+        mime: doc.mime,
+        documentId: doc.id,
+        includeInQuotePdf,
+        sortOrder: quoteAttachments.length + 1
+      }, quoteAttachments.length));
+      added++;
+    }
+    const updatedQuote = buildQuoteFromEditor({ id: activeQuote.id, attachments: quoteAttachments }, { assignNumber: false });
+    upsertQuoteRecord(updatedQuote);
+    openQuoteWorkspace();
+    renderQuoteAttachmentList();
+    if (quoteAttachmentFiles) quoteAttachmentFiles.value = "";
+    if (quoteAttachmentTitle) quoteAttachmentTitle.value = "";
+    showToast(added === 1 ? "Bilaga kopplad till offerten." : `${added} bilagor kopplades till offerten.`, 4500);
   }
 
   function getActiveInvoiceForOrder(orderId){
@@ -10826,7 +11288,14 @@ if (!d.features) d.features = { sruEnabled: false };
       vatScheme: String((quoteVatScheme && quoteVatScheme.value) || "SE_VAT").trim(),
       status: String((quoteStatus && quoteStatus.value) || existing?.status || "draft").trim(),
       ref: String((quoteRef && quoteRef.value) || "").trim(),
+      introText: String((quoteIntroText && quoteIntroText.value) || "").trim(),
+      scopeText: String((quoteScopeText && quoteScopeText.value) || "").trim(),
+      deliveryText: String((quoteDeliveryText && quoteDeliveryText.value) || "").trim(),
+      termsSummaryText: String((quoteTermsSummaryText && quoteTermsSummaryText.value) || "").trim(),
+      internalNote: String((quoteNotes && quoteNotes.value) || "").trim(),
       notes: String((quoteNotes && quoteNotes.value) || "").trim(),
+      appendices: quoteAppendices.map((appendix, idx) => normalizeQuoteAppendix({ ...appendix, sortOrder: idx + 1 }, idx)),
+      attachments: quoteAttachments.map((attachment, idx) => normalizeQuoteAttachment({ ...attachment, quoteId: id, sortOrder: idx + 1 }, idx)),
       source: String((quoteSource && quoteSource.value) || existing?.source || "fu_local").trim(),
       adminQuoteId: String(existing?.adminQuoteId || "").trim(),
       adminToken: String(existing?.adminToken || "").trim(),
@@ -10946,6 +11415,7 @@ if (!d.features) d.features = { sruEnabled: false };
   function renderQuotePrintHtml(quote){
     const totals = quoteTotals(quote.lines || []);
     const currency = escapeHtml(quote.currency || state.company?.currency || "SEK");
+    const publicSections = quotePublicSections(quote);
     const rows = (quote.lines || []).map((line, idx) => {
       const sums = quoteLineTotals(line);
       const title = String(line.title || line.description || "Rad").trim() || "Rad";
@@ -11000,13 +11470,17 @@ if (!d.features) d.features = { sruEnabled: false };
         </table>
       </div>
 
+      ${publicSections.sections.map(section => `<div class="card"><div style="font-weight:800; margin-bottom:6px;">${escapeHtml(section.title)}</div><div style="white-space:pre-wrap;">${escapeHtml(section.text)}</div></div>`).join("")}
+
+      ${publicSections.appendices.map((appendix, idx) => `<div class="card"><div style="font-weight:800; margin-bottom:6px;">${escapeHtml(appendix.title || `Appendix ${idx + 1}`)}</div><div style="white-space:pre-wrap;">${escapeHtml(appendix.text || "")}</div></div>`).join("")}
+
+      ${publicSections.attachments.length ? `<div class="card"><div style="font-weight:800; margin-bottom:6px;">Bilagor</div>${publicSections.attachments.map((attachment, idx) => `<div class="muted">Bilaga ${idx + 1}: ${escapeHtml(attachment.title || attachment.fileName || "Bilaga")}</div>`).join("")}</div>` : ""}
+
       <div class="card" style="max-width:420px; margin-left:auto;">
         <div class="row"><span>Summa exkl. moms</span><span>${fmtSEK(totals.subtotal)} ${currency}</span></div>
         <div class="row"><span>Moms</span><span>${fmtSEK(totals.vat)} ${currency}</span></div>
         <div class="row" style="font-weight:900; font-size:18px;"><span>Totalt inkl. moms</span><span>${fmtSEK(totals.total)} ${currency}</span></div>
       </div>
-
-      ${quote.notes ? `<div class="card"><div style="font-weight:800; margin-bottom:6px;">Notering</div><div style="white-space:pre-wrap;">${escapeHtml(quote.notes)}</div></div>` : ""}
     `;
   }
 
@@ -11088,16 +11562,18 @@ if (!d.features) d.features = { sruEnabled: false };
     const statusValue = String((quoteStatus && quoteStatus.value) || currentStoredQuoteStatus() || "draft").trim() || "draft";
     const hasActiveOrderDraft = !!getActiveOrderForQuote(editingQuoteId);
 
-    [quoteNo, quoteCurrency, quoteVatScheme, quoteRef, quoteCustomerName, quoteCompanyName, quoteCustomerEmail, quoteCustomerPhone, quoteOrgnr, quoteNotes]
+    [quoteNo, quoteCurrency, quoteVatScheme, quoteRef, quoteCustomerName, quoteCompanyName, quoteCustomerEmail, quoteCustomerPhone, quoteOrgnr, quoteIntroText, quoteScopeText, quoteDeliveryText, quoteTermsSummaryText, quoteNotes, quoteAttachmentTitle]
       .filter(Boolean)
       .forEach(el => { el.readOnly = !!locked; });
 
-    [quoteDate, quoteExpiresAt, quoteStatus, quoteCustomerSelect, quoteSource]
+    [quoteDate, quoteExpiresAt, quoteStatus, quoteCustomerSelect, quoteSource, quoteAttachmentKind, quoteAttachmentIncludeInPdf, quoteAttachmentFiles]
       .filter(Boolean)
       .forEach(el => { el.disabled = !!locked; });
 
     if (btnQuoteAddLine) btnQuoteAddLine.disabled = !!locked;
     if (btnQuoteClear) btnQuoteClear.disabled = !!locked;
+    if (btnQuoteAppendixAdd) btnQuoteAppendixAdd.disabled = !!locked;
+    if (btnQuoteAttachmentUpload) btnQuoteAttachmentUpload.disabled = !!locked;
     if (btnQuoteSave) btnQuoteSave.disabled = !!locked || !quoteCanSave();
     if (btnQuoteMarkSent) btnQuoteMarkSent.disabled = !!locked || statusValue === "sent" || statusValue === "accepted" || !quoteCanSave();
     if (btnQuoteMarkAccepted) btnQuoteMarkAccepted.disabled = !!locked || statusValue === "accepted" || !quoteCanSave();
@@ -11112,6 +11588,8 @@ if (!d.features) d.features = { sruEnabled: false };
       ? `${baseStatus} · låst (${statusValue}) · PDF säkras vid statusbyte/förhandsgranskning`
       : (locked ? `${baseStatus} · låst (${statusValue})` : baseStatus);
     setQuoteEditorStatus(statusText);
+    renderQuoteAppendices();
+    renderQuoteAttachmentList();
     updateQuoteInternalIndicators();
   }
 
@@ -11273,9 +11751,17 @@ if (!d.features) d.features = { sruEnabled: false };
     if (quoteCustomerEmail) quoteCustomerEmail.value = "";
     if (quoteCustomerPhone) quoteCustomerPhone.value = "";
     if (quoteOrgnr) quoteOrgnr.value = "";
+    if (quoteIntroText) quoteIntroText.value = "";
+    if (quoteScopeText) quoteScopeText.value = "";
+    if (quoteDeliveryText) quoteDeliveryText.value = "";
+    if (quoteTermsSummaryText) quoteTermsSummaryText.value = "";
     if (quoteNotes) quoteNotes.value = "";
     quoteLines = [makeDefaultQuoteLine(0)];
+    quoteAppendices = [];
+    quoteAttachments = [];
     renderOrderDraftView(null);
+    renderQuoteAppendices();
+    renderQuoteAttachmentList();
     renderQuoteLines();
     updateQuoteTotals();
   }
@@ -11300,10 +11786,18 @@ if (!d.features) d.features = { sruEnabled: false };
     if (quoteCustomerEmail) quoteCustomerEmail.value = quote.customerEmail || "";
     if (quoteCustomerPhone) quoteCustomerPhone.value = quote.customerPhone || "";
     if (quoteOrgnr) quoteOrgnr.value = quote.orgnr || "";
-    if (quoteNotes) quoteNotes.value = quote.notes || "";
+    if (quoteIntroText) quoteIntroText.value = quote.introText || "";
+    if (quoteScopeText) quoteScopeText.value = quote.scopeText || "";
+    if (quoteDeliveryText) quoteDeliveryText.value = quote.deliveryText || "";
+    if (quoteTermsSummaryText) quoteTermsSummaryText.value = quote.termsSummaryText || "";
+    if (quoteNotes) quoteNotes.value = quote.internalNote || quote.notes || "";
     quoteLines = (quote.lines || []).map((line, idx) => normalizeQuoteLine(line, quote.id, idx));
+    quoteAppendices = (quote.appendices || []).map((appendix, idx) => normalizeQuoteAppendix(appendix, idx));
+    quoteAttachments = (quote.attachments || []).map((attachment, idx) => normalizeQuoteAttachment({ ...attachment, quoteId: quote.id }, idx));
     if (!quoteLines.length) quoteLines = [makeDefaultQuoteLine(0)];
     renderOrderDraftView(null);
+    renderQuoteAppendices();
+    renderQuoteAttachmentList();
     renderQuoteLines();
     updateQuoteTotals();
   }
@@ -11382,7 +11876,13 @@ if (!d.features) d.features = { sruEnabled: false };
         status: quote.status || "accepted",
         acceptedAt: quote.updatedAt || quote.createdAt || timestamp,
         ref: quote.ref || "",
-        notes: quote.notes || ""
+        introText: quote.introText || "",
+        scopeText: quote.scopeText || "",
+        deliveryText: quote.deliveryText || "",
+        termsSummaryText: quote.termsSummaryText || "",
+        appendices: (quote.appendices || []).map((appendix, idx) => normalizeQuoteAppendix(appendix, idx)),
+        attachments: (quote.attachments || []).map((attachment, idx) => normalizeQuoteAttachment(attachment, idx)),
+        notes: quote.internalNote || quote.notes || ""
       },
       lines: (quote.lines || []).map((line, idx) => {
         const qty = quoteRound2(Number(line?.qty) || 0);
@@ -11464,7 +11964,10 @@ if (!d.features) d.features = { sruEnabled: false };
         if (!b) return;
         const act = b.dataset.act;
         const id = b.dataset.id;
-        if (act === "edit") loadQuoteToEditor(id);
+        if (act === "edit") {
+          loadQuoteToEditor(id);
+          openQuoteWorkspace();
+        }
         if (act === "del") await deleteQuote(id);
       });
       quoteList.appendChild(div);
@@ -11472,13 +11975,18 @@ if (!d.features) d.features = { sruEnabled: false };
   }
 
   function wireQuoteEvents(){
-    if (btnQuoteNew) btnQuoteNew.addEventListener("click", (e)=>{ e.preventDefault(); newQuote(); });
+    if (btnQuoteNew) btnQuoteNew.addEventListener("click", (e)=>{ e.preventDefault(); newQuote(); openQuoteWorkspace(); });
+    if (btnQuoteWorkspaceNew) btnQuoteWorkspaceNew.addEventListener("click", (e)=>{ e.preventDefault(); newQuote(); openQuoteWorkspace(); });
+    if (btnQuoteWorkspaceClose) btnQuoteWorkspaceClose.addEventListener("click", (e)=>{ e.preventDefault(); closeQuoteWorkspace(); });
     if (btnQuotePrint) btnQuotePrint.addEventListener("click", (e)=>{ e.preventDefault(); previewQuotePrint(); });
     if (btnQuoteMarkSent) btnQuoteMarkSent.addEventListener("click", (e)=>{ e.preventDefault(); markQuoteAsSent(); });
     if (btnQuoteMarkAccepted) btnQuoteMarkAccepted.addEventListener("click", (e)=>{ e.preventDefault(); markQuoteAsAccepted(); });
     if (btnQuoteCreateOrderDraft) btnQuoteCreateOrderDraft.addEventListener("click", (e)=>{ e.preventDefault(); createOrderDraftFromEditor(); });
     if (btnQuoteOpenOrderDraft) btnQuoteOpenOrderDraft.addEventListener("click", (e)=>{ e.preventDefault(); openOrderDraftFromEditor(); });
     if (btnOrderDraftCreateInvoice) btnOrderDraftCreateInvoice.addEventListener("click", (e)=>{ e.preventDefault(); createInvoiceFromOpenOrderDraft(); });
+    if (btnQuoteAppendixAdd) btnQuoteAppendixAdd.addEventListener("click", (e)=>{ e.preventDefault(); quoteAppendices.push(normalizeQuoteAppendix({}, quoteAppendices.length)); renderQuoteAppendices(); applyQuoteEditorLock(); });
+    if (btnQuoteAttachmentUpload) btnQuoteAttachmentUpload.addEventListener("click", async (e)=>{ e.preventDefault(); await uploadQuoteAttachmentFiles(); });
+    if (quoteWorkspaceBackdrop) quoteWorkspaceBackdrop.addEventListener("click", (e)=>{ if (e.target === quoteWorkspaceBackdrop) closeQuoteWorkspace(); });
     if (btnQuoteSave) btnQuoteSave.addEventListener("click", (e)=>{ e.preventDefault(); saveQuote(); });
     if (btnQuoteAddLine) btnQuoteAddLine.addEventListener("click", (e)=>{ e.preventDefault(); quoteLines.push(makeDefaultQuoteLine(quoteLines.length)); renderQuoteLines(); updateQuoteTotals(); });
     if (btnQuoteClear) btnQuoteClear.addEventListener("click", async (e)=>{ e.preventDefault(); if (!(await confirmAsync("Rensa offerten?"))) return; newQuote(); });
@@ -11495,7 +12003,7 @@ if (!d.features) d.features = { sruEnabled: false };
       }
       updateQuoteTotals();
     });
-    [quoteDate, quoteExpiresAt, quoteNo, quoteCurrency, quoteVatScheme, quoteRef, quoteSource, quoteCustomerName, quoteCompanyName, quoteCustomerEmail, quoteCustomerPhone, quoteOrgnr, quoteNotes].filter(Boolean).forEach(el => {
+    [quoteDate, quoteExpiresAt, quoteNo, quoteCurrency, quoteVatScheme, quoteRef, quoteSource, quoteCustomerName, quoteCompanyName, quoteCustomerEmail, quoteCustomerPhone, quoteOrgnr, quoteIntroText, quoteScopeText, quoteDeliveryText, quoteTermsSummaryText, quoteNotes].filter(Boolean).forEach(el => {
       el.addEventListener("input", updateQuoteTotals);
       el.addEventListener("change", updateQuoteTotals);
     });

@@ -2221,8 +2221,8 @@ Tack!</div>
 (function(){
  
 
-  const APP_VERSION = "1.4.13"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.23";  // user-facing revision
+  const APP_VERSION = "1.4.14"; // bump when adding new data fields
+  const APP_SEMVER = "0.3.24";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -2890,14 +2890,40 @@ function documentMirrorManifestKey(){
   return DOC_MIRROR_MANIFEST_KEY_PREFIX + "default";
 }
 
-function dataFileStemForMirror(){
-  const rawName = String(fsHandle && fsHandle.name ? fsHandle.name : "fu-data.json");
-  const stem = rawName.replace(/\.[A-Za-z0-9]+$/g, "");
-  return safeFilename(stem) || "fu-data";
+function companyOrgnrForMirror(){
+  const raw = String(state?.company?.orgnr || "").trim();
+  if (raw) return safeStemPart(raw, 32) || "orgnr_saknas";
+  try {
+    const activeId = CompanyManager.getActiveCompanyId();
+    const meta = activeId ? CompanyManager.getCompanyMeta(activeId) : null;
+    const fallback = String(meta?.orgnr || "").trim();
+    if (fallback) return safeStemPart(fallback, 32) || "orgnr_saknas";
+  } catch {}
+  return "orgnr_saknas";
 }
 
-function documentMirrorRootFolderName(){
-  return `${dataFileStemForMirror()}_files`;
+function mirrorYearLabel(yearId){
+  const raw = String(yearId || "").trim();
+  if (/^\d{4}$/.test(raw)) return raw;
+  const fy = (state.fiscalYears || []).find(y => y && String(y.id || "").trim() === raw);
+  const start = String(fy?.start || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(start)) return start.slice(0, 4);
+  const fromId = safeStemPart(raw, 16);
+  return fromId || String(new Date().getFullYear());
+}
+
+function documentMirrorFolderLabel(doc, suffix){
+  const rawYearId = String(doc?.yearId || "").trim();
+  const rawDate = String(doc?.date || "").trim();
+  const year = rawYearId
+    ? mirrorYearLabel(rawYearId)
+    : (/^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate.slice(0, 4) : mirrorYearLabel(state.activeYearId || ""));
+  const orgnr = companyOrgnrForMirror();
+  return safeFileName(`${year}_${orgnr}_${suffix}`);
+}
+
+function documentMirrorIndexFolderName(){
+  return safeFileName(`FU_DOKUMENTINDEX_${companyOrgnrForMirror()}`);
 }
 
 function yearsWithMirrorCandidates(){
@@ -2914,11 +2940,10 @@ function yearsWithMirrorCandidates(){
 }
 
 function documentMirrorFolderParts(doc){
-  const root = documentMirrorRootFolderName();
   const kind = String(doc?.kind || "document").trim();
-  if (kind === "invoice_pdf" || kind === "voucher_pdf") return [root, "documents", "pdf"];
-  if (kind.startsWith("webshop_")) return [root, "documents", "json"];
-  return [root, "documents", "other"];
+  if (kind === "invoice_pdf" || kind === "voucher_pdf") return [documentMirrorFolderLabel(doc, "PDF")];
+  if (kind.startsWith("webshop_")) return [documentMirrorFolderLabel(doc, "JSON")];
+  return [documentMirrorFolderLabel(doc, "OTHER")];
 }
 
 async function backupEnsureDir(rootDir, parts){
@@ -2962,7 +2987,7 @@ async function syncDocumentsToBackupDir(reason, options = {}){
     }
   }
 
-  const rootName = documentMirrorRootFolderName();
+  const indexFolderName = documentMirrorIndexFolderName();
   const docs = (state.documents || [])
     .filter(doc => doc && String(doc.status || "active") === "active")
     .slice()
@@ -3009,9 +3034,10 @@ async function syncDocumentsToBackupDir(reason, options = {}){
     });
   }
 
-  const docsDir = await backupEnsureDir(backupDirHandle, [rootName, "documents"]);
+  const docsDir = await backupEnsureDir(backupDirHandle, [indexFolderName]);
   await backupWriteTextFile(docsDir, "index.json", JSON.stringify({
-    root: rootName,
+    root: indexFolderName,
+    folderFormat: "YYYY_ORGNR_KIND",
     dataFile: fsHandle && fsHandle.name ? String(fsHandle.name) : "",
     updatedAt: nowISO(),
     reason: String(reason || "sync"),
@@ -3020,7 +3046,7 @@ async function syncDocumentsToBackupDir(reason, options = {}){
 
   await idbSet(manifestKey, {
     version: 1,
-    rootName,
+    rootName: indexFolderName,
     updatedAt: nowISO(),
     items: nextItems,
   }).catch(()=> null);

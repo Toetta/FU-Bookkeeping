@@ -12948,9 +12948,14 @@ if (!d.features) d.features = { sruEnabled: false };
     return null;
   }
 
-  function renderInvoiceContactOptions(customerId, preferredContactId){
+  function renderInvoiceContactOptions(customerId, preferredContactId, preferredSnapshot){
     const customer = getCustomerRecordById(customerId);
     const contacts = customerInvoiceContacts(customer);
+    const snapshotContact = preferredSnapshot?.name ? normalizeCustomerContact(preferredSnapshot, 0) : null;
+    const resolvedContact = snapshotContact || resolveInvoiceContactPerson({ customerId, selectedContactId: preferredContactId }, customer);
+    if (resolvedContact?.name && !contacts.some(contact => contact.id === resolvedContact.id || (contact.name === resolvedContact.name && contact.email === resolvedContact.email && contact.phone === resolvedContact.phone))) {
+      contacts.unshift(normalizeCustomerContact({ ...resolvedContact, id: resolvedContact.id || String(preferredContactId || "").trim() || crypto.randomUUID() }, 0));
+    }
     if (!invContactSelect) return;
     invContactSelect.innerHTML = contacts.length ? "" : `<option value="">(ingen kontaktperson)</option>`;
     contacts.forEach(contact => {
@@ -12960,7 +12965,7 @@ if (!d.features) d.features = { sruEnabled: false };
       invContactSelect.appendChild(opt);
     });
     const preferred = String(preferredContactId || "").trim();
-    const fallback = (getCustomerPrimaryContact(customer, "invoice") || contacts[0] || {}).id || "";
+    const fallback = (resolvedContact || getCustomerPrimaryContact(customer, "invoice") || contacts[0] || {}).id || "";
     invContactSelect.value = contacts.some(contact => contact.id === preferred) ? preferred : fallback;
     invContactSelect.disabled = !contacts.length;
     invSelectedContactId = String(invContactSelect.value || "").trim();
@@ -13082,13 +13087,14 @@ if (!d.features) d.features = { sruEnabled: false };
 
   function applySelectedCustomerToInvoiceEditor(){
     if (!invCustomerId) {
-      renderInvoiceContactOptions("", "");
+      renderInvoiceContactOptions("", "", null);
       return;
     }
     const customer = state.customers?.[invCustomerId];
     if (!customer) return;
     const normalized = normalizeCustomerRecord(customer, invCustomerId, { defaultCurrency: state.company?.currency || "SEK" });
-    renderInvoiceContactOptions(invCustomerId, invSelectedContactId || "");
+    const currentInvoice = editingInvoiceId ? ((state.invoices || []).find(x => x && x.id === editingInvoiceId) || null) : null;
+    renderInvoiceContactOptions(invCustomerId, invSelectedContactId || "", currentInvoice?.selectedContactSnapshot || null);
     const paymentDays = normalized.invoiceDefaults?.paymentDays;
     if (Number.isFinite(paymentDays) && invDate && invDue) {
       invDue.value = addDays(invDate.value || todayISO(), paymentDays);
@@ -13220,7 +13226,7 @@ if (!d.features) d.features = { sruEnabled: false };
     invNo.value = "";
     invRef.value = "";
     invLines = [ { kind:"item", desc:"", qty:"1", price:"", vat:"25" } ];
-    renderInvoiceContactOptions("", "");
+    renderInvoiceContactOptions("", "", null);
     renderInvoiceCustomer();
     renderInvoiceLines();
     updateInvoiceTotals();
@@ -13538,7 +13544,7 @@ if (!d.features) d.features = { sruEnabled: false };
     invRef.value = inv.ref || "";
     invCustomerId = inv.customerId || null;
     invSelectedContactId = String(inv.selectedContactId || inv.selectedContactSnapshot?.id || "").trim();
-    renderInvoiceContactOptions(invCustomerId || "", invSelectedContactId || "");
+    renderInvoiceContactOptions(invCustomerId || "", invSelectedContactId || "", inv.selectedContactSnapshot || null);
     invLines = (inv.lines||[]).map(l => ({
       kind: l.kind || "item",
       desc: l.desc || "",

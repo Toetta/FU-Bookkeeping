@@ -453,6 +453,12 @@
     .quote-attachment-list{ display:grid; gap:10px; }
     .quote-meta-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(150px,1fr)); gap:10px; }
     .quote-meta-grid.compact{ grid-template-columns:repeat(auto-fit, minmax(180px,1fr)); }
+    .customer-form-sections{ display:grid; gap:12px; }
+    .customer-form-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(180px,1fr)); gap:10px; }
+    .customer-form-grid.wide{ grid-template-columns:repeat(auto-fit, minmax(220px,1fr)); }
+    .customer-stack-list{ display:grid; gap:10px; }
+    .customer-inline-card{ padding:10px; border-radius:14px; background:rgba(11,18,32,.72); border:1px solid rgba(34,48,68,.7); }
+    .customer-inline-card .row{ align-items:flex-start; }
     @media (max-width: 1180px){
       .quote-workspace-columns{ grid-template-columns:1fr; }
     }
@@ -1122,27 +1128,182 @@
             </div>
           </div>
 
-          <div class="grid" style="gap:10px;">
+          <div class="customer-form-sections">
             <input type="hidden" id="custEditId" />
-            <div class="field">
-              <label>Namn</label>
-              <input id="custRegName" placeholder="t.ex. Mariano Vozzi" />
-            </div>
-            <div class="field">
-              <label>Adress</label>
-              <input id="custRegAddr" placeholder="Gata, postnr, ort" />
-            </div>
-            <div class="row" style="gap:10px;">
-              <div class="field" style="flex:1; min-width:220px;">
-                <label>E-post (valfritt)</label>
-                <input id="custRegEmail" placeholder="kund@exempel.se" />
+            <div class="customer-inline-card">
+              <div class="muted small" style="margin-bottom:8px;">Grunduppgifter</div>
+              <div class="customer-form-grid wide">
+                <div class="field">
+                  <label>Typ</label>
+                  <select id="custRegKind">
+                    <option value="company">Företag</option>
+                    <option value="person">Person</option>
+                  </select>
+                </div>
+                <div class="field" style="grid-column:span 2; min-width:220px;">
+                  <label>Företagsnamn / visningsnamn</label>
+                  <input id="custRegName" placeholder="t.ex. Innovatio Brutalis AB" />
+                </div>
+                <div class="field" style="grid-column:span 2; min-width:220px;">
+                  <label>Juridiskt namn</label>
+                  <input id="custRegLegalName" placeholder="t.ex. Innovatio Brutalis Aktiebolag" />
+                </div>
+                <div class="field">
+                  <label>Org.nr</label>
+                  <input id="custRegOrgnr" placeholder="559999-9999" />
+                </div>
+                <div class="field">
+                  <label>VAT</label>
+                  <input id="custRegVatNo" placeholder="SE559999999901" />
+                </div>
+                <div class="field">
+                  <label>Kundnr</label>
+                  <input id="custRegCustomerNo" placeholder="t.ex. K-1024" />
+                </div>
+                <div class="field">
+                  <label>Status</label>
+                  <select id="custRegStatus">
+                    <option value="active">active</option>
+                    <option value="inactive">inactive</option>
+                  </select>
+                </div>
+                <div class="field" style="grid-column:1 / -1;">
+                  <label>Taggar</label>
+                  <input id="custRegTags" placeholder="t.ex. återkommande, export, OEM" />
+                </div>
               </div>
-              <div class="field" style="min-width:180px;">
-                <label>Org.nr (valfritt)</label>
-                <input id="custRegOrgnr" placeholder="559999-9999" />
+            </div>
+
+            <div class="customer-inline-card">
+              <div class="muted small" style="margin-bottom:8px;">Huvudkontakt</div>
+              <div class="customer-form-grid wide">
+                <div class="field">
+                  <label>Huvudmail</label>
+                  <input id="custRegEmail" placeholder="kund@exempel.se" />
+                </div>
+                <div class="field">
+                  <label>Telefon / växel</label>
+                  <input id="custRegPhone" placeholder="08-123 45 67" />
+                </div>
+                <div class="field">
+                  <label>Webbplats</label>
+                  <input id="custRegWebsite" placeholder="https://example.se" />
+                </div>
+                <div class="field">
+                  <label>Standardvaluta</label>
+                  <input id="custRegDefaultCurrency" placeholder="SEK" />
+                </div>
               </div>
             </div>
-            <div class="muted small">Tips: kunder används i Kundfakturor-fliken och sparas i din datafil/backup.</div>
+
+            <div class="customer-inline-card">
+              <div class="muted small" style="margin-bottom:8px;">Fakturaadress</div>
+              <div class="customer-form-grid wide">
+                <div class="field">
+                  <label>Företag</label>
+                  <input id="custRegBillCompany" placeholder="t.ex. Innovatio Brutalis AB" />
+                </div>
+                <div class="field">
+                  <label>Attention</label>
+                  <input id="custRegBillAttention" placeholder="t.ex. Ekonomi / Anna Andersson" />
+                </div>
+                <div class="field" style="grid-column:span 2; min-width:220px;">
+                  <label>Adressrad 1</label>
+                  <input id="custRegBillLine1" placeholder="Gata 1" />
+                </div>
+                <div class="field" style="grid-column:span 2; min-width:220px;">
+                  <label>Adressrad 2</label>
+                  <input id="custRegBillLine2" placeholder="C/O, avdelning eller box" />
+                </div>
+                <div class="field">
+                  <label>Postnr</label>
+                  <input id="custRegBillZip" placeholder="123 45" />
+                </div>
+                <div class="field">
+                  <label>Ort</label>
+                  <input id="custRegBillCity" placeholder="Stockholm" />
+                </div>
+                <div class="field">
+                  <label>Land</label>
+                  <input id="custRegBillCountry" placeholder="Sverige" />
+                </div>
+                <div class="field">
+                  <label>Fakturamail</label>
+                  <input id="custRegBillEmail" placeholder="invoice@exempel.se" />
+                </div>
+                <div class="field">
+                  <label>Telefon</label>
+                  <input id="custRegBillPhone" placeholder="08-123 45 67" />
+                </div>
+                <div class="field" style="grid-column:1 / -1;">
+                  <label>Äldre enkel adressrad</label>
+                  <input id="custRegAddr" placeholder="Kompatibilitetsfält, fylls från fakturaadress" />
+                </div>
+              </div>
+            </div>
+
+            <div class="customer-inline-card">
+              <div class="row" style="justify-content:space-between; margin-bottom:8px;">
+                <div class="muted small">Kontaktpersoner</div>
+                <button class="btn secondary" id="btnCustAddContact" type="button">+ Kontakt</button>
+              </div>
+              <div id="custContactsList" class="customer-stack-list"></div>
+            </div>
+
+            <div class="customer-inline-card">
+              <div class="row" style="justify-content:space-between; margin-bottom:8px;">
+                <div class="muted small">Leveransadresser</div>
+                <button class="btn secondary" id="btnCustAddDelivery" type="button">+ Leveransadress</button>
+              </div>
+              <div id="custDeliveryList" class="customer-stack-list"></div>
+            </div>
+
+            <div class="customer-inline-card">
+              <div class="muted small" style="margin-bottom:8px;">Fakturadefaults</div>
+              <div class="customer-form-grid wide">
+                <div class="field">
+                  <label>Betalningsdagar</label>
+                  <input id="custRegPaymentDays" type="number" min="0" step="1" placeholder="30" />
+                </div>
+                <div class="field">
+                  <label>Fakturamejl</label>
+                  <input id="custRegInvoiceEmail" placeholder="invoice@exempel.se" />
+                </div>
+                <div class="field">
+                  <label>Referensetikett</label>
+                  <input id="custRegReferenceLabel" placeholder="Er referens" />
+                </div>
+                <div class="field">
+                  <label>Referensvärde</label>
+                  <input id="custRegReferenceValue" placeholder="t.ex. PO-4421" />
+                </div>
+                <div class="field">
+                  <label>Vår referens</label>
+                  <input id="custRegOurReference" placeholder="t.ex. Malkus Arlemark" />
+                </div>
+                <div class="field">
+                  <label>Er referens</label>
+                  <input id="custRegTheirReference" placeholder="t.ex. Anna Andersson" />
+                </div>
+                <div class="field">
+                  <label>Leveransmetod</label>
+                  <input id="custRegDeliveryMethod" placeholder="t.ex. email" />
+                </div>
+                <div class="field">
+                  <label>Språk</label>
+                  <input id="custRegLanguage" placeholder="sv" />
+                </div>
+              </div>
+            </div>
+
+            <div class="customer-inline-card">
+              <div class="field">
+                <label>Intern notering</label>
+                <textarea id="custRegNotes" placeholder="Intern info, avtal, inköpsportal, prislista eller andra anteckningar."></textarea>
+              </div>
+            </div>
+
+            <div class="muted small">Kunder används i offert-, order- och kundfakturaflöden. Äldre kundposter migreras automatiskt till den rikare modellen.</div>
           </div>
         </div>
 
@@ -1519,24 +1680,38 @@
           </div>
 
           <div class="grid" style="gap:10px;">
-            <div class="row" style="gap:10px;">
-              <div class="field" style="flex:1; min-width:220px;">
-                <label>Namn</label>
-                <input id="custName" placeholder="t.ex. Mariano Vozzi" />
+            <div class="customer-form-grid wide">
+              <div class="field" style="grid-column:span 2; min-width:220px;">
+                <label>Företag / kundnamn</label>
+                <input id="custName" placeholder="t.ex. Innovatio Brutalis AB" />
               </div>
-              <div class="field" style="flex:1; min-width:220px;">
-                <label>Adress</label>
+              <div class="field">
+                <label>Primär kontaktperson</label>
+                <input id="custPrimaryContactName" placeholder="t.ex. Anna Andersson" />
+              </div>
+              <div class="field">
+                <label>Kontaktroll</label>
+                <input id="custPrimaryContactRole" placeholder="t.ex. Inköp" />
+              </div>
+              <div class="field" style="grid-column:span 2; min-width:220px;">
+                <label>Fakturaadress</label>
                 <input id="custAddr" placeholder="Gata, postnr, ort" />
               </div>
-            </div>
-            <div class="row" style="gap:10px;">
-              <div class="field" style="flex:1; min-width:220px;">
-                <label>E-post (valfritt)</label>
-                <input id="custEmail" placeholder="kund@exempel.se" />
+              <div class="field">
+                <label>Fakturamail</label>
+                <input id="custEmail" placeholder="invoice@exempel.se" />
               </div>
-              <div class="field" style="min-width:180px;">
-                <label>Org.nr (valfritt)</label>
+              <div class="field">
+                <label>Telefon</label>
+                <input id="custPhone" placeholder="08-123 45 67" />
+              </div>
+              <div class="field">
+                <label>Org.nr</label>
                 <input id="custOrgnr" placeholder="559999-9999" />
+              </div>
+              <div class="field">
+                <label>Er referens</label>
+                <input id="custInvoiceReference" placeholder="t.ex. PO-4421" />
               </div>
             </div>
             <div class="row" style="justify-content:flex-end;">
@@ -2625,8 +2800,8 @@ Tack!</div>
 (function(){
  
 
-  const APP_VERSION = "1.4.24"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.35";  // user-facing revision
+  const APP_VERSION = "1.4.25"; // bump when adding new data fields
+  const APP_SEMVER = "0.3.36";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -4822,12 +4997,7 @@ cur = {
     const auditLog = (state.auditLog||[]).filter(e=>String(e.yearId||"")===String(yearId));
     const lockUntil = lockUntilForYear(yearId);
 
-    // collect referenced customers/suppliers (keep minimal but sufficient)
-    const customers = {};
-    for (const inv of invoices){
-      const cid = inv.customerId;
-      if (cid && state.customers && state.customers[cid]) customers[cid] = state.customers[cid];
-    }
+    const customers = normalizeCustomerRegistry(state.customers || {}, { defaultCurrency: state.company?.currency || "SEK" });
     const suppliers = {};
     // suppliers referenced by supplierInvoices (keep minimal but sufficient)
     for (const si of supplierInvoices){
@@ -6025,6 +6195,242 @@ cur = {
       
   }
 
+  const CUSTOMER_STATUS_OPTIONS = ["active", "inactive"];
+
+  function splitCustomerTags(value){
+    const items = Array.isArray(value)
+      ? value
+      : String(value || "").split(/[;,\n]/);
+    const seen = new Set();
+    const result = [];
+    items.forEach(item => {
+      const tag = clampText(String(item || "").trim(), 40);
+      if (!tag) return;
+      const key = tag.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      result.push(tag);
+    });
+    return result;
+  }
+
+  function emptyCustomerAddress(){
+    return { company:"", attention:"", line1:"", line2:"", zip:"", city:"", country:"", email:"", phone:"" };
+  }
+
+  function normalizeCustomerAddress(address, fallback){
+    const raw = (address && typeof address === "object") ? address : {};
+    const fb = (fallback && typeof fallback === "object") ? fallback : {};
+    return {
+      company: clampText(String(raw.company || raw.name || fb.company || fb.name || "").trim(), 160),
+      attention: clampText(String(raw.attention || fb.attention || "").trim(), 160),
+      line1: clampText(String(raw.line1 || raw.addr || fb.line1 || fb.addr || "").trim(), 160),
+      line2: clampText(String(raw.line2 || fb.line2 || "").trim(), 160),
+      zip: clampText(String(raw.zip || raw.postalCode || fb.zip || "").trim(), 40),
+      city: clampText(String(raw.city || fb.city || "").trim(), 120),
+      country: clampText(String(raw.country || fb.country || "").trim(), 80),
+      email: clampText(String(raw.email || fb.email || "").trim(), 160),
+      phone: clampText(String(raw.phone || fb.phone || "").trim(), 80),
+    };
+  }
+
+  function emptyCustomerContact(){
+    return { id:"", name:"", role:"", email:"", phone:"", department:"", notes:"", isPrimary:false, useForQuotes:true, useForOrders:true, useForInvoices:true };
+  }
+
+  function normalizeCustomerContact(contact, index){
+    const raw = (contact && typeof contact === "object") ? contact : {};
+    return {
+      ...emptyCustomerContact(),
+      id: clampText(String(raw.id || "").trim(), 80) || crypto.randomUUID(),
+      name: clampText(String(raw.name || raw.fullName || "").trim(), 160),
+      role: clampText(String(raw.role || "").trim(), 120),
+      email: clampText(String(raw.email || "").trim(), 160),
+      phone: clampText(String(raw.phone || "").trim(), 80),
+      department: clampText(String(raw.department || "").trim(), 120),
+      notes: clampText(String(raw.notes || "").trim(), 500),
+      isPrimary: raw.isPrimary === true || raw.primary === true || index === 0,
+      useForQuotes: raw.useForQuotes !== false,
+      useForOrders: raw.useForOrders !== false,
+      useForInvoices: raw.useForInvoices !== false,
+    };
+  }
+
+  function emptyCustomerDeliveryAddress(){
+    return { id:"", label:"", company:"", attention:"", line1:"", line2:"", zip:"", city:"", country:"", email:"", phone:"", isDefault:false };
+  }
+
+  function normalizeCustomerDeliveryAddress(address, index, fallbackCompany){
+    const raw = (address && typeof address === "object") ? address : {};
+    const base = normalizeCustomerAddress(raw, { company: fallbackCompany || "" });
+    return {
+      ...emptyCustomerDeliveryAddress(),
+      ...base,
+      id: clampText(String(raw.id || "").trim(), 80) || crypto.randomUUID(),
+      label: clampText(String(raw.label || `Leveransadress ${index + 1}`).trim(), 120),
+      isDefault: raw.isDefault === true || index === 0,
+    };
+  }
+
+  function emptyCustomerInvoiceDefaults(){
+    return { referenceLabel:"", referenceValue:"", paymentDays:null, deliveryMethod:"", invoiceEmail:"", ourReference:"", theirReference:"", priceList:"", language:"" };
+  }
+
+  function normalizeCustomerInvoiceDefaults(defaults){
+    const raw = (defaults && typeof defaults === "object") ? defaults : {};
+    const paymentDays = parseInt(String(raw.paymentDays ?? raw.payDays ?? "").trim(), 10);
+    return {
+      ...emptyCustomerInvoiceDefaults(),
+      referenceLabel: clampText(String(raw.referenceLabel || "").trim(), 80),
+      referenceValue: clampText(String(raw.referenceValue || "").trim(), 160),
+      paymentDays: Number.isFinite(paymentDays) && paymentDays >= 0 ? paymentDays : null,
+      deliveryMethod: clampText(String(raw.deliveryMethod || "").trim(), 80),
+      invoiceEmail: clampText(String(raw.invoiceEmail || raw.email || "").trim(), 160),
+      ourReference: clampText(String(raw.ourReference || "").trim(), 120),
+      theirReference: clampText(String(raw.theirReference || "").trim(), 120),
+      priceList: clampText(String(raw.priceList || "").trim(), 80),
+      language: clampText(String(raw.language || "").trim(), 40),
+    };
+  }
+
+  function getCustomerPrimaryContact(customer, usage){
+    const contacts = Array.isArray(customer?.contacts) ? customer.contacts : [];
+    const filtered = usage === "invoice"
+      ? contacts.filter(contact => contact && contact.useForInvoices !== false)
+      : usage === "order"
+        ? contacts.filter(contact => contact && contact.useForOrders !== false)
+        : usage === "quote"
+          ? contacts.filter(contact => contact && contact.useForQuotes !== false)
+          : contacts;
+    return filtered.find(contact => contact && contact.isPrimary) || filtered[0] || contacts.find(Boolean) || null;
+  }
+
+  function getCustomerBillingAddress(customer){
+    return normalizeCustomerAddress(customer?.billingAddress || customer, { company: customer?.name || customer?.legalName || "" });
+  }
+
+  function formatCustomerAddressLines(address){
+    const a = normalizeCustomerAddress(address);
+    return [
+      a.company,
+      a.attention,
+      a.line1,
+      a.line2,
+      [a.zip, a.city].filter(Boolean).join(" ").trim(),
+      a.country,
+    ].filter(part => part && String(part).trim());
+  }
+
+  function formatCustomerAddressSingleLine(address){
+    return formatCustomerAddressLines(address).join(", ");
+  }
+
+  function customerDisplayName(customer){
+    const c = customer && typeof customer === "object" ? customer : {};
+    return clampText(String(c.name || c.legalName || getCustomerBillingAddress(c).company || getCustomerPrimaryContact(c)?.name || "").trim(), 160);
+  }
+
+  function customerPrimaryCity(customer){
+    const billing = getCustomerBillingAddress(customer);
+    if (billing.city) return billing.city;
+    const delivery = (Array.isArray(customer?.deliveryAddresses) ? customer.deliveryAddresses : []).find(address => address && address.isDefault) || (Array.isArray(customer?.deliveryAddresses) ? customer.deliveryAddresses[0] : null);
+    return clampText(String(delivery?.city || "").trim(), 120);
+  }
+
+  function customerEffectiveInvoiceEmail(customer){
+    const c = customer && typeof customer === "object" ? customer : {};
+    return clampText(String(c.invoiceDefaults?.invoiceEmail || getCustomerBillingAddress(c).email || getCustomerPrimaryContact(c, "invoice")?.email || c.email || "").trim(), 160);
+  }
+
+  function customerEffectivePhone(customer){
+    const c = customer && typeof customer === "object" ? customer : {};
+    return clampText(String(getCustomerBillingAddress(c).phone || getCustomerPrimaryContact(c)?.phone || c.phone || "").trim(), 80);
+  }
+
+  function customerSearchText(customer){
+    const c = customer && typeof customer === "object" ? customer : {};
+    const billing = getCustomerBillingAddress(c);
+    const contacts = Array.isArray(c.contacts) ? c.contacts : [];
+    const deliveries = Array.isArray(c.deliveryAddresses) ? c.deliveryAddresses : [];
+    return [
+      c.name, c.legalName, c.orgnr, c.vatNo, c.email, c.phone, c.website, c.customerNo, c.notes,
+      splitCustomerTags(c.tags).join(" "),
+      billing.company, billing.attention, billing.line1, billing.line2, billing.zip, billing.city, billing.country, billing.email, billing.phone,
+      ...contacts.flatMap(contact => [contact?.name, contact?.role, contact?.email, contact?.phone, contact?.department, contact?.notes]),
+      ...deliveries.flatMap(address => [address?.label, address?.company, address?.attention, address?.line1, address?.line2, address?.zip, address?.city, address?.country]),
+      c.invoiceDefaults?.referenceValue, c.invoiceDefaults?.theirReference, c.invoiceDefaults?.ourReference, c.invoiceDefaults?.invoiceEmail,
+    ].filter(Boolean).join(" ").toLowerCase();
+  }
+
+  function normalizeCustomerRecord(customer, id, options){
+    const raw = (customer && typeof customer === "object") ? customer : {};
+    const opts = (options && typeof options === "object") ? options : {};
+    const now = nowISO();
+    const customerId = clampText(String(id || raw.id || "").trim(), 80) || crypto.randomUUID();
+    const defaultCurrency = clampText(String(raw.defaultCurrency || opts.defaultCurrency || "SEK").trim(), 12) || "SEK";
+    const fallbackCompany = String(raw.name || raw.legalName || "").trim();
+    const billingAddress = normalizeCustomerAddress(raw.billingAddress || raw, {
+      company: fallbackCompany,
+      addr: raw.addr,
+      email: raw.email,
+      phone: raw.phone,
+    });
+    const contacts = (Array.isArray(raw.contacts) ? raw.contacts : []).map((contact, index) => normalizeCustomerContact(contact, index));
+    if (contacts.length && !contacts.some(contact => contact.isPrimary)) contacts[0].isPrimary = true;
+    const deliveryAddresses = (Array.isArray(raw.deliveryAddresses) ? raw.deliveryAddresses : []).map((address, index) => normalizeCustomerDeliveryAddress(address, index, fallbackCompany));
+    if (deliveryAddresses.length && !deliveryAddresses.some(address => address.isDefault)) deliveryAddresses[0].isDefault = true;
+    const invoiceDefaults = normalizeCustomerInvoiceDefaults(raw.invoiceDefaults || raw);
+    const primaryContact = getCustomerPrimaryContact({ contacts }, "invoice");
+    const displayName = clampText(String(raw.name || raw.companyName || raw.legalName || billingAddress.company || primaryContact?.name || "").trim(), 160);
+    const kind = String(raw.kind || (raw.orgnr || raw.legalName || raw.customerNo || contacts.length || deliveryAddresses.length ? "company" : "person")).trim().toLowerCase() === "person" ? "person" : "company";
+    const email = clampText(String(raw.email || invoiceDefaults.invoiceEmail || billingAddress.email || primaryContact?.email || "").trim(), 160);
+    const phone = clampText(String(raw.phone || billingAddress.phone || primaryContact?.phone || "").trim(), 80);
+    const addr = clampText(String(raw.addr || formatCustomerAddressSingleLine(billingAddress)).trim(), 240);
+    const tags = splitCustomerTags(raw.tags);
+    const status = CUSTOMER_STATUS_OPTIONS.includes(String(raw.status || "").trim()) ? String(raw.status).trim() : "active";
+    return {
+      id: customerId,
+      kind,
+      name: displayName,
+      legalName: clampText(String(raw.legalName || displayName).trim(), 160),
+      orgnr: clampText(String(raw.orgnr || "").trim(), 80),
+      vatNo: clampText(String(raw.vatNo || raw.vat || "").trim(), 80),
+      email,
+      phone,
+      website: clampText(String(raw.website || raw.web || "").trim(), 200),
+      customerNo: clampText(String(raw.customerNo || "").trim(), 80),
+      notes: clampText(String(raw.notes || "").trim(), 4000),
+      defaultCurrency,
+      status,
+      tags,
+      billingAddress,
+      deliveryAddresses,
+      contacts,
+      invoiceDefaults,
+      createdAt: String(raw.createdAt || now).trim() || now,
+      updatedAt: String(raw.updatedAt || now).trim() || now,
+      addr,
+      city: billingAddress.city,
+      country: billingAddress.country,
+    };
+  }
+
+  function normalizeCustomerRegistry(customers, options){
+    const input = customers && typeof customers === "object" ? customers : {};
+    const normalized = {};
+    if (Array.isArray(input)) {
+      input.forEach((customer, index) => {
+        const record = normalizeCustomerRecord(customer, customer?.id || `customer-${index + 1}`, options);
+        normalized[record.id] = record;
+      });
+      return normalized;
+    }
+    Object.keys(input).forEach(id => {
+      normalized[id] = normalizeCustomerRecord(input[id], id, options);
+    });
+    return normalized;
+  }
+
   function getActiveCompanyIdForStorage(){
     try {
       if (typeof CompanyManager !== "undefined" && CompanyManager && typeof CompanyManager.getActiveCompanyId === "function"){
@@ -6162,6 +6568,7 @@ if (!d.features) d.features = { sruEnabled: false };
       if (typeof d.sru.enabled !== "boolean") d.sru.enabled = false;
       if (!d.sru.periodSuffix) d.sru.periodSuffix = "P4";
       if (!Array.isArray(d.sru.neMappings)) d.sru.neMappings = [];
+      d.customers = normalizeCustomerRegistry(d.customers, { defaultCurrency: d.company?.currency || "SEK" });
       if (!d.activeYearId) d.activeYearId = d.fiscalYears[0]?.id ?? String(new Date().getFullYear());
       return d;
     } catch {
@@ -11293,10 +11700,17 @@ if (!d.features) d.features = { sruEnabled: false };
     const keys = Object.keys(state.customers || {}).sort((a,b)=> (state.customers[a]?.name || "").localeCompare(state.customers[b]?.name || "", "sv"));
     quoteCustomerSelect.innerHTML = `<option value="">(ingen vald)</option>`;
     keys.forEach(id => {
-      const c = state.customers[id] || {};
+      const c = normalizeCustomerRecord(state.customers[id], id, { defaultCurrency: state.company?.currency || "SEK" });
+      const primaryContact = getCustomerPrimaryContact(c, "quote");
+      const city = customerPrimaryCity(c);
       const opt = document.createElement("option");
       opt.value = id;
-      opt.textContent = `${c.name || "(namn)"}${c.orgnr ? " · " + c.orgnr : ""}`;
+      opt.textContent = [
+        customerDisplayName(c) || "(namn)",
+        c.orgnr ? String(c.orgnr) : "",
+        primaryContact?.name ? String(primaryContact.name) : "",
+        city ? String(city) : ""
+      ].filter(Boolean).join(" · ");
       quoteCustomerSelect.appendChild(opt);
     });
     quoteCustomerSelect.value = keys.includes(prev) ? prev : "";
@@ -11307,11 +11721,13 @@ if (!d.features) d.features = { sruEnabled: false };
     if (!customerId) return;
     const c = state.customers?.[customerId];
     if (!c) return;
-    if (quoteCustomerName) quoteCustomerName.value = c.name || "";
-    if (quoteCompanyName) quoteCompanyName.value = c.name || "";
-    if (quoteCustomerEmail) quoteCustomerEmail.value = c.email || "";
-    if (quoteCustomerPhone) quoteCustomerPhone.value = "";
-    if (quoteOrgnr) quoteOrgnr.value = c.orgnr || "";
+    const customer = normalizeCustomerRecord(c, customerId, { defaultCurrency: state.company?.currency || "SEK" });
+    const primaryContact = getCustomerPrimaryContact(customer, "quote");
+    if (quoteCustomerName) quoteCustomerName.value = primaryContact?.name || customerDisplayName(customer) || "";
+    if (quoteCompanyName) quoteCompanyName.value = customerDisplayName(customer) || "";
+    if (quoteCustomerEmail) quoteCustomerEmail.value = customerEffectiveInvoiceEmail(customer) || customer.email || "";
+    if (quoteCustomerPhone) quoteCustomerPhone.value = customerEffectivePhone(customer) || "";
+    if (quoteOrgnr) quoteOrgnr.value = customer.orgnr || "";
     updateQuoteTotals();
   }
 
@@ -12132,18 +12548,55 @@ if (!d.features) d.features = { sruEnabled: false };
   const custName = document.getElementById("custName");
   const custAddr = document.getElementById("custAddr");
   const custEmail = document.getElementById("custEmail");
+  const custPhone = document.getElementById("custPhone");
   const custOrgnr = document.getElementById("custOrgnr");
+  const custPrimaryContactName = document.getElementById("custPrimaryContactName");
+  const custPrimaryContactRole = document.getElementById("custPrimaryContactRole");
+  const custInvoiceReference = document.getElementById("custInvoiceReference");
   // Customer registry (tab)
   const custEditId = document.getElementById("custEditId");
+  const custRegKind = document.getElementById("custRegKind");
   const custRegName = document.getElementById("custRegName");
+  const custRegLegalName = document.getElementById("custRegLegalName");
   const custRegAddr = document.getElementById("custRegAddr");
   const custRegEmail = document.getElementById("custRegEmail");
+  const custRegPhone = document.getElementById("custRegPhone");
   const custRegOrgnr = document.getElementById("custRegOrgnr");
+  const custRegVatNo = document.getElementById("custRegVatNo");
+  const custRegCustomerNo = document.getElementById("custRegCustomerNo");
+  const custRegStatus = document.getElementById("custRegStatus");
+  const custRegTags = document.getElementById("custRegTags");
+  const custRegWebsite = document.getElementById("custRegWebsite");
+  const custRegDefaultCurrency = document.getElementById("custRegDefaultCurrency");
+  const custRegBillCompany = document.getElementById("custRegBillCompany");
+  const custRegBillAttention = document.getElementById("custRegBillAttention");
+  const custRegBillLine1 = document.getElementById("custRegBillLine1");
+  const custRegBillLine2 = document.getElementById("custRegBillLine2");
+  const custRegBillZip = document.getElementById("custRegBillZip");
+  const custRegBillCity = document.getElementById("custRegBillCity");
+  const custRegBillCountry = document.getElementById("custRegBillCountry");
+  const custRegBillEmail = document.getElementById("custRegBillEmail");
+  const custRegBillPhone = document.getElementById("custRegBillPhone");
+  const custRegPaymentDays = document.getElementById("custRegPaymentDays");
+  const custRegInvoiceEmail = document.getElementById("custRegInvoiceEmail");
+  const custRegReferenceLabel = document.getElementById("custRegReferenceLabel");
+  const custRegReferenceValue = document.getElementById("custRegReferenceValue");
+  const custRegOurReference = document.getElementById("custRegOurReference");
+  const custRegTheirReference = document.getElementById("custRegTheirReference");
+  const custRegDeliveryMethod = document.getElementById("custRegDeliveryMethod");
+  const custRegLanguage = document.getElementById("custRegLanguage");
+  const custRegNotes = document.getElementById("custRegNotes");
+  const btnCustAddContact = document.getElementById("btnCustAddContact");
+  const btnCustAddDelivery = document.getElementById("btnCustAddDelivery");
+  const custContactsList = document.getElementById("custContactsList");
+  const custDeliveryList = document.getElementById("custDeliveryList");
   const custSearch = document.getElementById("custSearch");
   const customersList = document.getElementById("customersList");
   const btnCustNew = document.getElementById("btnCustNew");
   const btnCustSave = document.getElementById("btnCustSave");
   const btnCustRefresh = document.getElementById("btnCustRefresh");
+  let customerContactsDraft = [];
+  let customerDeliveryAddressesDraft = [];
 
   // Supplier registry (tab)
   const supEditId = document.getElementById("supEditId");
@@ -12221,13 +12674,20 @@ if (!d.features) d.features = { sruEnabled: false };
 
   function getInvoiceCustomerSnapshot(invoice){
     const inv = (invoice && typeof invoice === "object") ? invoice : {};
-    const customer = (state.customers && inv.customerId) ? (state.customers[inv.customerId] || {}) : {};
+    const customer = (state.customers && inv.customerId) ? normalizeCustomerRecord(state.customers[inv.customerId], inv.customerId, { defaultCurrency: state.company?.currency || "SEK" }) : {};
+    const billing = getCustomerBillingAddress(customer);
+    const primaryContact = getCustomerPrimaryContact(customer, "invoice");
     return {
-      name: String(inv.customerName || inv.companyName || customer.name || "").trim(),
-      addr: String(inv.customerAddr || customer.addr || "").trim(),
-      email: String(inv.customerEmail || customer.email || "").trim(),
+      name: String(inv.customerName || inv.companyName || customerDisplayName(customer) || "").trim(),
+      addr: String(inv.customerAddr || formatCustomerAddressSingleLine(billing) || customer.addr || "").trim(),
+      email: String(inv.customerEmail || customerEffectiveInvoiceEmail(customer) || customer.email || "").trim(),
       orgnr: String(inv.customerOrgnr || inv.orgnr || customer.orgnr || "").trim(),
-      phone: String(inv.customerPhone || customer.phone || "").trim()
+      phone: String(inv.customerPhone || customerEffectivePhone(customer) || customer.phone || "").trim(),
+      contactName: String(inv.customerContactName || primaryContact?.name || "").trim(),
+      contactRole: String(inv.customerContactRole || primaryContact?.role || "").trim(),
+      city: String(inv.customerCity || billing.city || "").trim(),
+      theirReference: String(inv.customerTheirReference || customer.invoiceDefaults?.theirReference || customer.invoiceDefaults?.referenceValue || "").trim(),
+      ourReference: String(inv.customerOurReference || customer.invoiceDefaults?.ourReference || "").trim(),
     };
   }
 
@@ -12247,34 +12707,55 @@ if (!d.features) d.features = { sruEnabled: false };
 
     const existingId = String(o.customerId || "").trim();
     if (existingId && state.customers[existingId]) {
-      const current = state.customers[existingId] || {};
-      state.customers[existingId] = {
+      const current = normalizeCustomerRecord(state.customers[existingId], existingId, { defaultCurrency: state.company?.currency || "SEK" });
+      state.customers[existingId] = normalizeCustomerRecord({
         ...current,
         name: String(current.name || snapshot.name).trim(),
-        addr: String(current.addr || snapshot.addr || "").trim(),
-        email: String(current.email || snapshot.email || "").trim(),
         orgnr: String(current.orgnr || snapshot.orgnr || "").trim(),
-      };
+        email: String(current.email || snapshot.email || "").trim(),
+        phone: String(current.phone || snapshot.phone || "").trim(),
+        billingAddress: {
+          ...getCustomerBillingAddress(current),
+          company: current.name || snapshot.name,
+          email: current.billingAddress?.email || snapshot.email,
+          phone: current.billingAddress?.phone || snapshot.phone,
+        }
+      }, existingId, { defaultCurrency: state.company?.currency || "SEK" });
       return {
         customerId: existingId,
-        customer: {
-          ...snapshot,
-          name: String(state.customers[existingId].name || snapshot.name).trim(),
-          addr: String(state.customers[existingId].addr || snapshot.addr || "").trim(),
-          email: String(state.customers[existingId].email || snapshot.email || "").trim(),
-          orgnr: String(state.customers[existingId].orgnr || snapshot.orgnr || "").trim(),
-        }
+        customer: getInvoiceCustomerSnapshot({ customerId: existingId })
       };
     }
 
     const customerId = existingId || crypto.randomUUID();
-    state.customers[customerId] = {
+    state.customers[customerId] = normalizeCustomerRecord({
       name: snapshot.name,
-      addr: snapshot.addr,
       email: snapshot.email,
+      phone: snapshot.phone,
       orgnr: snapshot.orgnr,
-    };
-    return { customerId, customer: snapshot };
+      billingAddress: {
+        company: snapshot.name,
+        line1: snapshot.addr,
+        email: snapshot.email,
+        phone: snapshot.phone,
+      }
+    }, customerId, { defaultCurrency: state.company?.currency || "SEK" });
+    return { customerId, customer: getInvoiceCustomerSnapshot({ customerId }) };
+  }
+
+  function applySelectedCustomerToInvoiceEditor(){
+    if (!invCustomerId) return;
+    const customer = state.customers?.[invCustomerId];
+    if (!customer) return;
+    const normalized = normalizeCustomerRecord(customer, invCustomerId, { defaultCurrency: state.company?.currency || "SEK" });
+    const paymentDays = normalized.invoiceDefaults?.paymentDays;
+    if (Number.isFinite(paymentDays) && invDate && invDue) {
+      invDue.value = addDays(invDate.value || todayISO(), paymentDays);
+    }
+    if (invRef && !String(invRef.value || "").trim()) {
+      const reference = String(normalized.invoiceDefaults?.referenceValue || normalized.invoiceDefaults?.theirReference || "").trim();
+      if (reference) invRef.value = reference;
+    }
   }
 
   function nextInvoiceNo(yearId){
@@ -12404,14 +12885,26 @@ if (!d.features) d.features = { sruEnabled: false };
       invCustomerBox.textContent = "Ingen kund vald.";
       return;
     }
-    const c = (invCustomerId ? state.customers?.[invCustomerId] : null) || snapshot;
-    if (!c || !String(c.name || "").trim()){
+    const c = invCustomerId ? normalizeCustomerRecord(state.customers?.[invCustomerId], invCustomerId, { defaultCurrency: state.company?.currency || "SEK" }) : null;
+    const billing = c ? getCustomerBillingAddress(c) : null;
+    const primaryContact = c ? getCustomerPrimaryContact(c, "invoice") : null;
+    const displayName = c ? customerDisplayName(c) : snapshot.name;
+    const addressText = c ? formatCustomerAddressSingleLine(billing) : snapshot.addr;
+    const emailText = c ? customerEffectiveInvoiceEmail(c) : snapshot.email;
+    const phoneText = c ? customerEffectivePhone(c) : snapshot.phone;
+    const orgnrText = c ? c.orgnr : snapshot.orgnr;
+    const referenceText = c ? String(c.invoiceDefaults?.theirReference || c.invoiceDefaults?.referenceValue || "").trim() : snapshot.theirReference;
+    if (!(c || String(snapshot.name || "").trim())){
       invCustomerBox.textContent = "Ingen kund vald.";
       return;
     }
-    invCustomerBox.innerHTML = `<div style="font-weight:800;">${escapeHtml(c.name||"(namn)")}</div>
-      <div class="muted small">${escapeHtml(c.addr||"")}</div>
-      <div class="muted small">${escapeHtml(c.email||"")}${c.orgnr?" · "+escapeHtml(c.orgnr):""}</div>`;
+    invCustomerBox.innerHTML = `
+      <div style="font-weight:800;">${escapeHtml(displayName || "(namn)")}</div>
+      ${primaryContact?.name ? `<div class="muted small">Kontakt: ${escapeHtml(primaryContact.name)}${primaryContact.role ? ` · ${escapeHtml(primaryContact.role)}` : ""}</div>` : ""}
+      ${addressText ? `<div class="muted small">${escapeHtml(addressText)}</div>` : ""}
+      <div class="muted small">${escapeHtml(emailText || "")}${phoneText ? ` · ${escapeHtml(phoneText)}` : ""}${orgnrText ? ` · ${escapeHtml(orgnrText)}` : ""}</div>
+      ${referenceText ? `<div class="muted small">Er referens: ${escapeHtml(referenceText)}</div>` : ""}
+    `;
   }
 
   function lineAmount(ln){
@@ -12542,7 +13035,9 @@ if (!d.features) d.features = { sruEnabled: false };
     const due = invDue.value || addDays(date, (state.company.payDays||30));
     const no = (invNo.value || "").trim() || nextInvoiceNo(yearId);
     const ref = clampText(invRef.value || "");
-    const customerRecord = invCustomerId ? (state.customers?.[invCustomerId] || {}) : {};
+    const customerRecord = invCustomerId ? normalizeCustomerRecord(state.customers?.[invCustomerId], invCustomerId, { defaultCurrency: state.company?.currency || "SEK" }) : {};
+    const billingAddress = getCustomerBillingAddress(customerRecord);
+    const primaryContact = getCustomerPrimaryContact(customerRecord, "invoice");
 
     const lines = invLines.map(l => ({
       kind: l.kind,
@@ -12560,12 +13055,17 @@ if (!d.features) d.features = { sruEnabled: false };
       date,
       due,
       customerId: invCustomerId,
-      customerName: String(customerRecord.name || existing?.customerName || existing?.companyName || "").trim(),
-      companyName: String(customerRecord.name || existing?.companyName || existing?.customerName || "").trim(),
-      customerAddr: String(customerRecord.addr || existing?.customerAddr || "").trim(),
-      customerEmail: String(customerRecord.email || existing?.customerEmail || "").trim(),
-      customerPhone: String(existing?.customerPhone || "").trim(),
+      customerName: String(primaryContact?.name || customerDisplayName(customerRecord) || existing?.customerName || existing?.companyName || "").trim(),
+      companyName: String(customerDisplayName(customerRecord) || existing?.companyName || existing?.customerName || "").trim(),
+      customerAddr: String(formatCustomerAddressSingleLine(billingAddress) || customerRecord.addr || existing?.customerAddr || "").trim(),
+      customerEmail: String(customerEffectiveInvoiceEmail(customerRecord) || existing?.customerEmail || "").trim(),
+      customerPhone: String(customerEffectivePhone(customerRecord) || existing?.customerPhone || "").trim(),
       customerOrgnr: String(customerRecord.orgnr || existing?.customerOrgnr || existing?.orgnr || "").trim(),
+      customerContactName: String(primaryContact?.name || existing?.customerContactName || "").trim(),
+      customerContactRole: String(primaryContact?.role || existing?.customerContactRole || "").trim(),
+      customerCity: String(billingAddress.city || existing?.customerCity || "").trim(),
+      customerTheirReference: String(customerRecord.invoiceDefaults?.theirReference || customerRecord.invoiceDefaults?.referenceValue || existing?.customerTheirReference || "").trim(),
+      customerOurReference: String(customerRecord.invoiceDefaults?.ourReference || existing?.customerOurReference || "").trim(),
       orgnr: String(customerRecord.orgnr || existing?.customerOrgnr || existing?.orgnr || "").trim(),
       currency: getInvoiceCurrency(existing),
       ref,
@@ -12871,9 +13371,195 @@ if (!d.features) d.features = { sruEnabled: false };
     showToast("Skapade verifikation (serie F). Kontrollera konton och moms innan du använder skarpt.", 6500);
   }
 
+  function isMeaningfulCustomerContact(contact){
+    return !!String(contact?.name || contact?.role || contact?.email || contact?.phone || contact?.department || contact?.notes || "").trim();
+  }
+
+  function isMeaningfulCustomerDeliveryAddress(address){
+    return !!String(address?.label || address?.company || address?.attention || address?.line1 || address?.line2 || address?.zip || address?.city || address?.country || address?.email || address?.phone || "").trim();
+  }
+
+  function renderCustomerContactsEditor(){
+    if (!custContactsList) return;
+    custContactsList.innerHTML = "";
+    if (!customerContactsDraft.length){
+      custContactsList.innerHTML = `<div class="muted small">Inga kontaktpersoner ännu.</div>`;
+      return;
+    }
+    customerContactsDraft.forEach((contact, index) => {
+      const row = document.createElement("div");
+      row.className = "customer-inline-card";
+      row.innerHTML = `
+        <div class="row" style="justify-content:space-between; margin-bottom:8px;">
+          <div class="muted small">Kontakt ${index + 1}</div>
+          <button class="btn danger" type="button" data-customer-contact-remove="${escapeAttr(contact.id)}">Ta bort</button>
+        </div>
+        <div class="customer-form-grid wide">
+          <div class="field"><label>Namn</label><input type="text" value="${escapeAttr(contact.name || "")}" data-customer-contact-name="${escapeAttr(contact.id)}" /></div>
+          <div class="field"><label>Roll</label><input type="text" value="${escapeAttr(contact.role || "")}" data-customer-contact-role="${escapeAttr(contact.id)}" /></div>
+          <div class="field"><label>E-post</label><input type="text" value="${escapeAttr(contact.email || "")}" data-customer-contact-email="${escapeAttr(contact.id)}" /></div>
+          <div class="field"><label>Telefon</label><input type="text" value="${escapeAttr(contact.phone || "")}" data-customer-contact-phone="${escapeAttr(contact.id)}" /></div>
+          <div class="field"><label>Avdelning</label><input type="text" value="${escapeAttr(contact.department || "")}" data-customer-contact-department="${escapeAttr(contact.id)}" /></div>
+          <div class="field" style="grid-column:1 / -1;"><label>Notering</label><input type="text" value="${escapeAttr(contact.notes || "")}" data-customer-contact-notes="${escapeAttr(contact.id)}" /></div>
+        </div>
+        <div class="row muted small" style="gap:12px; margin-top:8px;">
+          <label><input type="checkbox" ${contact.isPrimary ? "checked" : ""} data-customer-contact-primary="${escapeAttr(contact.id)}" /> Primär</label>
+          <label><input type="checkbox" ${contact.useForQuotes ? "checked" : ""} data-customer-contact-quotes="${escapeAttr(contact.id)}" /> Offerter</label>
+          <label><input type="checkbox" ${contact.useForOrders ? "checked" : ""} data-customer-contact-orders="${escapeAttr(contact.id)}" /> Order</label>
+          <label><input type="checkbox" ${contact.useForInvoices ? "checked" : ""} data-customer-contact-invoices="${escapeAttr(contact.id)}" /> Fakturor</label>
+        </div>
+      `;
+      const bindInput = (selector, key) => {
+        const el = row.querySelector(selector);
+        if (!el) return;
+        el.addEventListener("input", ()=>{ contact[key] = clampText(String(el.value || "").trim(), key === "notes" ? 500 : 160); });
+      };
+      bindInput(`input[data-customer-contact-name="${escapeAttr(contact.id)}"]`, "name");
+      bindInput(`input[data-customer-contact-role="${escapeAttr(contact.id)}"]`, "role");
+      bindInput(`input[data-customer-contact-email="${escapeAttr(contact.id)}"]`, "email");
+      bindInput(`input[data-customer-contact-phone="${escapeAttr(contact.id)}"]`, "phone");
+      bindInput(`input[data-customer-contact-department="${escapeAttr(contact.id)}"]`, "department");
+      bindInput(`input[data-customer-contact-notes="${escapeAttr(contact.id)}"]`, "notes");
+      const primaryEl = row.querySelector(`input[data-customer-contact-primary="${escapeAttr(contact.id)}"]`);
+      if (primaryEl) primaryEl.addEventListener("change", ()=>{
+        customerContactsDraft.forEach(item => { item.isPrimary = item.id === contact.id ? !!primaryEl.checked : false; });
+        if (!customerContactsDraft.some(item => item.isPrimary) && customerContactsDraft[0]) customerContactsDraft[0].isPrimary = true;
+        renderCustomerContactsEditor();
+      });
+      const quotesEl = row.querySelector(`input[data-customer-contact-quotes="${escapeAttr(contact.id)}"]`);
+      if (quotesEl) quotesEl.addEventListener("change", ()=>{ contact.useForQuotes = !!quotesEl.checked; });
+      const ordersEl = row.querySelector(`input[data-customer-contact-orders="${escapeAttr(contact.id)}"]`);
+      if (ordersEl) ordersEl.addEventListener("change", ()=>{ contact.useForOrders = !!ordersEl.checked; });
+      const invoicesEl = row.querySelector(`input[data-customer-contact-invoices="${escapeAttr(contact.id)}"]`);
+      if (invoicesEl) invoicesEl.addEventListener("change", ()=>{ contact.useForInvoices = !!invoicesEl.checked; });
+      const removeEl = row.querySelector(`button[data-customer-contact-remove="${escapeAttr(contact.id)}"]`);
+      if (removeEl) removeEl.addEventListener("click", ()=>{
+        customerContactsDraft = customerContactsDraft.filter(item => item.id !== contact.id).map((item, idx) => normalizeCustomerContact({ ...item, isPrimary: idx === 0 ? item.isPrimary || !customerContactsDraft.some(entry => entry.id !== contact.id && entry.isPrimary) : item.isPrimary }, idx));
+        if (customerContactsDraft.length && !customerContactsDraft.some(item => item.isPrimary)) customerContactsDraft[0].isPrimary = true;
+        renderCustomerContactsEditor();
+      });
+      custContactsList.appendChild(row);
+    });
+  }
+
+  function renderCustomerDeliveryAddressesEditor(){
+    if (!custDeliveryList) return;
+    custDeliveryList.innerHTML = "";
+    if (!customerDeliveryAddressesDraft.length){
+      custDeliveryList.innerHTML = `<div class="muted small">Inga leveransadresser ännu.</div>`;
+      return;
+    }
+    customerDeliveryAddressesDraft.forEach((address, index) => {
+      const row = document.createElement("div");
+      row.className = "customer-inline-card";
+      row.innerHTML = `
+        <div class="row" style="justify-content:space-between; margin-bottom:8px;">
+          <div class="muted small">Leveransadress ${index + 1}</div>
+          <button class="btn danger" type="button" data-customer-delivery-remove="${escapeAttr(address.id)}">Ta bort</button>
+        </div>
+        <div class="customer-form-grid wide">
+          <div class="field"><label>Etikett</label><input type="text" value="${escapeAttr(address.label || "")}" data-customer-delivery-label="${escapeAttr(address.id)}" /></div>
+          <div class="field"><label>Företag</label><input type="text" value="${escapeAttr(address.company || "")}" data-customer-delivery-company="${escapeAttr(address.id)}" /></div>
+          <div class="field"><label>Attention</label><input type="text" value="${escapeAttr(address.attention || "")}" data-customer-delivery-attention="${escapeAttr(address.id)}" /></div>
+          <div class="field"><label>E-post</label><input type="text" value="${escapeAttr(address.email || "")}" data-customer-delivery-email="${escapeAttr(address.id)}" /></div>
+          <div class="field"><label>Telefon</label><input type="text" value="${escapeAttr(address.phone || "")}" data-customer-delivery-phone="${escapeAttr(address.id)}" /></div>
+          <div class="field"><label>Land</label><input type="text" value="${escapeAttr(address.country || "")}" data-customer-delivery-country="${escapeAttr(address.id)}" /></div>
+          <div class="field" style="grid-column:span 2;"><label>Adressrad 1</label><input type="text" value="${escapeAttr(address.line1 || "")}" data-customer-delivery-line1="${escapeAttr(address.id)}" /></div>
+          <div class="field" style="grid-column:span 2;"><label>Adressrad 2</label><input type="text" value="${escapeAttr(address.line2 || "")}" data-customer-delivery-line2="${escapeAttr(address.id)}" /></div>
+          <div class="field"><label>Postnr</label><input type="text" value="${escapeAttr(address.zip || "")}" data-customer-delivery-zip="${escapeAttr(address.id)}" /></div>
+          <div class="field"><label>Ort</label><input type="text" value="${escapeAttr(address.city || "")}" data-customer-delivery-city="${escapeAttr(address.id)}" /></div>
+        </div>
+        <label class="row muted small" style="gap:8px; margin-top:8px;"><input type="checkbox" ${address.isDefault ? "checked" : ""} data-customer-delivery-default="${escapeAttr(address.id)}" /> Standardadress</label>
+      `;
+      const bindInput = (selector, key) => {
+        const el = row.querySelector(selector);
+        if (!el) return;
+        el.addEventListener("input", ()=>{ address[key] = clampText(String(el.value || "").trim(), 160); });
+      };
+      ["label","company","attention","email","phone","country","line1","line2","zip","city"].forEach(key => {
+        bindInput(`input[data-customer-delivery-${key}="${escapeAttr(address.id)}"]`, key);
+      });
+      const defaultEl = row.querySelector(`input[data-customer-delivery-default="${escapeAttr(address.id)}"]`);
+      if (defaultEl) defaultEl.addEventListener("change", ()=>{
+        customerDeliveryAddressesDraft.forEach(item => { item.isDefault = item.id === address.id ? !!defaultEl.checked : false; });
+        if (!customerDeliveryAddressesDraft.some(item => item.isDefault) && customerDeliveryAddressesDraft[0]) customerDeliveryAddressesDraft[0].isDefault = true;
+        renderCustomerDeliveryAddressesEditor();
+      });
+      const removeEl = row.querySelector(`button[data-customer-delivery-remove="${escapeAttr(address.id)}"]`);
+      if (removeEl) removeEl.addEventListener("click", ()=>{
+        customerDeliveryAddressesDraft = customerDeliveryAddressesDraft.filter(item => item.id !== address.id).map((item, idx) => normalizeCustomerDeliveryAddress(item, idx, custRegName?.value || ""));
+        if (customerDeliveryAddressesDraft.length && !customerDeliveryAddressesDraft.some(item => item.isDefault)) customerDeliveryAddressesDraft[0].isDefault = true;
+        renderCustomerDeliveryAddressesEditor();
+      });
+      custDeliveryList.appendChild(row);
+    });
+  }
+
+  function buildCustomerFromRegistryEditor(existing){
+    const current = existing ? normalizeCustomerRecord(existing, existing.id, { defaultCurrency: state.company?.currency || "SEK" }) : null;
+    const billingAddress = normalizeCustomerAddress({
+      company: custRegBillCompany?.value || custRegName?.value || current?.billingAddress?.company || "",
+      attention: custRegBillAttention?.value || current?.billingAddress?.attention || "",
+      line1: custRegBillLine1?.value || custRegAddr?.value || current?.billingAddress?.line1 || "",
+      line2: custRegBillLine2?.value || current?.billingAddress?.line2 || "",
+      zip: custRegBillZip?.value || current?.billingAddress?.zip || "",
+      city: custRegBillCity?.value || current?.billingAddress?.city || "",
+      country: custRegBillCountry?.value || current?.billingAddress?.country || "",
+      email: custRegBillEmail?.value || current?.billingAddress?.email || "",
+      phone: custRegBillPhone?.value || current?.billingAddress?.phone || "",
+    });
+    const contacts = customerContactsDraft
+      .filter(isMeaningfulCustomerContact)
+      .map((contact, index) => normalizeCustomerContact({ ...contact, isPrimary: contact.isPrimary || index === 0 }, index));
+    if (contacts.length && !contacts.some(contact => contact.isPrimary)) contacts[0].isPrimary = true;
+    const deliveryAddresses = customerDeliveryAddressesDraft
+      .filter(isMeaningfulCustomerDeliveryAddress)
+      .map((address, index) => normalizeCustomerDeliveryAddress({ ...address, isDefault: address.isDefault || index === 0 }, index, custRegName?.value || current?.name || ""));
+    if (deliveryAddresses.length && !deliveryAddresses.some(address => address.isDefault)) deliveryAddresses[0].isDefault = true;
+    const invoiceDefaults = normalizeCustomerInvoiceDefaults({
+      paymentDays: custRegPaymentDays?.value,
+      invoiceEmail: custRegInvoiceEmail?.value,
+      referenceLabel: custRegReferenceLabel?.value,
+      referenceValue: custRegReferenceValue?.value,
+      ourReference: custRegOurReference?.value,
+      theirReference: custRegTheirReference?.value,
+      deliveryMethod: custRegDeliveryMethod?.value,
+      language: custRegLanguage?.value,
+    });
+    return normalizeCustomerRecord({
+      ...current,
+      kind: String(custRegKind?.value || current?.kind || "company").trim(),
+      name: String(custRegName?.value || current?.name || "").trim(),
+      legalName: String(custRegLegalName?.value || current?.legalName || "").trim(),
+      orgnr: String(custRegOrgnr?.value || current?.orgnr || "").trim(),
+      vatNo: String(custRegVatNo?.value || current?.vatNo || "").trim(),
+      email: String(custRegEmail?.value || current?.email || "").trim(),
+      phone: String(custRegPhone?.value || current?.phone || "").trim(),
+      website: String(custRegWebsite?.value || current?.website || "").trim(),
+      customerNo: String(custRegCustomerNo?.value || current?.customerNo || "").trim(),
+      notes: String(custRegNotes?.value || current?.notes || "").trim(),
+      defaultCurrency: String(custRegDefaultCurrency?.value || current?.defaultCurrency || state.company?.currency || "SEK").trim(),
+      status: String(custRegStatus?.value || current?.status || "active").trim(),
+      tags: splitCustomerTags(custRegTags?.value || current?.tags || []),
+      billingAddress,
+      deliveryAddresses,
+      contacts,
+      invoiceDefaults,
+      addr: String(custRegAddr?.value || formatCustomerAddressSingleLine(billingAddress)).trim(),
+      updatedAt: nowISO(),
+    }, current?.id || (custEditId?.value || "").trim() || crypto.randomUUID(), { defaultCurrency: state.company?.currency || "SEK" });
+  }
+
   function openCustomerDialog(){
     if (!customerDialog) return;
-    custName.value = ""; custAddr.value = ""; custEmail.value = ""; custOrgnr.value = "";
+    if (custName) custName.value = "";
+    if (custPrimaryContactName) custPrimaryContactName.value = "";
+    if (custPrimaryContactRole) custPrimaryContactRole.value = "";
+    if (custAddr) custAddr.value = "";
+    if (custEmail) custEmail.value = "";
+    if (custPhone) custPhone.value = "";
+    if (custOrgnr) custOrgnr.value = "";
+    if (custInvoiceReference) custInvoiceReference.value = "";
     renderCustomerList();
     customerDialog.showModal();
   }
@@ -12886,20 +13572,23 @@ if (!d.features) d.features = { sruEnabled: false };
   function renderCustomerList(){
     if (!customerList) return;
     customerList.innerHTML = "";
-    const keys = Object.keys(state.customers||{}).sort((a,b)=> (state.customers[a]?.name||"").localeCompare(state.customers[b]?.name||"", "sv"));
+    const keys = Object.keys(state.customers||{}).sort((a,b)=> customerDisplayName(state.customers[a]).localeCompare(customerDisplayName(state.customers[b]), "sv"));
     if (!keys.length){
       customerList.innerHTML = `<div class="muted small">Inga kunder sparade än.</div>`;
       return;
     }
     keys.forEach(id=>{
-      const c = state.customers[id];
+      const customer = normalizeCustomerRecord(state.customers[id], id, { defaultCurrency: state.company?.currency || "SEK" });
+      const primaryContact = getCustomerPrimaryContact(customer, "invoice");
+      const city = customerPrimaryCity(customer);
       const div = document.createElement("div");
       div.className = "item";
       div.innerHTML = `
         <div class="top">
           <div>
-            <div class="title">${escapeHtml(c.name||"(namn)")}</div>
-            <div class="meta">${escapeHtml(c.addr||"")}</div>
+            <div class="title">${escapeHtml(customerDisplayName(customer) || "(namn)")}${customer.status === "inactive" ? ` <span class="status">inactive</span>` : ""}</div>
+            <div class="meta">${escapeHtml(formatCustomerAddressSingleLine(getCustomerBillingAddress(customer)) || "")}</div>
+            <div class="meta">${escapeHtml(primaryContact?.name || "")}${primaryContact?.role ? ` · ${escapeHtml(primaryContact.role)}` : ""}${city ? ` · ${escapeHtml(city)}` : ""}</div>
           </div>
           <div class="row">
             <button class="btn" data-pick="${id}">Välj</button>
@@ -12911,18 +13600,14 @@ if (!d.features) d.features = { sruEnabled: false };
         if (!b) return;
         if (b.dataset.pick){
           invCustomerId = b.dataset.pick;
+          applySelectedCustomerToInvoiceEditor();
           renderInvoiceCustomer();
           updateInvoiceTotals();
           closeCustomerDialog();
         }
         if (b.dataset.del){
-          if (!(await confirmAsync("Ta bort kunden?"))) return;
-          delete state.customers[b.dataset.del];
-          if (invCustomerId === b.dataset.del) invCustomerId = null;
-          save();
+          await deleteCustomer(b.dataset.del);
           renderCustomerList();
-          renderInvoiceCustomer();
-          updateInvoiceTotals();
         }
       });
       customerList.appendChild(div);
@@ -12930,60 +13615,141 @@ if (!d.features) d.features = { sruEnabled: false };
   }
 
   function saveCustomerAndPick(){
-    const name = (custName.value||"").trim();
-    if (!name) return showToast("Ange kundnamn.", 3500);
-    const c = {
+    const name = (custName?.value || "").trim();
+    if (!name) return showToast("Ange företagsnamn.", 3500);
+    const primaryContactName = String(custPrimaryContactName?.value || "").trim();
+    const customer = normalizeCustomerRecord({
+      kind: "company",
       name,
-      addr: (custAddr.value||"").trim(),
-      email: (custEmail.value||"").trim(),
-      orgnr: (custOrgnr.value||"").trim()
-    };
-    const id = crypto.randomUUID();
+      orgnr: String(custOrgnr?.value || "").trim(),
+      email: String(custEmail?.value || "").trim(),
+      phone: String(custPhone?.value || "").trim(),
+      billingAddress: {
+        company: name,
+        line1: String(custAddr?.value || "").trim(),
+        email: String(custEmail?.value || "").trim(),
+        phone: String(custPhone?.value || "").trim(),
+      },
+      contacts: primaryContactName ? [{ name: primaryContactName, role: String(custPrimaryContactRole?.value || "").trim(), email: String(custEmail?.value || "").trim(), phone: String(custPhone?.value || "").trim(), isPrimary: true }] : [],
+      invoiceDefaults: {
+        referenceValue: String(custInvoiceReference?.value || "").trim(),
+        theirReference: String(custInvoiceReference?.value || "").trim(),
+        invoiceEmail: String(custEmail?.value || "").trim(),
+      }
+    }, crypto.randomUUID(), { defaultCurrency: state.company?.currency || "SEK" });
     if (!state.customers) state.customers = {};
-    state.customers[id] = c;
-    invCustomerId = id;
+    state.customers[customer.id] = customer;
+    invCustomerId = customer.id;
+    applySelectedCustomerToInvoiceEditor();
     save();
+    renderCustomerList();
+    renderCustomers();
     renderInvoiceCustomer();
     updateInvoiceTotals();
     closeCustomerDialog();
   }
+
   // --- Customer registry (tab) ---
   function resetCustomerEditor(){
     if (custEditId) custEditId.value = "";
+    if (custRegKind) custRegKind.value = "company";
     if (custRegName) custRegName.value = "";
+    if (custRegLegalName) custRegLegalName.value = "";
     if (custRegAddr) custRegAddr.value = "";
     if (custRegEmail) custRegEmail.value = "";
+    if (custRegPhone) custRegPhone.value = "";
     if (custRegOrgnr) custRegOrgnr.value = "";
+    if (custRegVatNo) custRegVatNo.value = "";
+    if (custRegCustomerNo) custRegCustomerNo.value = "";
+    if (custRegStatus) custRegStatus.value = "active";
+    if (custRegTags) custRegTags.value = "";
+    if (custRegWebsite) custRegWebsite.value = "";
+    if (custRegDefaultCurrency) custRegDefaultCurrency.value = state.company?.currency || "SEK";
+    if (custRegBillCompany) custRegBillCompany.value = "";
+    if (custRegBillAttention) custRegBillAttention.value = "";
+    if (custRegBillLine1) custRegBillLine1.value = "";
+    if (custRegBillLine2) custRegBillLine2.value = "";
+    if (custRegBillZip) custRegBillZip.value = "";
+    if (custRegBillCity) custRegBillCity.value = "";
+    if (custRegBillCountry) custRegBillCountry.value = "";
+    if (custRegBillEmail) custRegBillEmail.value = "";
+    if (custRegBillPhone) custRegBillPhone.value = "";
+    if (custRegPaymentDays) custRegPaymentDays.value = "";
+    if (custRegInvoiceEmail) custRegInvoiceEmail.value = "";
+    if (custRegReferenceLabel) custRegReferenceLabel.value = "";
+    if (custRegReferenceValue) custRegReferenceValue.value = "";
+    if (custRegOurReference) custRegOurReference.value = "";
+    if (custRegTheirReference) custRegTheirReference.value = "";
+    if (custRegDeliveryMethod) custRegDeliveryMethod.value = "";
+    if (custRegLanguage) custRegLanguage.value = "";
+    if (custRegNotes) custRegNotes.value = "";
+    customerContactsDraft = [];
+    customerDeliveryAddressesDraft = [];
+    renderCustomerContactsEditor();
+    renderCustomerDeliveryAddressesEditor();
   }
 
   function loadCustomerToEditor(id){
-    const c = state.customers?.[id];
-    if (!c) return;
+    const current = state.customers?.[id];
+    if (!current) return;
+    const customer = normalizeCustomerRecord(current, id, { defaultCurrency: state.company?.currency || "SEK" });
+    const billing = getCustomerBillingAddress(customer);
     if (custEditId) custEditId.value = id;
-    if (custRegName) custRegName.value = c.name || "";
-    if (custRegAddr) custRegAddr.value = c.addr || "";
-    if (custRegEmail) custRegEmail.value = c.email || "";
-    if (custRegOrgnr) custRegOrgnr.value = c.orgnr || "";
+    if (custRegKind) custRegKind.value = customer.kind || "company";
+    if (custRegName) custRegName.value = customer.name || "";
+    if (custRegLegalName) custRegLegalName.value = customer.legalName || "";
+    if (custRegAddr) custRegAddr.value = customer.addr || formatCustomerAddressSingleLine(billing) || "";
+    if (custRegEmail) custRegEmail.value = customer.email || "";
+    if (custRegPhone) custRegPhone.value = customer.phone || "";
+    if (custRegOrgnr) custRegOrgnr.value = customer.orgnr || "";
+    if (custRegVatNo) custRegVatNo.value = customer.vatNo || "";
+    if (custRegCustomerNo) custRegCustomerNo.value = customer.customerNo || "";
+    if (custRegStatus) custRegStatus.value = customer.status || "active";
+    if (custRegTags) custRegTags.value = splitCustomerTags(customer.tags).join(", ");
+    if (custRegWebsite) custRegWebsite.value = customer.website || "";
+    if (custRegDefaultCurrency) custRegDefaultCurrency.value = customer.defaultCurrency || state.company?.currency || "SEK";
+    if (custRegBillCompany) custRegBillCompany.value = billing.company || "";
+    if (custRegBillAttention) custRegBillAttention.value = billing.attention || "";
+    if (custRegBillLine1) custRegBillLine1.value = billing.line1 || "";
+    if (custRegBillLine2) custRegBillLine2.value = billing.line2 || "";
+    if (custRegBillZip) custRegBillZip.value = billing.zip || "";
+    if (custRegBillCity) custRegBillCity.value = billing.city || "";
+    if (custRegBillCountry) custRegBillCountry.value = billing.country || "";
+    if (custRegBillEmail) custRegBillEmail.value = billing.email || "";
+    if (custRegBillPhone) custRegBillPhone.value = billing.phone || "";
+    if (custRegPaymentDays) custRegPaymentDays.value = customer.invoiceDefaults?.paymentDays != null ? String(customer.invoiceDefaults.paymentDays) : "";
+    if (custRegInvoiceEmail) custRegInvoiceEmail.value = customer.invoiceDefaults?.invoiceEmail || "";
+    if (custRegReferenceLabel) custRegReferenceLabel.value = customer.invoiceDefaults?.referenceLabel || "";
+    if (custRegReferenceValue) custRegReferenceValue.value = customer.invoiceDefaults?.referenceValue || "";
+    if (custRegOurReference) custRegOurReference.value = customer.invoiceDefaults?.ourReference || "";
+    if (custRegTheirReference) custRegTheirReference.value = customer.invoiceDefaults?.theirReference || "";
+    if (custRegDeliveryMethod) custRegDeliveryMethod.value = customer.invoiceDefaults?.deliveryMethod || "";
+    if (custRegLanguage) custRegLanguage.value = customer.invoiceDefaults?.language || "";
+    if (custRegNotes) custRegNotes.value = customer.notes || "";
+    customerContactsDraft = (customer.contacts || []).map((contact, index) => normalizeCustomerContact(contact, index));
+    customerDeliveryAddressesDraft = (customer.deliveryAddresses || []).map((address, index) => normalizeCustomerDeliveryAddress(address, index, customer.name || ""));
+    renderCustomerContactsEditor();
+    renderCustomerDeliveryAddressesEditor();
   }
 
   function saveCustomerFromRegistry(){
-    const name = (custRegName?.value || "").trim();
-    if (!name) return showToast("Ange kundnamn.", 3500);
-    const c = {
-      name,
-      addr: (custRegAddr?.value || "").trim(),
-      email: (custRegEmail?.value || "").trim(),
-      orgnr: (custRegOrgnr?.value || "").trim()
-    };
-    const id = (custEditId?.value || "").trim() || crypto.randomUUID();
+    const existingId = (custEditId?.value || "").trim();
+    const existing = existingId ? normalizeCustomerRecord(state.customers?.[existingId], existingId, { defaultCurrency: state.company?.currency || "SEK" }) : null;
+    const customer = buildCustomerFromRegistryEditor(existing);
+    if (!customer.name) return showToast("Ange företagsnamn.", 3500);
     state.customers = state.customers || {};
-    state.customers[id] = c;
+    state.customers[customer.id] = customer;
     save();
-    // keep invoice editor in sync if it was the same customer
-    if (invCustomerId === id) renderInvoiceCustomer();
+    if (invCustomerId === customer.id) {
+      applySelectedCustomerToInvoiceEditor();
+      renderInvoiceCustomer();
+    }
     updateInvoiceTotals();
+    renderCustomerList();
     renderCustomers();
-    loadCustomerToEditor(id);
+    renderQuoteCustomerOptions(quoteCustomerSelect?.value || "");
+    loadCustomerToEditor(customer.id);
+    showToast("Kund sparad.", 3000);
   }
 
   async function deleteCustomer(id){
@@ -12996,7 +13762,9 @@ if (!d.features) d.features = { sruEnabled: false };
     delete state.customers[id];
     if (invCustomerId === id) invCustomerId = null;
     save();
+    renderCustomerList();
     renderCustomers();
+    renderQuoteCustomerOptions(quoteCustomerSelect?.value || "");
     renderInvoiceCustomer();
     updateInvoiceTotals();
     resetCustomerEditor();
@@ -13006,7 +13774,7 @@ if (!d.features) d.features = { sruEnabled: false };
     if (!customersList) return;
     const q = (custSearch?.value || "").trim().toLowerCase();
     const keys = Object.keys(state.customers||{})
-      .sort((a,b)=> (state.customers[a]?.name||"").localeCompare(state.customers[b]?.name||"", "sv"));
+      .sort((a,b)=> customerDisplayName(state.customers[a]).localeCompare(customerDisplayName(state.customers[b]), "sv"));
 
     customersList.innerHTML = "";
     if (!keys.length){
@@ -13015,18 +13783,21 @@ if (!d.features) d.features = { sruEnabled: false };
     }
 
     keys.forEach(id=>{
-      const c = state.customers[id];
-      const hay = `${c.name||""} ${c.addr||""} ${c.email||""} ${c.orgnr||""}`.toLowerCase();
+      const customer = normalizeCustomerRecord(state.customers[id], id, { defaultCurrency: state.company?.currency || "SEK" });
+      const hay = customerSearchText(customer);
       if (q && !hay.includes(q)) return;
+      const primaryContact = getCustomerPrimaryContact(customer, "invoice");
+      const billing = getCustomerBillingAddress(customer);
 
       const div = document.createElement("div");
       div.className = "item";
       div.innerHTML = `
         <div class="top">
           <div>
-            <div class="title">${escapeHtml(c.name||"(namn)")}</div>
-            <div class="meta">${escapeHtml(c.addr||"")}</div>
-            <div class="meta">${escapeHtml(c.email||"")}${c.orgnr?(" · "+escapeHtml(c.orgnr)):""}</div>
+            <div class="title">${escapeHtml(customerDisplayName(customer) || "(namn)")}${customer.status === "inactive" ? ` <span class="status">inactive</span>` : ""}</div>
+            <div class="meta">${escapeHtml(customer.orgnr || "")}${customer.customerNo ? ` · ${escapeHtml(customer.customerNo)}` : ""}${customer.vatNo ? ` · VAT ${escapeHtml(customer.vatNo)}` : ""}</div>
+            <div class="meta">${escapeHtml(customer.email || customerEffectiveInvoiceEmail(customer) || "")}${customer.phone || customerEffectivePhone(customer) ? ` · ${escapeHtml(customer.phone || customerEffectivePhone(customer))}` : ""}</div>
+            <div class="meta">${escapeHtml(primaryContact?.name || "")}${primaryContact?.role ? ` · ${escapeHtml(primaryContact.role)}` : ""}${billing.city ? ` · ${escapeHtml(billing.city)}` : ""}</div>
           </div>
           <div class="row">
             <button class="btn secondary" data-act="edit" data-id="${id}">Redigera</button>
@@ -13043,6 +13814,23 @@ if (!d.features) d.features = { sruEnabled: false };
         if (act==="del"){ await deleteCustomer(cid); }
       });
       customersList.appendChild(div);
+    });
+  }
+
+  function wireCustomerRegistryEvents(){
+    if (btnCustNew) btnCustNew.addEventListener("click", (e)=>{ e.preventDefault(); resetCustomerEditor(); });
+    if (btnCustSave) btnCustSave.addEventListener("click", (e)=>{ e.preventDefault(); saveCustomerFromRegistry(); });
+    if (btnCustRefresh) btnCustRefresh.addEventListener("click", (e)=>{ e.preventDefault(); renderCustomers(); renderCustomerList(); });
+    if (custSearch) custSearch.addEventListener("input", ()=> renderCustomers());
+    if (btnCustAddContact) btnCustAddContact.addEventListener("click", (e)=>{
+      e.preventDefault();
+      customerContactsDraft.push(normalizeCustomerContact({ isPrimary: customerContactsDraft.length === 0 }, customerContactsDraft.length));
+      renderCustomerContactsEditor();
+    });
+    if (btnCustAddDelivery) btnCustAddDelivery.addEventListener("click", (e)=>{
+      e.preventDefault();
+      customerDeliveryAddressesDraft.push(normalizeCustomerDeliveryAddress({ company: custRegName?.value || "", isDefault: customerDeliveryAddressesDraft.length === 0 }, customerDeliveryAddressesDraft.length, custRegName?.value || ""));
+      renderCustomerDeliveryAddressesEditor();
     });
   }
 
@@ -17760,6 +18548,10 @@ try { if (invDate) invDate.value = todayISO(); } catch (e){ console.error(e); }
 try { if (invDue) invDue.value = addDays(todayISO(), (state.company.payDays||30)); } catch (e){ console.error(e); }
 
 try { if (siYearSelect) siYearSelect.value = state.activeYearId; } catch (e){ console.error(e); }
+try { if (typeof wireCustomerRegistryEvents === "function") wireCustomerRegistryEvents(); } catch (e){ console.error(e); }
+try { if (typeof resetCustomerEditor === "function") resetCustomerEditor(); } catch (e){ console.error(e); }
+try { if (typeof renderCustomers === "function") renderCustomers(); } catch (e){ console.error(e); }
+try { if (typeof renderCustomerList === "function") renderCustomerList(); } catch (e){ console.error(e); }
 try { if (typeof wireSupplierRegistryEvents === "function") wireSupplierRegistryEvents(); } catch (e){ console.error(e); }
 try { if (typeof renderSuppliers === "function") renderSuppliers(); } catch (e){ console.error(e); }
 try { if (typeof wireSupplierInvoiceEvents === "function") wireSupplierInvoiceEvents(); } catch (e){ console.error(e); }

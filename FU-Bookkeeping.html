@@ -1752,6 +1752,14 @@
                     </div>
                     <div class="quote-meta-grid compact">
                       <div class="field">
+                        <label>Kontaktperson</label>
+                        <select id="quoteContactSelect"></select>
+                      </div>
+                      <div class="field">
+                        <label>Leveransadress</label>
+                        <select id="quoteDeliveryAddressSelect"></select>
+                      </div>
+                      <div class="field">
                         <label>Kundnamn</label>
                         <input id="quoteCustomerName" placeholder="t.ex. Mariano Vozzi" />
                       </div>
@@ -2800,8 +2808,8 @@ Tack!</div>
 (function(){
  
 
-  const APP_VERSION = "1.4.25"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.36";  // user-facing revision
+  const APP_VERSION = "1.4.26"; // bump when adding new data fields
+  const APP_SEMVER = "0.3.37";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -3346,6 +3354,8 @@ Tack!</div>
       date,
       expiresAt: String(raw.expiresAt || "").trim() || addDays(date, 30),
       customerId: clampText(String(raw.customerId || "").trim(), 80),
+      selectedContactId: clampText(String(raw.selectedContactId || "").trim(), 80),
+      selectedDeliveryAddressId: clampText(String(raw.selectedDeliveryAddressId || "").trim(), 80),
       customerName: clampText(String(raw.customerName || "").trim(), 120),
       customerEmail: clampText(String(raw.customerEmail || "").trim(), 120),
       customerPhone: clampText(String(raw.customerPhone || "").trim(), 60),
@@ -4558,6 +4568,9 @@ cur = {
     if (!q) throw new Error("generateQuotePdfBlob kräver en offert.");
 
     const company = state.company || {};
+    const customer = getCustomerRecordById(q.customerId || "");
+    const selectedContact = resolveQuoteSelectedContact(q, customer);
+    const selectedDeliveryAddress = resolveQuoteSelectedDeliveryAddress(q, customer);
     const totals = quoteTotals(q.lines || []);
     const currency = String(q.currency || company.currency || "SEK").trim() || "SEK";
     const publicSections = quotePublicSections(q);
@@ -4578,6 +4591,14 @@ cur = {
     if (q.orgnr) lines.push(`Kund org.nr: ${String(q.orgnr).trim()}`);
     if (q.customerEmail) lines.push(`Kund e-post: ${String(q.customerEmail).trim()}`);
     if (q.customerPhone) lines.push(`Kund telefon: ${String(q.customerPhone).trim()}`);
+    if (selectedContact?.name) {
+      lines.push("Kontaktperson:");
+      customerContactSummaryLines(selectedContact).forEach(part => lines.push(`  ${part}`));
+    }
+    if (selectedDeliveryAddress) {
+      lines.push("Leveransadress:");
+      customerDeliveryAddressSummaryLines(selectedDeliveryAddress, q.companyName || q.customerName || "").forEach(part => lines.push(`  ${part}`));
+    }
     if (publicSections.sections.length || publicSections.appendices.length || publicSections.attachments.length) lines.push("");
     publicSections.sections.forEach(section => {
       lines.push(section.title.toUpperCase());
@@ -4648,6 +4669,14 @@ cur = {
     if (o.orgnr || o.customer?.orgnr) lines.push(`Kund org.nr: ${String(o.orgnr || o.customer?.orgnr || "").trim()}`);
     if (o.customerEmail || o.customer?.email) lines.push(`Kund e-post: ${String(o.customerEmail || o.customer?.email || "").trim()}`);
     if (o.customerPhone || o.customer?.phone) lines.push(`Kund telefon: ${String(o.customerPhone || o.customer?.phone || "").trim()}`);
+    if (o.selectedContactSnapshot?.name) {
+      lines.push("Kontaktperson:");
+      customerContactSummaryLines(o.selectedContactSnapshot).forEach(part => lines.push(`  ${part}`));
+    }
+    if (o.selectedDeliveryAddressSnapshot) {
+      lines.push("Leveransadress:");
+      customerDeliveryAddressSummaryLines(o.selectedDeliveryAddressSnapshot, o.companyName || o.customerName || "").forEach(part => lines.push(`  ${part}`));
+    }
     lines.push("");
     lines.push("RADER");
 
@@ -6335,6 +6364,64 @@ cur = {
     if (billing.city) return billing.city;
     const delivery = (Array.isArray(customer?.deliveryAddresses) ? customer.deliveryAddresses : []).find(address => address && address.isDefault) || (Array.isArray(customer?.deliveryAddresses) ? customer.deliveryAddresses[0] : null);
     return clampText(String(delivery?.city || "").trim(), 120);
+  }
+
+  function customerQuoteContacts(customer){
+    return (Array.isArray(customer?.contacts) ? customer.contacts : [])
+      .map((contact, idx) => normalizeCustomerContact(contact, idx))
+      .filter(contact => contact && contact.useForQuotes !== false && contact.name);
+  }
+
+  function customerQuoteDeliveryAddresses(customer){
+    return (Array.isArray(customer?.deliveryAddresses) ? customer.deliveryAddresses : [])
+      .map((address, idx) => normalizeCustomerDeliveryAddress(address, idx, customerDisplayName(customer)))
+      .filter(address => address && (address.line1 || address.company || address.city || address.label));
+  }
+
+  function getCustomerRecordById(customerId){
+    const id = String(customerId || "").trim();
+    if (!id) return null;
+    const customer = state.customers?.[id];
+    if (!customer) return null;
+    return normalizeCustomerRecord(customer, id, { defaultCurrency: state.company?.currency || "SEK" });
+  }
+
+  function resolveQuoteSelectedContact(quote, customer){
+    const model = customer && typeof customer === "object" ? customer : getCustomerRecordById(quote?.customerId || "");
+    const contacts = customerQuoteContacts(model);
+    if (!contacts.length) return null;
+    const selectedId = String(quote?.selectedContactId || "").trim();
+    return contacts.find(contact => contact.id === selectedId) || getCustomerPrimaryContact(model, "quote") || contacts[0] || null;
+  }
+
+  function resolveQuoteSelectedDeliveryAddress(quote, customer){
+    const model = customer && typeof customer === "object" ? customer : getCustomerRecordById(quote?.customerId || "");
+    const addresses = customerQuoteDeliveryAddresses(model);
+    if (!addresses.length) return null;
+    const selectedId = String(quote?.selectedDeliveryAddressId || "").trim();
+    return addresses.find(address => address.id === selectedId) || addresses.find(address => address.isDefault) || addresses[0] || null;
+  }
+
+  function customerContactSummaryLines(contact){
+    const normalized = contact ? normalizeCustomerContact(contact, 0) : null;
+    if (!normalized || !normalized.name) return [];
+    return [
+      normalized.name,
+      [normalized.role, normalized.department].filter(Boolean).join(" · ").trim(),
+      normalized.email ? `E-post: ${normalized.email}` : "",
+      normalized.phone ? `Telefon: ${normalized.phone}` : ""
+    ].filter(Boolean);
+  }
+
+  function customerDeliveryAddressSummaryLines(address, fallbackCompany){
+    const normalized = address ? normalizeCustomerDeliveryAddress(address, 0, fallbackCompany || "") : null;
+    if (!normalized) return [];
+    return [
+      normalized.label,
+      ...formatCustomerAddressLines(normalized),
+      normalized.email ? `E-post: ${normalized.email}` : "",
+      normalized.phone ? `Telefon: ${normalized.phone}` : ""
+    ].filter(Boolean);
   }
 
   function customerEffectiveInvoiceEmail(customer){
@@ -11249,6 +11336,8 @@ if (!d.features) d.features = { sruEnabled: false };
   const quoteAttachmentList = document.getElementById("quoteAttachmentList");
   const quoteEditorStatus = document.getElementById("quoteEditorStatus");
   const quoteCustomerName = document.getElementById("quoteCustomerName");
+  const quoteContactSelect = document.getElementById("quoteContactSelect");
+  const quoteDeliveryAddressSelect = document.getElementById("quoteDeliveryAddressSelect");
   const quoteInternalIndicators = document.getElementById("quoteInternalIndicators");
   const quoteOrderDraftView = document.getElementById("quoteOrderDraftView");
   const quoteOrderDraftTitle = document.getElementById("quoteOrderDraftTitle");
@@ -11716,17 +11805,63 @@ if (!d.features) d.features = { sruEnabled: false };
     quoteCustomerSelect.value = keys.includes(prev) ? prev : "";
   }
 
+  function renderQuoteDependentCustomerOptions(customerId, preferredContactId, preferredDeliveryAddressId){
+    const customer = getCustomerRecordById(customerId);
+    const contacts = customerQuoteContacts(customer);
+    const deliveryAddresses = customerQuoteDeliveryAddresses(customer);
+
+    if (quoteContactSelect) {
+      quoteContactSelect.innerHTML = contacts.length ? "" : `<option value="">(ingen kontaktperson)</option>`;
+      contacts.forEach(contact => {
+        const opt = document.createElement("option");
+        opt.value = contact.id;
+        opt.textContent = [contact.name, contact.role, contact.email || contact.phone || ""].filter(Boolean).join(" · ");
+        quoteContactSelect.appendChild(opt);
+      });
+      const preferred = String(preferredContactId || "").trim();
+      const fallback = (getCustomerPrimaryContact(customer, "quote") || contacts[0] || {}).id || "";
+      quoteContactSelect.value = contacts.some(contact => contact.id === preferred) ? preferred : fallback;
+      quoteContactSelect.disabled = !contacts.length;
+    }
+
+    if (quoteDeliveryAddressSelect) {
+      quoteDeliveryAddressSelect.innerHTML = deliveryAddresses.length ? "" : `<option value="">(ingen leveransadress)</option>`;
+      deliveryAddresses.forEach(address => {
+        const opt = document.createElement("option");
+        opt.value = address.id;
+        opt.textContent = [address.label, formatCustomerAddressSingleLine(address)].filter(Boolean).join(" · ");
+        quoteDeliveryAddressSelect.appendChild(opt);
+      });
+      const preferred = String(preferredDeliveryAddressId || "").trim();
+      const fallback = (deliveryAddresses.find(address => address.isDefault) || deliveryAddresses[0] || {}).id || "";
+      quoteDeliveryAddressSelect.value = deliveryAddresses.some(address => address.id === preferred) ? preferred : fallback;
+      quoteDeliveryAddressSelect.disabled = !deliveryAddresses.length;
+    }
+  }
+
+  function applyQuoteContactSelection(){
+    const customer = getCustomerRecordById((quoteCustomerSelect && quoteCustomerSelect.value) || "");
+    if (!customer) return;
+    const selectedContact = resolveQuoteSelectedContact({
+      customerId: customer.id,
+      selectedContactId: String((quoteContactSelect && quoteContactSelect.value) || "").trim()
+    }, customer);
+    if (quoteCustomerName) quoteCustomerName.value = selectedContact?.name || customerDisplayName(customer) || "";
+    if (quoteCustomerEmail) quoteCustomerEmail.value = selectedContact?.email || customerEffectiveInvoiceEmail(customer) || customer.email || "";
+    if (quoteCustomerPhone) quoteCustomerPhone.value = selectedContact?.phone || customerEffectivePhone(customer) || "";
+  }
+
   function applyQuoteCustomerSelection(){
     const customerId = String((quoteCustomerSelect && quoteCustomerSelect.value) || "").trim();
-    if (!customerId) return;
-    const c = state.customers?.[customerId];
-    if (!c) return;
-    const customer = normalizeCustomerRecord(c, customerId, { defaultCurrency: state.company?.currency || "SEK" });
-    const primaryContact = getCustomerPrimaryContact(customer, "quote");
-    if (quoteCustomerName) quoteCustomerName.value = primaryContact?.name || customerDisplayName(customer) || "";
+    if (!customerId) {
+      renderQuoteDependentCustomerOptions("", "", "");
+      return;
+    }
+    const customer = getCustomerRecordById(customerId);
+    if (!customer) return;
+    renderQuoteDependentCustomerOptions(customerId, "", "");
+    applyQuoteContactSelection();
     if (quoteCompanyName) quoteCompanyName.value = customerDisplayName(customer) || "";
-    if (quoteCustomerEmail) quoteCustomerEmail.value = customerEffectiveInvoiceEmail(customer) || customer.email || "";
-    if (quoteCustomerPhone) quoteCustomerPhone.value = customerEffectivePhone(customer) || "";
     if (quoteOrgnr) quoteOrgnr.value = customer.orgnr || "";
     updateQuoteTotals();
   }
@@ -11776,6 +11911,8 @@ if (!d.features) d.features = { sruEnabled: false };
       date,
       expiresAt: String((quoteExpiresAt && quoteExpiresAt.value) || "").trim() || addDays(date, 30),
       customerId: String((quoteCustomerSelect && quoteCustomerSelect.value) || "").trim(),
+      selectedContactId: String((quoteContactSelect && quoteContactSelect.value) || "").trim(),
+      selectedDeliveryAddressId: String((quoteDeliveryAddressSelect && quoteDeliveryAddressSelect.value) || "").trim(),
       customerName: String((quoteCustomerName && quoteCustomerName.value) || "").trim(),
       customerEmail: String((quoteCustomerEmail && quoteCustomerEmail.value) || "").trim(),
       customerPhone: String((quoteCustomerPhone && quoteCustomerPhone.value) || "").trim(),
@@ -11913,6 +12050,11 @@ if (!d.features) d.features = { sruEnabled: false };
     const totals = quoteTotals(quote.lines || []);
     const currency = escapeHtml(quote.currency || state.company?.currency || "SEK");
     const publicSections = quotePublicSections(quote);
+    const customer = getCustomerRecordById(quote.customerId || "");
+    const selectedContact = resolveQuoteSelectedContact(quote, customer);
+    const selectedDeliveryAddress = resolveQuoteSelectedDeliveryAddress(quote, customer);
+    const contactLines = customerContactSummaryLines(selectedContact);
+    const deliveryLines = customerDeliveryAddressSummaryLines(selectedDeliveryAddress, quote.companyName || quote.customerName || "");
     const rows = (quote.lines || []).map((line, idx) => {
       const sums = quoteLineTotals(line);
       const title = String(line.title || line.description || "Rad").trim() || "Rad";
@@ -11958,6 +12100,8 @@ if (!d.features) d.features = { sruEnabled: false };
         ${quote.orgnr ? `<div class="muted">Org.nr: ${escapeHtml(quote.orgnr)}</div>` : ""}
         ${quote.customerEmail ? `<div class="muted">${escapeHtml(quote.customerEmail)}</div>` : ""}
         ${quote.customerPhone ? `<div class="muted">${escapeHtml(quote.customerPhone)}</div>` : ""}
+        ${contactLines.length ? `<div class="muted" style="margin-top:10px;">Vald kontaktperson</div>${contactLines.map(line => `<div class="muted">${escapeHtml(line)}</div>`).join("")}` : ""}
+        ${deliveryLines.length ? `<div class="muted" style="margin-top:10px;">Vald leveransadress</div>${deliveryLines.map(line => `<div class="muted">${escapeHtml(line)}</div>`).join("")}` : ""}
       </div>
 
       <div class="card">
@@ -12243,6 +12387,7 @@ if (!d.features) d.features = { sruEnabled: false };
     if (quoteRef) quoteRef.value = "";
     renderQuoteCustomerOptions("");
     if (quoteSource) quoteSource.value = "fu_local";
+    renderQuoteDependentCustomerOptions("", "", "");
     if (quoteCustomerName) quoteCustomerName.value = "";
     if (quoteCompanyName) quoteCompanyName.value = "";
     if (quoteCustomerEmail) quoteCustomerEmail.value = "";
@@ -12277,6 +12422,7 @@ if (!d.features) d.features = { sruEnabled: false };
     if (quoteVatScheme) quoteVatScheme.value = quote.vatScheme || "SE_VAT";
     if (quoteRef) quoteRef.value = quote.ref || "";
     renderQuoteCustomerOptions(quote.customerId || "");
+    renderQuoteDependentCustomerOptions(quote.customerId || "", quote.selectedContactId || "", quote.selectedDeliveryAddressId || "");
     if (quoteSource) quoteSource.value = quote.source || "fu_local";
     if (quoteCustomerName) quoteCustomerName.value = quote.customerName || "";
     if (quoteCompanyName) quoteCompanyName.value = quote.companyName || "";
@@ -12329,6 +12475,8 @@ if (!d.features) d.features = { sruEnabled: false };
     const actor = currentQuoteActor();
     const timestamp = nowISO();
     const orderNo = `ORD-${String(quote.quoteNo || quote.id || "order").trim()}`;
+    const selectedContactSnapshot = resolveQuoteSelectedContact(quote);
+    const selectedDeliveryAddressSnapshot = resolveQuoteSelectedDeliveryAddress(quote);
     const order = {
       id: crypto.randomUUID(),
       yearId: quote.yearId || state.activeYearId || "",
@@ -12357,6 +12505,8 @@ if (!d.features) d.features = { sruEnabled: false };
       customerEmail: quote.customerEmail || "",
       customerPhone: quote.customerPhone || "",
       orgnr: quote.orgnr || "",
+      selectedContactSnapshot: selectedContactSnapshot ? normalizeCustomerContact(selectedContactSnapshot, 0) : null,
+      selectedDeliveryAddressSnapshot: selectedDeliveryAddressSnapshot ? normalizeCustomerDeliveryAddress(selectedDeliveryAddressSnapshot, 0, quote.companyName || quote.customerName || "") : null,
       email: quote.customerEmail || "",
       phone: quote.customerPhone || "",
       customer: {
@@ -12490,6 +12640,8 @@ if (!d.features) d.features = { sruEnabled: false };
     if (btnQuoteRefresh) btnQuoteRefresh.addEventListener("click", (e)=>{ e.preventDefault(); renderQuotes(); });
     if (quoteYearSelect) quoteYearSelect.addEventListener("change", renderQuotes);
     if (quoteCustomerSelect) quoteCustomerSelect.addEventListener("change", ()=>{ applyQuoteCustomerSelection(); renderQuotes(); });
+    if (quoteContactSelect) quoteContactSelect.addEventListener("change", ()=>{ applyQuoteContactSelection(); updateQuoteTotals(); });
+    if (quoteDeliveryAddressSelect) quoteDeliveryAddressSelect.addEventListener("change", updateQuoteTotals);
     if (quoteStatus) quoteStatus.addEventListener("change", ()=>{
       const previousStatus = currentStoredQuoteStatus();
       const requestedStatus = String(quoteStatus.value || "").trim();
@@ -12500,7 +12652,7 @@ if (!d.features) d.features = { sruEnabled: false };
       }
       updateQuoteTotals();
     });
-    [quoteDate, quoteExpiresAt, quoteNo, quoteCurrency, quoteVatScheme, quoteRef, quoteSource, quoteCustomerName, quoteCompanyName, quoteCustomerEmail, quoteCustomerPhone, quoteOrgnr, quoteIntroText, quoteScopeText, quoteDeliveryText, quoteTermsSummaryText, quoteNotes].filter(Boolean).forEach(el => {
+    [quoteDate, quoteExpiresAt, quoteNo, quoteCurrency, quoteVatScheme, quoteRef, quoteSource, quoteCustomerName, quoteCompanyName, quoteCustomerEmail, quoteCustomerPhone, quoteOrgnr, quoteIntroText, quoteScopeText, quoteDeliveryText, quoteTermsSummaryText, quoteNotes, quoteContactSelect, quoteDeliveryAddressSelect].filter(Boolean).forEach(el => {
       el.addEventListener("input", updateQuoteTotals);
       el.addEventListener("change", updateQuoteTotals);
     });

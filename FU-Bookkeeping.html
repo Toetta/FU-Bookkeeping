@@ -2808,8 +2808,8 @@ Tack!</div>
 (function(){
  
 
-  const APP_VERSION = "1.4.26"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.37";  // user-facing revision
+  const APP_VERSION = "1.4.27"; // bump when adding new data fields
+  const APP_SEMVER = "0.3.38";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -4493,9 +4493,10 @@ cur = {
     if (!inv) throw new Error("generateInvoicePdfBlob kräver en faktura.");
 
     const company = state.company || {};
-    const customer = getInvoiceCustomerSnapshot(inv);
-    const totals = invoiceTotals(inv);
-    const currency = getInvoiceCurrency(inv);
+    const display = getInvoiceDocumentDisplayData(inv);
+    const customer = display.snapshot;
+    const totals = display.totals;
+    const currency = display.currency;
     const lines = [];
 
     lines.push(`FAKTURA ${String(inv.no || "").trim() || "(utan nummer)"}`);
@@ -4507,10 +4508,21 @@ cur = {
     lines.push(`Förfallodatum: ${String(inv.due || "").trim() || "-"}`);
     if (inv.ref) lines.push(`Referens: ${String(inv.ref).trim()}`);
     lines.push("");
-    lines.push(`Kund: ${String(customer.name || "").trim() || "(ingen kund)"}`);
-    if (customer.orgnr) lines.push(`Kund org.nr: ${String(customer.orgnr).trim()}`);
-    if (customer.email) lines.push(`Kund e-post: ${String(customer.email).trim()}`);
-    if (customer.addr) wrapPdfText(String(customer.addr), 72).forEach(part => lines.push(part));
+    lines.push("FAKTURAMOTTAGARE");
+    lines.push(String(display.recipient.title || "(ingen kund)").trim() || "(ingen kund)");
+    display.recipient.addressLines.forEach(part => lines.push(part));
+    if (display.recipient.orgnr) lines.push(`Org.nr: ${String(display.recipient.orgnr).trim()}`);
+    if (display.recipient.email) lines.push(`E-post: ${String(display.recipient.email).trim()}`);
+    if (display.recipient.phone) lines.push(`Telefon: ${String(display.recipient.phone).trim()}`);
+    if (display.requester.name || display.requester.theirReference) {
+      lines.push("");
+      lines.push("BESTÄLLARE / KONTAKTPERSON");
+      if (display.requester.name) lines.push(String(display.requester.name).trim());
+      if (display.requester.role) lines.push(`Roll: ${String(display.requester.role).trim()}`);
+      if (display.requester.email) lines.push(`E-post: ${String(display.requester.email).trim()}`);
+      if (display.requester.phone) lines.push(`Telefon: ${String(display.requester.phone).trim()}`);
+      if (display.requester.theirReference) lines.push(`Er referens: ${String(display.requester.theirReference).trim()}`);
+    }
     lines.push("");
     lines.push("RADER");
 
@@ -4534,6 +4546,15 @@ cur = {
     lines.push(`Summa exkl. moms: ${fmtSEK(totals.net)} ${currency}`);
     lines.push(`Moms: ${fmtSEK(totals.vat)} ${currency}`);
     lines.push(`Att betala: ${fmtSEK(totals.gross)} ${currency}`);
+    lines.push("");
+    lines.push("BETALNINGSUPPGIFTER");
+    if (display.paymentRows.length) {
+      display.paymentRows.forEach(([label, value]) => lines.push(`${label}: ${value}`));
+    }
+    if (display.paymentFallback) lines.push(display.paymentFallback);
+    lines.push("");
+    lines.push("VILLKOR");
+    display.termsRows.forEach(([label, value]) => lines.push(`${label}: ${value}`));
     if (company.invoiceNote) {
       lines.push("");
       wrapPdfText(String(company.invoiceNote), 72).forEach((part, idx) => lines.push(idx === 0 ? `Notering: ${part}` : `  ${part}`));
@@ -12830,6 +12851,7 @@ if (!d.features) d.features = { sruEnabled: false };
     const billing = getCustomerBillingAddress(customer);
     const primaryContact = getCustomerPrimaryContact(customer, "invoice");
     return {
+      companyName: String(inv.companyName || customerDisplayName(customer) || inv.customerName || "").trim(),
       name: String(inv.customerName || inv.companyName || customerDisplayName(customer) || "").trim(),
       addr: String(inv.customerAddr || formatCustomerAddressSingleLine(billing) || customer.addr || "").trim(),
       email: String(inv.customerEmail || customerEffectiveInvoiceEmail(customer) || customer.email || "").trim(),
@@ -12840,6 +12862,93 @@ if (!d.features) d.features = { sruEnabled: false };
       city: String(inv.customerCity || billing.city || "").trim(),
       theirReference: String(inv.customerTheirReference || customer.invoiceDefaults?.theirReference || customer.invoiceDefaults?.referenceValue || "").trim(),
       ourReference: String(inv.customerOurReference || customer.invoiceDefaults?.ourReference || "").trim(),
+    };
+  }
+
+  function getInvoiceCustomerRecord(invoice){
+    const inv = (invoice && typeof invoice === "object") ? invoice : {};
+    const customerId = String(inv.customerId || "").trim();
+    if (!customerId || !state.customers?.[customerId]) return null;
+    return normalizeCustomerRecord(state.customers[customerId], customerId, { defaultCurrency: state.company?.currency || "SEK" });
+  }
+
+  function getInvoiceSourceOrder(invoice){
+    const orderId = String(invoice?.orderId || "").trim();
+    if (!orderId) return null;
+    return (state.orders || []).find(order => order && String(order.id || "").trim() === orderId) || null;
+  }
+
+  function getInvoiceSourceQuote(invoice, order){
+    const sourceOrder = order && typeof order === "object" ? order : getInvoiceSourceOrder(invoice);
+    const quoteId = String(sourceOrder?.sourceQuoteId || sourceOrder?.quoteId || invoice?.sourceQuoteId || "").trim();
+    if (quoteId) {
+      const match = (state.quotes || []).find(quote => quote && String(quote.id || "").trim() === quoteId);
+      if (match) return match;
+    }
+    const quoteNo = String(invoice?.sourceQuoteNo || sourceOrder?.sourceQuoteNo || sourceOrder?.quoteSnapshot?.quoteNo || "").trim();
+    if (!quoteNo) return null;
+    return (state.quotes || []).find(quote => quote && String(quote.quoteNo || "").trim() === quoteNo) || null;
+  }
+
+  function resolveInvoiceContactPerson(invoice, customerRecord){
+    const inv = (invoice && typeof invoice === "object") ? invoice : {};
+    const order = getInvoiceSourceOrder(inv);
+    if (order?.selectedContactSnapshot?.name) return normalizeCustomerContact(order.selectedContactSnapshot, 0);
+    const quote = getInvoiceSourceQuote(inv, order);
+    const quoteContact = quote ? resolveQuoteSelectedContact(quote) : null;
+    if (quoteContact?.name) return normalizeCustomerContact(quoteContact, 0);
+    const customer = customerRecord && typeof customerRecord === "object" ? customerRecord : getInvoiceCustomerRecord(inv);
+    const primaryContact = getCustomerPrimaryContact(customer, "invoice");
+    if (primaryContact?.name) return normalizeCustomerContact(primaryContact, 0);
+    return null;
+  }
+
+  function getInvoiceDocumentDisplayData(invoice){
+    const inv = (invoice && typeof invoice === "object") ? invoice : {};
+    const company = state.company || {};
+    const customer = getInvoiceCustomerRecord(inv);
+    const snapshot = getInvoiceCustomerSnapshot(inv);
+    const billingAddress = customer ? getCustomerBillingAddress(customer) : null;
+    const contact = resolveInvoiceContactPerson(inv, customer);
+    const totals = invoiceTotals(inv);
+    const currency = getInvoiceCurrency(inv);
+    const paymentRows = [];
+    const paymentRef = String(inv.ref || inv.no || "").trim();
+    if (paymentRef) paymentRows.push(["OCR / referens", paymentRef]);
+    if (company.bankgiro) paymentRows.push(["Bankgiro", String(company.bankgiro).trim()]);
+    if (company.plusgiro) paymentRows.push(["Plusgiro", String(company.plusgiro).trim()]);
+    if (company.swishPhone) paymentRows.push(["Swish", String(company.swishPhone).trim()]);
+    if (company.bankAccountNo) paymentRows.push(["Bankkonto", String(company.bankAccountNo).trim()]);
+    if (company.iban) paymentRows.push(["IBAN", String(company.iban).trim()]);
+    if (company.swift) paymentRows.push(["SWIFT/BIC", String(company.swift).trim()]);
+    const termsRows = [];
+    if (inv.due) termsRows.push(["Förfallodatum", String(inv.due).trim()]);
+    if (company.payDays) termsRows.push(["Betalvillkor", `${String(company.payDays).trim()} dagar`]);
+    termsRows.push(["Belopp", `${fmtSEK(totals.gross)} ${currency}`]);
+    const hasConfiguredPaymentChannels = [company.bankgiro, company.plusgiro, company.swishPhone, company.bankAccountNo, company.iban, company.swift]
+      .some(value => !!String(value || "").trim());
+    return {
+      snapshot,
+      recipient: {
+        title: String(snapshot.companyName || snapshot.name || "").trim() || "(ingen kund)",
+        addressInline: customer ? formatCustomerAddressSingleLine(billingAddress) : String(snapshot.addr || "").trim(),
+        addressLines: customer ? formatCustomerAddressLines(billingAddress) : (String(snapshot.addr || "").trim() ? wrapPdfText(String(snapshot.addr).trim(), 72) : []),
+        orgnr: String(snapshot.orgnr || "").trim(),
+        email: String(snapshot.email || "").trim(),
+        phone: String(snapshot.phone || "").trim(),
+      },
+      requester: {
+        name: String(contact?.name || snapshot.contactName || "").trim(),
+        role: String(contact?.role || snapshot.contactRole || "").trim(),
+        email: String(contact?.email || "").trim(),
+        phone: String(contact?.phone || "").trim(),
+        theirReference: String(snapshot.theirReference || "").trim(),
+      },
+      paymentRows,
+      termsRows,
+      paymentFallback: hasConfiguredPaymentChannels ? "" : "Betalningsuppgifter saknas i företagsinställningarna",
+      totals,
+      currency,
     };
   }
 
@@ -13032,30 +13141,26 @@ if (!d.features) d.features = { sruEnabled: false };
   function renderInvoiceCustomer(){
     if (!invCustomerBox) return;
     const currentInvoice = editingInvoiceId ? ((state.invoices || []).find(x => x && x.id === editingInvoiceId) || null) : null;
-    const snapshot = getInvoiceCustomerSnapshot(currentInvoice);
-    if (!invCustomerId && !snapshot.name){
+    const draftInvoice = currentInvoice || { customerId: invCustomerId };
+    const display = getInvoiceDocumentDisplayData(draftInvoice);
+    const hasRecipient = !!String(display.snapshot.companyName || display.snapshot.name || "").trim();
+    if (!invCustomerId && !hasRecipient){
       invCustomerBox.textContent = "Ingen kund vald.";
       return;
     }
-    const c = invCustomerId ? normalizeCustomerRecord(state.customers?.[invCustomerId], invCustomerId, { defaultCurrency: state.company?.currency || "SEK" }) : null;
-    const billing = c ? getCustomerBillingAddress(c) : null;
-    const primaryContact = c ? getCustomerPrimaryContact(c, "invoice") : null;
-    const displayName = c ? customerDisplayName(c) : snapshot.name;
-    const addressText = c ? formatCustomerAddressSingleLine(billing) : snapshot.addr;
-    const emailText = c ? customerEffectiveInvoiceEmail(c) : snapshot.email;
-    const phoneText = c ? customerEffectivePhone(c) : snapshot.phone;
-    const orgnrText = c ? c.orgnr : snapshot.orgnr;
-    const referenceText = c ? String(c.invoiceDefaults?.theirReference || c.invoiceDefaults?.referenceValue || "").trim() : snapshot.theirReference;
-    if (!(c || String(snapshot.name || "").trim())){
+    if (!(invCustomerId || hasRecipient)){
       invCustomerBox.textContent = "Ingen kund vald.";
       return;
     }
     invCustomerBox.innerHTML = `
-      <div style="font-weight:800;">${escapeHtml(displayName || "(namn)")}</div>
-      ${primaryContact?.name ? `<div class="muted small">Kontakt: ${escapeHtml(primaryContact.name)}${primaryContact.role ? ` · ${escapeHtml(primaryContact.role)}` : ""}</div>` : ""}
-      ${addressText ? `<div class="muted small">${escapeHtml(addressText)}</div>` : ""}
-      <div class="muted small">${escapeHtml(emailText || "")}${phoneText ? ` · ${escapeHtml(phoneText)}` : ""}${orgnrText ? ` · ${escapeHtml(orgnrText)}` : ""}</div>
-      ${referenceText ? `<div class="muted small">Er referens: ${escapeHtml(referenceText)}</div>` : ""}
+      <div class="muted small">Fakturamottagare</div>
+      <div style="font-weight:800; margin-top:4px;">${escapeHtml(display.recipient.title || "(namn)")}</div>
+      ${display.recipient.addressInline ? `<div class="muted small">${escapeHtml(display.recipient.addressInline)}</div>` : ""}
+      ${(display.recipient.email || display.recipient.phone || display.recipient.orgnr) ? `<div class="muted small">${escapeHtml(display.recipient.email || "")}${display.recipient.phone ? ` · ${escapeHtml(display.recipient.phone)}` : ""}${display.recipient.orgnr ? ` · ${escapeHtml(display.recipient.orgnr)}` : ""}</div>` : ""}
+      ${(display.requester.name || display.requester.theirReference) ? `<div class="muted small" style="margin-top:10px;">Beställare / kontaktperson</div>` : ""}
+      ${display.requester.name ? `<div class="muted small">${escapeHtml(display.requester.name)}${display.requester.role ? ` · ${escapeHtml(display.requester.role)}` : ""}</div>` : ""}
+      ${(display.requester.email || display.requester.phone) ? `<div class="muted small">${escapeHtml(display.requester.email || "")}${display.requester.phone ? ` · ${escapeHtml(display.requester.phone)}` : ""}</div>` : ""}
+      ${display.requester.theirReference ? `<div class="muted small">Er referens: ${escapeHtml(display.requester.theirReference)}</div>` : ""}
     `;
   }
 
@@ -13361,9 +13466,10 @@ if (!d.features) d.features = { sruEnabled: false };
   function printInvoice(id){
     const inv = (state.invoices||[]).find(x=>x.id===id);
     if (!inv) return;
-    const c = getInvoiceCustomerSnapshot(inv);
-    const tot = invoiceTotals(inv);
-    const currency = getInvoiceCurrency(inv);
+    const display = getInvoiceDocumentDisplayData(inv);
+    const c = display.snapshot;
+    const tot = display.totals;
+    const currency = display.currency;
 
     const rows = (inv.lines||[]).map(l=>{
       if (l.kind !== "item"){
@@ -13421,11 +13527,15 @@ if (!d.features) d.features = { sruEnabled: false };
       </div>
 
       <div style="margin-top:18px;">
-        <div class="muted">Kund</div>
-        <div style="font-weight:800;">${escapeHtml(c.name||"")}</div>
-        <div class="muted">${escapeHtml(c.addr||"")}</div>
-        ${c.orgnr?`<div class="muted">Org.nr: ${escapeHtml(c.orgnr)}</div>`:""}
-        ${c.email?`<div class="muted">${escapeHtml(c.email)}</div>`:""}
+        <div class="muted">Fakturamottagare</div>
+        <div style="font-weight:800;">${escapeHtml(display.recipient.title||"")}</div>
+        ${display.recipient.addressLines.map(line => `<div class="muted">${escapeHtml(line)}</div>`).join("")}
+        ${display.recipient.orgnr?`<div class="muted">Org.nr: ${escapeHtml(display.recipient.orgnr)}</div>`:""}
+        ${(display.recipient.email || display.recipient.phone) ? `<div class="muted">${escapeHtml(display.recipient.email || "")}${display.recipient.phone ? ` · ${escapeHtml(display.recipient.phone)}` : ""}</div>` : ""}
+        ${(display.requester.name || display.requester.theirReference) ? `<div class="muted" style="margin-top:10px;">Beställare / kontaktperson</div>` : ""}
+        ${display.requester.name ? `<div class="muted">${escapeHtml(display.requester.name)}${display.requester.role ? ` · ${escapeHtml(display.requester.role)}` : ""}</div>` : ""}
+        ${(display.requester.email || display.requester.phone) ? `<div class="muted">${escapeHtml(display.requester.email || "")}${display.requester.phone ? ` · ${escapeHtml(display.requester.phone)}` : ""}</div>` : ""}
+        ${display.requester.theirReference?`<div class="muted">Er referens: ${escapeHtml(display.requester.theirReference)}</div>`:""}
       </div>
 
       <table>
@@ -13442,19 +13552,12 @@ if (!d.features) d.features = { sruEnabled: false };
       <div class="paygrid">
         <div class="box">
           <div style="font-weight:800; margin-bottom:6px;">Betalningsuppgifter</div>
-          ${state.company.bankgiro?`<div class="kv"><span>Bankgiro</span><span>${escapeHtml(state.company.bankgiro)}</span></div>`:""}
-          ${state.company.plusgiro?`<div class="kv"><span>Plusgiro</span><span>${escapeHtml(state.company.plusgiro)}</span></div>`:""}
-          ${state.company.swishPhone?`<div class="kv"><span>Swish</span><span>${escapeHtml(state.company.swishPhone)}</span></div>`:""}
-          ${state.company.bankAccountNo?`<div class="kv"><span>Bankkonto</span><span>${escapeHtml(state.company.bankAccountNo)}</span></div>`:""}
-          ${state.company.iban?`<div class="kv"><span>IBAN</span><span>${escapeHtml(state.company.iban)}</span></div>`:""}
-          ${state.company.swift?`<div class="kv"><span>SWIFT/BIC</span><span>${escapeHtml(state.company.swift)}</span></div>`:""}
-          <div class="kv"><span>Referens/OCR</span><span>${escapeHtml(inv.no)}</span></div>
+          ${display.paymentRows.map(([label, value]) => `<div class="kv"><span>${escapeHtml(label)}</span><span>${escapeHtml(value)}</span></div>`).join("")}
+          ${display.paymentFallback ? `<div class="muted" style="margin-top:6px;">${escapeHtml(display.paymentFallback)}</div>` : ""}
         </div>
         <div class="box">
           <div style="font-weight:800; margin-bottom:6px;">Villkor</div>
-          <div class="kv"><span>Förfallodatum</span><span>${escapeHtml(inv.due)}</span></div>
-          <div class="kv"><span>Belopp</span><span>${fmtSEK(tot.gross)} ${escapeHtml(currency)}</span></div>
-          ${state.company.payDays?`<div class="muted" style="margin-top:6px;">Betalvillkor: ${escapeHtml(String(state.company.payDays))} dagar</div>`:""}
+          ${display.termsRows.map(([label, value]) => `<div class="kv"><span>${escapeHtml(label)}</span><span>${escapeHtml(value)}</span></div>`).join("")}
         </div>
       </div>
 

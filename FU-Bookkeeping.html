@@ -10674,10 +10674,9 @@ if (!d.features) d.features = { sruEnabled: false };
       const latestOrder = (state.orders || []).find(x => x && String(x.id || "").trim() === String(order.id || "").trim()) || order;
       renderOrderDraftView(latestOrder);
       updateQuoteInternalIndicators();
-      const ref = String(invoice?.no || invoice?.id || "").trim();
-      showToast(result?.created
-        ? (ref ? `Faktura skapades: ${ref}.` : "Faktura skapades.")
-        : (ref ? `Faktura finns redan: ${ref}.` : "Faktura finns redan."), 5000);
+      if (!invoice) throw new Error("Kunde inte öppna fakturan efter skapande.");
+      openInvoiceInEditor(invoice.id);
+      showToast(result?.created ? "Faktura skapad och öppnad" : "Befintlig faktura öppnad", 5000);
     } catch (err) {
       console.error(err);
       showToast(err && err.message ? String(err.message) : "Kunde inte skapa faktura från orderutkastet.", 7000);
@@ -12098,6 +12097,17 @@ if (!d.features) d.features = { sruEnabled: false };
     renderInvoiceCustomer();
     renderInvoiceLines();
     updateInvoiceTotals();
+  }
+
+  function openInvoiceInEditor(invoiceId){
+    const id = String(invoiceId || "").trim();
+    if (!id) throw new Error("Saknar invoiceId för editoröppning.");
+    const invoice = (state.invoices || []).find(x => x && String(x.id || "").trim() === id);
+    if (!invoice) throw new Error("Fakturan hittades inte.");
+    try { renderInvoices(); } catch (e) { console.error(e); }
+    try { activateTab("invoices"); } catch (e) { console.error(e); }
+    loadInvoiceToEditor(id);
+    return invoice;
   }
 
   async function deleteInvoice(id){

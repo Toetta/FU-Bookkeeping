@@ -2808,8 +2808,8 @@ Tack!</div>
 (function(){
  
 
-  const APP_VERSION = "1.4.27"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.38";  // user-facing revision
+  const APP_VERSION = "1.4.29"; // bump when adding new data fields
+  const APP_SEMVER = "0.3.40";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -12903,6 +12903,15 @@ if (!d.features) d.features = { sruEnabled: false };
     return null;
   }
 
+  function getInvoicePaymentReference(invoice){
+    const inv = (invoice && typeof invoice === "object") ? invoice : {};
+    const explicitRef = String(inv.paymentReference || inv.paymentRef || inv.ocrReference || inv.ocrRef || "").trim();
+    if (explicitRef) return explicitRef;
+    const invoiceNo = String(inv.no || "").trim();
+    if (invoiceNo && !/^utkast$/i.test(invoiceNo)) return invoiceNo;
+    return "Sätts när fakturan sparas";
+  }
+
   function getInvoiceDocumentDisplayData(invoice){
     const inv = (invoice && typeof invoice === "object") ? invoice : {};
     const company = state.company || {};
@@ -12913,8 +12922,7 @@ if (!d.features) d.features = { sruEnabled: false };
     const totals = invoiceTotals(inv);
     const currency = getInvoiceCurrency(inv);
     const paymentRows = [];
-    const paymentRef = String(inv.ref || inv.no || "").trim();
-    if (paymentRef) paymentRows.push(["OCR / referens", paymentRef]);
+    paymentRows.push(["Betalningsreferens", getInvoicePaymentReference(inv)]);
     if (company.bankgiro) paymentRows.push(["Bankgiro", String(company.bankgiro).trim()]);
     if (company.plusgiro) paymentRows.push(["Plusgiro", String(company.plusgiro).trim()]);
     if (company.swishPhone) paymentRows.push(["Swish", String(company.swishPhone).trim()]);
@@ -13373,6 +13381,18 @@ if (!d.features) d.features = { sruEnabled: false };
     return { net, vat, gross };
   }
 
+  function getVoucherForInvoice(invoice){
+    const inv = (invoice && typeof invoice === "object") ? invoice : null;
+    if (!inv) return null;
+    const invoiceId = String(inv.id || "").trim();
+    const invoiceNo = String(inv.no || "").trim();
+    const activeVouchers = (state.vouchers || []).filter(voucher => voucher && String(voucher.status || "active").trim() !== "deleted");
+    return activeVouchers.find(voucher => voucher && String(voucher.invoiceId || "").trim() === invoiceId)
+      || activeVouchers.find(voucher => voucher && invoiceNo && String(voucher.invoiceNo || "").trim() === invoiceNo)
+      || activeVouchers.find(voucher => voucher && invoiceNo && String(voucher.text || "").trim() === `Faktura ${invoiceNo}`)
+      || null;
+  }
+
   function renderInvoices(){
     // keep year selectors in sync
     fillYearSelectors();
@@ -13390,13 +13410,14 @@ if (!d.features) d.features = { sruEnabled: false };
           const c = getInvoiceCustomerSnapshot(inv);
           const tot = invoiceTotals(inv);
           const currency = getInvoiceCurrency(inv);
+          const bookedVoucher = getVoucherForInvoice(inv);
           const div = document.createElement("div");
           div.className = "item";
           div.innerHTML = `
             <div class="top">
               <div>
                 <div class="title">Faktura #${escapeHtml(inv.no)} · ${escapeHtml(inv.date)} · ${escapeHtml(c?.name || "(kund)")}</div>
-                <div class="meta">Förfaller ${escapeHtml(inv.due)} · Totalt ${fmtSEK(tot.gross)} ${escapeHtml(currency)}</div>
+                <div class="meta">${bookedVoucher ? `Bokförd${bookedVoucher.series && bookedVoucher.no ? ` · ${escapeHtml(String(bookedVoucher.series) + String(bookedVoucher.no))}` : ""}` : "Ej bokförd"} · Förfaller ${escapeHtml(inv.due)} · Totalt ${fmtSEK(tot.gross)} ${escapeHtml(currency)}</div>
               </div>
               <div class="row">
                 <button class="btn secondary" data-act="edit" data-id="${inv.id}">Öppna</button>
@@ -13580,6 +13601,8 @@ if (!d.features) d.features = { sruEnabled: false };
     const yearId = invoiceYearId();
     const date = invDate.value || todayISO();
     const no = nextVerno(yearId, "F");
+    const linkedInvoice = editingInvoiceId ? ((state.invoices || []).find(x => x && x.id === editingInvoiceId) || null) : null;
+    const invoiceNo = String((invNo && invNo.value) || linkedInvoice?.no || "").trim();
 
     const tmp = {
       lines: invLines.map(l=>({kind:l.kind, qty:parseMoney(l.qty), price:parseMoney(l.price), vat:parseMoney(l.vat)}))
@@ -13607,9 +13630,11 @@ if (!d.features) d.features = { sruEnabled: false };
       series: "F",
       no,
       date,
-      text: clampText(`Faktura ${invNo.value||""}`.trim() || "Faktura"),
+      text: clampText(`Faktura ${invoiceNo || ""}`.trim() || "Faktura"),
       regDate: todayISO(),
       sign: state.company.defaultSign || "",
+      invoiceId: String(linkedInvoice?.id || "").trim(),
+      invoiceNo,
       lines: [
         { account:"1510", text:"Faktura", amount: +gross },
         { account:"3001", text:"Försäljning", amount: -net },
@@ -13623,6 +13648,7 @@ if (!d.features) d.features = { sruEnabled: false };
 
     state.vouchers.sort((a,b)=> (a.yearId+b.series+a.no+a.date).localeCompare(b.yearId+b.series+b.no+b.date, "sv"));
     save();
+    try { renderInvoices(); } catch (e) { console.error(e); }
     showToast("Skapade verifikation (serie F). Kontrollera konton och moms innan du använder skarpt.", 6500);
   }
 

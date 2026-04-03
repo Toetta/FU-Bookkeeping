@@ -12214,6 +12214,27 @@ if (!d.features) d.features = { sruEnabled: false };
     }).join("");
 
     return `
+      <style>
+        .quote-print-table{ table-layout:fixed; }
+        .quote-print-table col.col-desc{ width:54%; }
+        .quote-print-table col.col-qty{ width:10%; }
+        .quote-print-table col.col-unit{ width:10%; }
+        .quote-print-table col.col-price{ width:13%; }
+        .quote-print-table col.col-total{ width:13%; }
+        .quote-print-table th,
+        .quote-print-table td{ padding:8px 10px; }
+        .quote-print-table th{ white-space:nowrap; }
+        .quote-print-table .num{ text-align:right; white-space:nowrap; }
+        .quote-print-totals{ max-width:420px; margin-left:auto; }
+        .quote-print-totals .sum-row{
+          display:grid;
+          grid-template-columns:minmax(170px,1fr) auto;
+          gap:16px;
+          align-items:baseline;
+          margin:4px 0;
+        }
+        .quote-print-totals .sum-row span:last-child{ white-space:nowrap; text-align:right; }
+      </style>
       <div class="row" style="margin-bottom:18px;">
         <div>
           ${state.company.logoDataUrl ? `<img alt="Logotyp" src="${state.company.logoDataUrl}" style="max-height:72px; max-width:260px; object-fit:contain; margin-bottom:10px;">` : ""}
@@ -12246,8 +12267,15 @@ if (!d.features) d.features = { sruEnabled: false };
       </div>
 
       <div class="card">
-        <table>
-          <thead><tr><th>Rad</th><th style="text-align:right;">Antal</th><th style="text-align:right;">Enhet</th><th style="text-align:right;">A-pris exkl.</th><th style="text-align:right;">Belopp</th></tr></thead>
+        <table class="quote-print-table">
+          <colgroup>
+            <col class="col-desc">
+            <col class="col-qty">
+            <col class="col-unit">
+            <col class="col-price">
+            <col class="col-total">
+          </colgroup>
+          <thead><tr><th>Rad</th><th class="num">Antal</th><th class="num">Enhet</th><th class="num">A-pris exkl.</th><th class="num">Belopp</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>
@@ -12258,10 +12286,10 @@ if (!d.features) d.features = { sruEnabled: false };
 
       ${publicSections.attachments.length ? `<div class="card"><div style="font-weight:800; margin-bottom:6px;">Bilagor</div>${publicSections.attachments.map((attachment, idx) => `<div class="muted">Bilaga ${idx + 1}: ${escapeHtml(attachment.title || attachment.fileName || "Bilaga")}</div>`).join("")}</div>` : ""}
 
-      <div class="card" style="max-width:420px; margin-left:auto;">
-        <div class="row"><span>Summa exkl. moms</span><span>${fmtSEK(totals.subtotal)} ${currency}</span></div>
-        <div class="row"><span>Moms</span><span>${fmtSEK(totals.vat)} ${currency}</span></div>
-        <div class="row" style="font-weight:900; font-size:18px;"><span>Totalt inkl. moms</span><span>${fmtSEK(totals.total)} ${currency}</span></div>
+      <div class="card quote-print-totals">
+        <div class="sum-row"><span>Summa exkl. moms</span><span>${fmtSEK(totals.subtotal)} ${currency}</span></div>
+        <div class="sum-row"><span>Moms</span><span>${fmtSEK(totals.vat)} ${currency}</span></div>
+        <div class="sum-row" style="font-weight:900; font-size:18px;"><span>Totalt inkl. moms</span><span>${fmtSEK(totals.total)} ${currency}</span></div>
       </div>
     `;
   }

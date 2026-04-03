@@ -1145,8 +1145,8 @@
                   <input id="custRegName" placeholder="t.ex. Innovatio Brutalis AB" />
                 </div>
                 <div class="field" style="grid-column:span 2; min-width:220px;">
-                  <label>Juridiskt namn</label>
-                  <input id="custRegLegalName" placeholder="t.ex. Innovatio Brutalis Aktiebolag" />
+                  <label>Juridiskt namn (valfritt)</label>
+                  <input id="custRegLegalName" placeholder="Visas bara när det faktiskt skiljer sig från företagsnamnet" />
                 </div>
                 <div class="field">
                   <label>Org.nr</label>
@@ -1199,12 +1199,19 @@
             <div class="customer-inline-card">
               <div class="muted small" style="margin-bottom:8px;">Fakturaadress</div>
               <div class="customer-form-grid wide">
-                <div class="field">
-                  <label>Företag</label>
-                  <input id="custRegBillCompany" placeholder="t.ex. Innovatio Brutalis AB" />
+                <div class="field" style="grid-column:1 / -1;">
+                  <label class="row muted small" style="gap:8px; align-items:center; font-weight:700;">
+                    <input id="custRegBillUseCompanyName" type="checkbox" checked />
+                    Använd företagsnamn som fakturamottagare
+                  </label>
+                  <div class="muted small" style="margin-top:6px;">Lämna detta aktivt för normala kunder. Välj separat mottagarnamn bara när fakturan ska gå till annat namn eller annan avdelning.</div>
                 </div>
                 <div class="field">
-                  <label>Attention</label>
+                  <label>Separat fakturamottagare</label>
+                  <input id="custRegBillCompany" placeholder="t.ex. Zenit Design, Ekonomiavdelningen" />
+                </div>
+                <div class="field">
+                  <label>Attention / avdelning / c/o</label>
                   <input id="custRegBillAttention" placeholder="t.ex. Ekonomi / Anna Andersson" />
                 </div>
                 <div class="field" style="grid-column:span 2; min-width:220px;">
@@ -2812,8 +2819,8 @@ Tack!</div>
 (function(){
  
 
-  const APP_VERSION = "1.4.31"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.42";  // user-facing revision
+  const APP_VERSION = "1.4.32"; // bump when adding new data fields
+  const APP_SEMVER = "0.3.43";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -6380,6 +6387,30 @@ cur = {
     return formatCustomerAddressLines(address).join(", ");
   }
 
+  function normalizeCustomerNameKey(value){
+    return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+  }
+
+  function sameCustomerName(a, b){
+    const left = normalizeCustomerNameKey(a);
+    const right = normalizeCustomerNameKey(b);
+    return !!left && !!right && left === right;
+  }
+
+  function dedupeTextLines(lines){
+    const out = [];
+    const seen = new Set();
+    (Array.isArray(lines) ? lines : []).forEach(line => {
+      const value = String(line || "").trim();
+      if (!value) return;
+      const key = normalizeCustomerNameKey(value);
+      if (key && seen.has(key)) return;
+      if (key) seen.add(key);
+      out.push(value);
+    });
+    return out;
+  }
+
   function customerDisplayName(customer){
     const c = customer && typeof customer === "object" ? customer : {};
     return clampText(String(c.name || c.legalName || getCustomerBillingAddress(c).company || getCustomerPrimaryContact(c)?.name || "").trim(), 160);
@@ -6461,6 +6492,38 @@ cur = {
     return clampText(String(getCustomerBillingAddress(c).phone || getCustomerPrimaryContact(c)?.phone || c.phone || "").trim(), 80);
   }
 
+  function getInvoiceRecipientAddressDisplay(invoice, customer, snapshot){
+    const inv = (invoice && typeof invoice === "object") ? invoice : {};
+    const customerRecord = customer && typeof customer === "object" ? customer : null;
+    const snap = snapshot && typeof snapshot === "object" ? snapshot : {};
+    const billing = customerRecord ? getCustomerBillingAddress(customerRecord) : normalizeCustomerAddress({ company: snap.companyName || snap.name || "", addr: snap.addr || "" });
+    const displayName = String(customerRecord?.name || snap.companyName || snap.name || billing.company || "").trim();
+    const billingRecipient = String(billing.company || "").trim();
+    const title = billingRecipient && !sameCustomerName(billingRecipient, displayName)
+      ? billingRecipient
+      : (displayName || billingRecipient || String(customerRecord?.legalName || "").trim() || "(ingen kund)");
+    const legalName = String(customerRecord?.legalName || "").trim();
+    const showLegalName = customerRecord?.showLegalNameOnInvoice === true || inv.showLegalNameOnInvoice === true;
+    const addressLines = customerRecord
+      ? dedupeTextLines([
+          showLegalName && legalName && !sameCustomerName(legalName, title) ? legalName : "",
+          billing.attention ? (/^att:/i.test(String(billing.attention).trim()) ? String(billing.attention).trim() : `Att: ${String(billing.attention).trim()}`) : "",
+          billing.line1,
+          billing.line2,
+          [billing.zip, billing.city].filter(Boolean).join(" ").trim(),
+          billing.country,
+        ])
+      : dedupeTextLines(String(snap.addr || "").trim().split(/\s*,\s*/));
+    return {
+      title,
+      addressLines,
+      addressInline: addressLines.join(", "),
+      orgnr: String(snap.orgnr || customerRecord?.orgnr || "").trim(),
+      email: String(snap.email || customerEffectiveInvoiceEmail(customerRecord) || customerRecord?.email || "").trim(),
+      phone: String(snap.phone || customerEffectivePhone(customerRecord) || customerRecord?.phone || "").trim(),
+    };
+  }
+
   function customerSearchText(customer){
     const c = customer && typeof customer === "object" ? customer : {};
     const billing = getCustomerBillingAddress(c);
@@ -6506,7 +6569,7 @@ cur = {
       id: customerId,
       kind,
       name: displayName,
-      legalName: clampText(String(raw.legalName || displayName).trim(), 160),
+      legalName: clampText(String(raw.legalName || "").trim(), 160),
       orgnr: clampText(String(raw.orgnr || "").trim(), 80),
       vatNo: clampText(String(raw.vatNo || raw.vat || "").trim(), 80),
       email,
@@ -6517,6 +6580,7 @@ cur = {
       defaultCurrency,
       status,
       tags,
+      showLegalNameOnInvoice: raw.showLegalNameOnInvoice === true || raw.billingAddress?.showLegalName === true,
       billingAddress,
       deliveryAddresses,
       contacts,
@@ -12758,6 +12822,7 @@ if (!d.features) d.features = { sruEnabled: false };
   const custRegTags = document.getElementById("custRegTags");
   const custRegWebsite = document.getElementById("custRegWebsite");
   const custRegDefaultCurrency = document.getElementById("custRegDefaultCurrency");
+  const custRegBillUseCompanyName = document.getElementById("custRegBillUseCompanyName");
   const custRegBillCompany = document.getElementById("custRegBillCompany");
   const custRegBillAttention = document.getElementById("custRegBillAttention");
   const custRegBillLine1 = document.getElementById("custRegBillLine1");
@@ -12990,10 +13055,10 @@ if (!d.features) d.features = { sruEnabled: false };
     const company = state.company || {};
     const customer = getInvoiceCustomerRecord(inv);
     const snapshot = getInvoiceCustomerSnapshot(inv);
-    const billingAddress = customer ? getCustomerBillingAddress(customer) : null;
     const contact = resolveInvoiceContactPerson(inv, customer);
     const totals = invoiceTotals(inv);
     const currency = getInvoiceCurrency(inv);
+    const recipient = getInvoiceRecipientAddressDisplay(inv, customer, snapshot);
     const paymentRows = [];
     paymentRows.push(["Betalningsreferens", getInvoicePaymentReference(inv)]);
     if (company.bankgiro) paymentRows.push(["Bankgiro", String(company.bankgiro).trim()]);
@@ -13010,14 +13075,7 @@ if (!d.features) d.features = { sruEnabled: false };
       .some(value => !!String(value || "").trim());
     return {
       snapshot,
-      recipient: {
-        title: String(snapshot.companyName || snapshot.name || "").trim() || "(ingen kund)",
-        addressInline: customer ? formatCustomerAddressSingleLine(billingAddress) : String(snapshot.addr || "").trim(),
-        addressLines: customer ? formatCustomerAddressLines(billingAddress) : (String(snapshot.addr || "").trim() ? wrapPdfText(String(snapshot.addr).trim(), 72) : []),
-        orgnr: String(snapshot.orgnr || "").trim(),
-        email: String(snapshot.email || "").trim(),
-        phone: String(snapshot.phone || "").trim(),
-      },
+      recipient,
       requester: {
         name: String(contact?.name || snapshot.contactName || "").trim(),
         role: String(contact?.role || snapshot.contactRole || "").trim(),
@@ -13870,8 +13928,12 @@ if (!d.features) d.features = { sruEnabled: false };
 
   function buildCustomerFromRegistryEditor(existing){
     const current = existing ? normalizeCustomerRecord(existing, existing.id, { defaultCurrency: state.company?.currency || "SEK" }) : null;
+    const useCompanyNameAsRecipient = !!(custRegBillUseCompanyName && custRegBillUseCompanyName.checked);
+    const companyName = String(custRegName?.value || current?.name || "").trim();
     const billingAddress = normalizeCustomerAddress({
-      company: custRegBillCompany?.value || custRegName?.value || current?.billingAddress?.company || "",
+      company: useCompanyNameAsRecipient
+        ? (companyName || current?.billingAddress?.company || "")
+        : (custRegBillCompany?.value || current?.billingAddress?.company || companyName || ""),
       attention: custRegBillAttention?.value || current?.billingAddress?.attention || "",
       line1: custRegBillLine1?.value || custRegAddr?.value || current?.billingAddress?.line1 || "",
       line2: custRegBillLine2?.value || current?.billingAddress?.line2 || "",
@@ -13902,7 +13964,7 @@ if (!d.features) d.features = { sruEnabled: false };
     return normalizeCustomerRecord({
       ...current,
       kind: String(custRegKind?.value || current?.kind || "company").trim(),
-      name: String(custRegName?.value || current?.name || "").trim(),
+      name: companyName,
       legalName: String(custRegLegalName?.value || current?.legalName || "").trim(),
       orgnr: String(custRegOrgnr?.value || current?.orgnr || "").trim(),
       vatNo: String(custRegVatNo?.value || current?.vatNo || "").trim(),
@@ -13921,6 +13983,22 @@ if (!d.features) d.features = { sruEnabled: false };
       addr: String(custRegAddr?.value || formatCustomerAddressSingleLine(billingAddress)).trim(),
       updatedAt: nowISO(),
     }, current?.id || (custEditId?.value || "").trim() || crypto.randomUUID(), { defaultCurrency: state.company?.currency || "SEK" });
+  }
+
+  function syncCustomerBillingCompanyUi(options){
+    const opts = (options && typeof options === "object") ? options : {};
+    const useCompanyName = !!(custRegBillUseCompanyName && custRegBillUseCompanyName.checked);
+    const companyField = custRegBillCompany ? custRegBillCompany.closest(".field") : null;
+    const companyName = String(custRegName?.value || "").trim();
+    if (custRegBillCompany) {
+      if (useCompanyName) {
+        custRegBillCompany.value = companyName;
+      } else if (opts.prefillDistinct && !String(custRegBillCompany.value || "").trim()) {
+        custRegBillCompany.value = "";
+      }
+      custRegBillCompany.disabled = useCompanyName;
+    }
+    if (companyField) companyField.hidden = useCompanyName;
   }
 
   function openCustomerDialog(){
@@ -14040,6 +14118,7 @@ if (!d.features) d.features = { sruEnabled: false };
     if (custRegTags) custRegTags.value = "";
     if (custRegWebsite) custRegWebsite.value = "";
     if (custRegDefaultCurrency) custRegDefaultCurrency.value = state.company?.currency || "SEK";
+    if (custRegBillUseCompanyName) custRegBillUseCompanyName.checked = true;
     if (custRegBillCompany) custRegBillCompany.value = "";
     if (custRegBillAttention) custRegBillAttention.value = "";
     if (custRegBillLine1) custRegBillLine1.value = "";
@@ -14060,6 +14139,7 @@ if (!d.features) d.features = { sruEnabled: false };
     if (custRegNotes) custRegNotes.value = "";
     customerContactsDraft = [];
     customerDeliveryAddressesDraft = [];
+    syncCustomerBillingCompanyUi();
     renderCustomerContactsEditor();
     renderCustomerDeliveryAddressesEditor();
   }
@@ -14083,6 +14163,7 @@ if (!d.features) d.features = { sruEnabled: false };
     if (custRegTags) custRegTags.value = splitCustomerTags(customer.tags).join(", ");
     if (custRegWebsite) custRegWebsite.value = customer.website || "";
     if (custRegDefaultCurrency) custRegDefaultCurrency.value = customer.defaultCurrency || state.company?.currency || "SEK";
+    if (custRegBillUseCompanyName) custRegBillUseCompanyName.checked = !billing.company || sameCustomerName(billing.company, customer.name);
     if (custRegBillCompany) custRegBillCompany.value = billing.company || "";
     if (custRegBillAttention) custRegBillAttention.value = billing.attention || "";
     if (custRegBillLine1) custRegBillLine1.value = billing.line1 || "";
@@ -14103,6 +14184,7 @@ if (!d.features) d.features = { sruEnabled: false };
     if (custRegNotes) custRegNotes.value = customer.notes || "";
     customerContactsDraft = (customer.contacts || []).map((contact, index) => normalizeCustomerContact(contact, index));
     customerDeliveryAddressesDraft = (customer.deliveryAddresses || []).map((address, index) => normalizeCustomerDeliveryAddress(address, index, customer.name || ""));
+    syncCustomerBillingCompanyUi();
     renderCustomerContactsEditor();
     renderCustomerDeliveryAddressesEditor();
   }
@@ -14200,6 +14282,8 @@ if (!d.features) d.features = { sruEnabled: false };
     if (btnCustSave) btnCustSave.addEventListener("click", (e)=>{ e.preventDefault(); saveCustomerFromRegistry(); });
     if (btnCustRefresh) btnCustRefresh.addEventListener("click", (e)=>{ e.preventDefault(); renderCustomers(); renderCustomerList(); });
     if (custSearch) custSearch.addEventListener("input", ()=> renderCustomers());
+    if (custRegName) custRegName.addEventListener("input", ()=> syncCustomerBillingCompanyUi());
+    if (custRegBillUseCompanyName) custRegBillUseCompanyName.addEventListener("change", ()=> syncCustomerBillingCompanyUi({ prefillDistinct: true }));
     if (btnCustAddContact) btnCustAddContact.addEventListener("click", (e)=>{
       e.preventDefault();
       customerContactsDraft.push(normalizeCustomerContact({ isPrimary: customerContactsDraft.length === 0 }, customerContactsDraft.length));

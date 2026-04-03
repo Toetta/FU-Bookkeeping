@@ -404,12 +404,21 @@
     .modal .actions{ display:flex; justify-content:flex-end; gap:10px; margin-top:12px; flex-wrap:wrap; }
 
     body.quote-workspace-open{ overflow:hidden; }
+    body.quote-workspace-open .sidebar{
+      pointer-events:none;
+      opacity:.58;
+    }
+    body.quote-workspace-open .sidebar .navFlyout{ display:none !important; }
     .quote-grid-list-only{ grid-template-columns: 1fr !important; }
-    #quoteWorkspaceBackdrop{ z-index:9997; }
+    #quoteWorkspaceBackdrop{
+      position:fixed;
+      inset:0;
+      z-index:9996;
+    }
     #quoteWorkspaceCard.quote-workspace-open{
       position:fixed;
       inset:12px;
-      z-index:9999;
+      z-index:9997;
       margin:0;
       padding:0;
       overflow:auto;
@@ -8045,6 +8054,10 @@ if (!d.features) d.features = { sruEnabled: false };
 
   // --- Tab logic (single delegated handler; avoids overlay/propagation edge-cases) ---
   const sidebar = document.querySelector(".sidebar");
+  function isQuoteWorkspaceOverlayActive(){
+    try { return !!document.body && document.body.classList.contains("quote-workspace-open"); }
+    catch { return false; }
+  }
 
   // --- Grouped sidebar (fly-out + accordion on mobile) ---
   const navGroups = Array.from(document.querySelectorAll(".sidebar .navGroup"));
@@ -8099,6 +8112,10 @@ if (!d.features) d.features = { sruEnabled: false };
       if (!gb) return;
 
       gb.addEventListener("click", (e)=>{
+        if (isQuoteWorkspaceOverlayActive()) {
+          e.preventDefault();
+          return;
+        }
         e.preventDefault();
         const isOpen = g.classList.contains("open");
         if (isOpen) closeAllNavGroups();
@@ -8283,6 +8300,10 @@ if (!d.features) d.features = { sruEnabled: false };
 
   if (sidebar){
     sidebar.addEventListener("click", (e)=>{
+      if (isQuoteWorkspaceOverlayActive()) {
+        e.preventDefault();
+        return;
+      }
       const btn = e.target && e.target.closest ? e.target.closest("button.tab[data-tab]") : null;
       if (!btn) return;
       e.preventDefault();
@@ -8291,6 +8312,10 @@ if (!d.features) d.features = { sruEnabled: false };
 
     // Keyboard (Enter/Space) on focused tab buttons
     sidebar.addEventListener("keydown", (e)=>{
+      if (isQuoteWorkspaceOverlayActive()) {
+        e.preventDefault();
+        return;
+      }
       if (e.key !== "Enter" && e.key !== " ") return;
       const btn = e.target && e.target.closest ? e.target.closest("button.tab[data-tab]") : null;
       if (!btn) return;
@@ -10851,6 +10876,16 @@ if (!d.features) d.features = { sruEnabled: false };
   let openOrderDraftId = null;
   let quoteWorkspaceOpen = false;
 
+  function mountQuoteWorkspaceOverlay(){
+    if (!document.body) return;
+    if (quoteWorkspaceBackdrop && quoteWorkspaceBackdrop.parentElement !== document.body) {
+      document.body.appendChild(quoteWorkspaceBackdrop);
+    }
+    if (quoteWorkspaceCard && quoteWorkspaceCard.parentElement !== document.body) {
+      document.body.appendChild(quoteWorkspaceCard);
+    }
+  }
+
   function getActiveOrderForQuote(quoteId){
     const id = String(quoteId || "").trim();
     if (!id) return null;
@@ -10873,6 +10908,14 @@ if (!d.features) d.features = { sruEnabled: false };
 
   function setQuoteWorkspaceOpen(open){
     quoteWorkspaceOpen = !!open;
+    if (quoteWorkspaceOpen) {
+      mountQuoteWorkspaceOverlay();
+      try { closeAllNavGroups(); } catch {}
+      try {
+        const activeEl = document.activeElement;
+        if (activeEl && sidebar && sidebar.contains(activeEl) && typeof activeEl.blur === "function") activeEl.blur();
+      } catch {}
+    }
     try { document.body.classList.toggle("quote-workspace-open", quoteWorkspaceOpen); } catch {}
     if (quoteWorkspaceBackdrop) quoteWorkspaceBackdrop.hidden = !quoteWorkspaceOpen;
     if (quoteWorkspaceCard) {
@@ -10883,6 +10926,7 @@ if (!d.features) d.features = { sruEnabled: false };
   }
 
   function openQuoteWorkspace(){
+    mountQuoteWorkspaceOverlay();
     setQuoteWorkspaceOpen(true);
   }
 

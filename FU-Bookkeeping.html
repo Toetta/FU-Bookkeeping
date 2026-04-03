@@ -1756,7 +1756,7 @@
                     </div>
                     <div class="quote-meta-grid compact">
                       <div class="field">
-                        <label>Kontaktperson</label>
+                        <label>Referensperson / beställare</label>
                         <select id="quoteContactSelect"></select>
                       </div>
                       <div class="field">
@@ -2812,8 +2812,8 @@ Tack!</div>
 (function(){
  
 
-  const APP_VERSION = "1.4.30"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.41";  // user-facing revision
+  const APP_VERSION = "1.4.31"; // bump when adding new data fields
+  const APP_SEMVER = "0.3.42";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -11660,6 +11660,7 @@ if (!d.features) d.features = { sruEnabled: false };
     });
     const activeInvoice = getActiveInvoiceForOrder(o.id);
     const snapshotLines = Array.isArray(o.lines) ? o.lines.slice() : [];
+    const selectedContactSummary = customerContactSummaryLines(o.selectedContactSnapshot).join(" · ");
 
     quoteOrderDraftView.hidden = false;
     quoteOrderDraftTitle.textContent = `Orderutkast ${orderNoValue}`;
@@ -11676,6 +11677,7 @@ if (!d.features) d.features = { sruEnabled: false };
       ["Ordernr", orderNoValue],
       ["Status", String(o.status || "draft").trim() || "draft"],
       ["Kund", String(o.customerName || o.companyName || o.customer?.full_name || o.customer?.company_name || "-").trim() || "-"],
+      ["Beställare / referensperson", selectedContactSummary || "-"],
       ["Offert", `${String(o.quoteId || o.sourceQuoteId || "-").trim() || "-"}${String(o.sourceQuoteNo || "").trim() ? ` / ${String(o.sourceQuoteNo).trim()}` : ""}`],
       ["Skapad", formatOrderstockDateTime(o.createdAt || o.created_at || "")],
       ["Faktura", activeInvoice ? String(activeInvoice.no || activeInvoice.id || "-").trim() || "-" : "Ingen aktiv faktura"],
@@ -12135,7 +12137,7 @@ if (!d.features) d.features = { sruEnabled: false };
         ${quote.orgnr ? `<div class="muted">Org.nr: ${escapeHtml(quote.orgnr)}</div>` : ""}
         ${quote.customerEmail ? `<div class="muted">${escapeHtml(quote.customerEmail)}</div>` : ""}
         ${quote.customerPhone ? `<div class="muted">${escapeHtml(quote.customerPhone)}</div>` : ""}
-        ${contactLines.length ? `<div class="muted" style="margin-top:10px;">Vald kontaktperson</div>${contactLines.map(line => `<div class="muted">${escapeHtml(line)}</div>`).join("")}` : ""}
+        ${contactLines.length ? `<div class="muted" style="margin-top:10px;">Beställare / referensperson</div>${contactLines.map(line => `<div class="muted">${escapeHtml(line)}</div>`).join("")}` : ""}
         ${deliveryLines.length ? `<div class="muted" style="margin-top:10px;">Vald leveransadress</div>${deliveryLines.map(line => `<div class="muted">${escapeHtml(line)}</div>`).join("")}` : ""}
       </div>
 
@@ -13079,10 +13081,14 @@ if (!d.features) d.features = { sruEnabled: false };
   }
 
   function applySelectedCustomerToInvoiceEditor(){
-    if (!invCustomerId) return;
+    if (!invCustomerId) {
+      renderInvoiceContactOptions("", "");
+      return;
+    }
     const customer = state.customers?.[invCustomerId];
     if (!customer) return;
     const normalized = normalizeCustomerRecord(customer, invCustomerId, { defaultCurrency: state.company?.currency || "SEK" });
+    renderInvoiceContactOptions(invCustomerId, invSelectedContactId || "");
     const paymentDays = normalized.invoiceDefaults?.paymentDays;
     if (Number.isFinite(paymentDays) && invDate && invDue) {
       invDue.value = addDays(invDate.value || todayISO(), paymentDays);
@@ -13154,12 +13160,18 @@ if (!d.features) d.features = { sruEnabled: false };
       date,
       due,
       customerId,
+      selectedContactId: String(order.selectedContactSnapshot?.id || "").trim(),
+      selectedContactSnapshot: order.selectedContactSnapshot ? normalizeCustomerContact(order.selectedContactSnapshot, 0) : null,
       customerName: customer.name,
       companyName: customer.name,
       customerAddr: customer.addr,
       customerEmail: customer.email,
       customerPhone: customer.phone,
       customerOrgnr: customer.orgnr,
+      customerContactName: String(order.selectedContactSnapshot?.name || customer.contactName || "").trim(),
+      customerContactRole: String(order.selectedContactSnapshot?.role || customer.contactRole || "").trim(),
+      customerContactEmail: String(order.selectedContactSnapshot?.email || customer.contactEmail || "").trim(),
+      customerContactPhone: String(order.selectedContactSnapshot?.phone || customer.contactPhone || "").trim(),
       orgnr: customer.orgnr,
       currency: String(order.currency || state.company?.currency || "SEK").trim() || "SEK",
       ref,
@@ -13202,11 +13214,13 @@ if (!d.features) d.features = { sruEnabled: false };
   function newInvoice(){
     editingInvoiceId = null;
     invCustomerId = null;
+    invSelectedContactId = "";
     invDate.value = todayISO();
     invDue.value = addDays(invDate.value, (state.company.payDays||30));
     invNo.value = "";
     invRef.value = "";
     invLines = [ { kind:"item", desc:"", qty:"1", price:"", vat:"25" } ];
+    renderInvoiceContactOptions("", "");
     renderInvoiceCustomer();
     renderInvoiceLines();
     updateInvoiceTotals();
@@ -13215,7 +13229,7 @@ if (!d.features) d.features = { sruEnabled: false };
   function renderInvoiceCustomer(){
     if (!invCustomerBox) return;
     const currentInvoice = editingInvoiceId ? ((state.invoices || []).find(x => x && x.id === editingInvoiceId) || null) : null;
-    const draftInvoice = currentInvoice || { customerId: invCustomerId };
+    const draftInvoice = currentInvoice || { customerId: invCustomerId, selectedContactId: invSelectedContactId };
     const display = getInvoiceDocumentDisplayData(draftInvoice);
     const hasRecipient = !!String(display.snapshot.companyName || display.snapshot.name || "").trim();
     if (!invCustomerId && !hasRecipient){
@@ -13368,7 +13382,7 @@ if (!d.features) d.features = { sruEnabled: false };
     const ref = clampText(invRef.value || "");
     const customerRecord = invCustomerId ? normalizeCustomerRecord(state.customers?.[invCustomerId], invCustomerId, { defaultCurrency: state.company?.currency || "SEK" }) : {};
     const billingAddress = getCustomerBillingAddress(customerRecord);
-    const primaryContact = getCustomerPrimaryContact(customerRecord, "invoice");
+    const selectedContact = resolveInvoiceContactPerson({ customerId: invCustomerId, selectedContactId: invSelectedContactId }, customerRecord);
 
     const lines = invLines.map(l => ({
       kind: l.kind,
@@ -13386,14 +13400,18 @@ if (!d.features) d.features = { sruEnabled: false };
       date,
       due,
       customerId: invCustomerId,
-      customerName: String(primaryContact?.name || customerDisplayName(customerRecord) || existing?.customerName || existing?.companyName || "").trim(),
+      selectedContactId: String(invSelectedContactId || "").trim(),
+      selectedContactSnapshot: selectedContact ? normalizeCustomerContact(selectedContact, 0) : null,
+      customerName: String(customerDisplayName(customerRecord) || existing?.customerName || existing?.companyName || "").trim(),
       companyName: String(customerDisplayName(customerRecord) || existing?.companyName || existing?.customerName || "").trim(),
       customerAddr: String(formatCustomerAddressSingleLine(billingAddress) || customerRecord.addr || existing?.customerAddr || "").trim(),
       customerEmail: String(customerEffectiveInvoiceEmail(customerRecord) || existing?.customerEmail || "").trim(),
       customerPhone: String(customerEffectivePhone(customerRecord) || existing?.customerPhone || "").trim(),
       customerOrgnr: String(customerRecord.orgnr || existing?.customerOrgnr || existing?.orgnr || "").trim(),
-      customerContactName: String(primaryContact?.name || existing?.customerContactName || "").trim(),
-      customerContactRole: String(primaryContact?.role || existing?.customerContactRole || "").trim(),
+      customerContactName: String(selectedContact?.name || existing?.customerContactName || "").trim(),
+      customerContactRole: String(selectedContact?.role || existing?.customerContactRole || "").trim(),
+      customerContactEmail: String(selectedContact?.email || existing?.customerContactEmail || "").trim(),
+      customerContactPhone: String(selectedContact?.phone || existing?.customerContactPhone || "").trim(),
       customerCity: String(billingAddress.city || existing?.customerCity || "").trim(),
       customerTheirReference: String(customerRecord.invoiceDefaults?.theirReference || customerRecord.invoiceDefaults?.referenceValue || existing?.customerTheirReference || "").trim(),
       customerOurReference: String(customerRecord.invoiceDefaults?.ourReference || existing?.customerOurReference || "").trim(),
@@ -13519,6 +13537,8 @@ if (!d.features) d.features = { sruEnabled: false };
     invNo.value = inv.no;
     invRef.value = inv.ref || "";
     invCustomerId = inv.customerId || null;
+    invSelectedContactId = String(inv.selectedContactId || inv.selectedContactSnapshot?.id || "").trim();
+    renderInvoiceContactOptions(invCustomerId || "", invSelectedContactId || "");
     invLines = (inv.lines||[]).map(l => ({
       kind: l.kind || "item",
       desc: l.desc || "",
@@ -13947,6 +13967,7 @@ if (!d.features) d.features = { sruEnabled: false };
         if (!b) return;
         if (b.dataset.pick){
           invCustomerId = b.dataset.pick;
+          invSelectedContactId = "";
           applySelectedCustomerToInvoiceEditor();
           renderInvoiceCustomer();
           updateInvoiceTotals();
@@ -13987,6 +14008,7 @@ if (!d.features) d.features = { sruEnabled: false };
     if (!state.customers) state.customers = {};
     state.customers[customer.id] = customer;
     invCustomerId = customer.id;
+    invSelectedContactId = "";
     applySelectedCustomerToInvoiceEditor();
     save();
     renderCustomerList();
@@ -14107,7 +14129,10 @@ if (!d.features) d.features = { sruEnabled: false };
     if (!(await confirmAsync(msg))) return;
 
     delete state.customers[id];
-    if (invCustomerId === id) invCustomerId = null;
+    if (invCustomerId === id) {
+      invCustomerId = null;
+      invSelectedContactId = "";
+    }
     save();
     renderCustomerList();
     renderCustomers();
@@ -14929,11 +14954,12 @@ if (!d.features) d.features = { sruEnabled: false };
  renderInvoiceLines(); updateInvoiceTotals(); });
     if (btnInvAddComment) btnInvAddComment.addEventListener("click", ()=>{ invLines.push({kind:"comment", desc:""}); renderInvoiceLines(); updateInvoiceTotals(); });
     if (btnInvPickCustomer) btnInvPickCustomer.addEventListener("click", openCustomerDialog);
+    if (invContactSelect) invContactSelect.addEventListener("change", ()=>{ applyInvoiceContactSelection(); updateInvoiceTotals(); });
     if (btnInvSave) btnInvSave.addEventListener("click", saveInvoice);
     if (btnInvPrint) btnInvPrint.addEventListener("click", ()=>{
       // print current editor as a "draft" by saving temporarily in memory
       const tmpId = editingInvoiceId || "__draft__";
-      const tmp = { id: tmpId, yearId: invoiceYearId(), no: (invNo.value||"").trim()||"Utkast", date: invDate.value||todayISO(), due: invDue.value||addDays(invDate.value||todayISO(), (state.company.payDays||30)), customerId: invCustomerId, ref: invRef.value||"", lines: invLines.map(l=>({kind:l.kind, desc:l.desc||"", qty:parseMoney(l.qty), price:parseMoney(l.price), vat:parseMoney(l.vat)})) };
+      const tmp = { id: tmpId, yearId: invoiceYearId(), no: (invNo.value||"").trim()||"Utkast", date: invDate.value||todayISO(), due: invDue.value||addDays(invDate.value||todayISO(), (state.company.payDays||30)), customerId: invCustomerId, selectedContactId: invSelectedContactId, selectedContactSnapshot: (()=>{ const customer = getCustomerRecordById(invCustomerId || ""); const contact = resolveInvoiceContactPerson({ customerId: invCustomerId, selectedContactId: invSelectedContactId }, customer); return contact ? normalizeCustomerContact(contact, 0) : null; })(), ref: invRef.value||"", lines: invLines.map(l=>({kind:l.kind, desc:l.desc||"", qty:parseMoney(l.qty), price:parseMoney(l.price), vat:parseMoney(l.vat)})) };
       // temporarily render without storing
       const c = state.customers?.[tmp.customerId];
       if (!c) return showToast("Välj kund först.", 3500);

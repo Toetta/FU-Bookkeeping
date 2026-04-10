@@ -1852,7 +1852,7 @@
                   <summary>Artiklar och tjänster</summary>
                   <div class="quote-section-body">
                     <div class="row" style="justify-content:space-between;">
-                      <div class="muted small">Offertrader med tjänster, produkter och rabatter.</div>
+                      <div class="muted small">Offertrader med tjänster, produkter, frakt och rabatter. Alla radpriser och radbelopp visas exkl. moms.</div>
                       <div class="row">
                         <button class="btn secondary" id="btnQuoteAddLine">+ Rad</button>
                         <button class="btn danger" id="btnQuoteClear">Rensa</button>
@@ -1868,8 +1868,9 @@
                             <th>Beskrivning</th>
                             <th class="right" style="width:80px;">Antal</th>
                             <th style="width:80px;">Enhet</th>
-                            <th class="right" style="width:120px;">A-pris exkl.</th>
+                            <th class="right" style="width:120px;">Á-pris exkl. moms</th>
                             <th class="right" style="width:80px;">Moms %</th>
+                            <th class="right" style="width:140px;">Radbelopp exkl. moms</th>
                             <th style="width:100px;">Konto</th>
                             <th style="width:60px;"></th>
                           </tr>
@@ -1933,6 +1934,7 @@
                     <div id="quoteInternalIndicators" class="row" style="gap:8px; flex-wrap:wrap;" hidden></div>
                     <div class="card" style="padding:10px; border-radius:14px; background:rgba(11,18,32,.90);">
                       <div class="muted small">Summering</div>
+                      <div class="muted small" style="margin-top:4px;">Alla radpriser visas exkl. moms. Moms redovisas separat nedan.</div>
                       <div id="quoteTotalsBox" style="margin-top:8px; font-weight:700;">Summa exkl. moms: 0,00 SEK<br>Moms: 0,00 SEK<br>Totalt inkl. moms: 0,00 SEK</div>
                     </div>
                   </div>
@@ -2002,8 +2004,9 @@
                           <th>Beskrivning</th>
                           <th class="right" style="width:80px;">Antal</th>
                           <th style="width:80px;">Enhet</th>
-                          <th class="right" style="width:120px;">A-pris exkl.</th>
+                          <th class="right" style="width:120px;">Á-pris exkl. moms</th>
                           <th class="right" style="width:80px;">Moms %</th>
+                          <th class="right" style="width:140px;">Radbelopp exkl. moms</th>
                         </tr>
                       </thead>
                       <tbody id="quoteOrderDraftLines"></tbody>
@@ -2829,7 +2832,7 @@ Tack!</div>
  
 
   const APP_VERSION = "1.4.34"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.45";  // user-facing revision
+  const APP_SEMVER = "0.3.46";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -3284,6 +3287,24 @@ Tack!</div>
     return Math.round((Number(value) || 0) * 100) / 100;
   }
 
+  function quoteCurrencyCode(currency){
+    return String(currency || state.company?.currency || "SEK").trim() || "SEK";
+  }
+
+  function formatVatRate(value){
+    const rounded = quoteRound2(value);
+    const text = rounded.toFixed(2).replace(/\.00$/, "").replace(/(\.\d)0$/, "$1").replace(".", ",");
+    return `${text} %`;
+  }
+
+  function formatMoneyExVat(amount, currency){
+    return `${fmtSEK(quoteRound2(amount))} ${quoteCurrencyCode(currency)}`;
+  }
+
+  function formatMoneyIncVat(amount, currency){
+    return `${fmtSEK(quoteRound2(amount))} ${quoteCurrencyCode(currency)}`;
+  }
+
   function normalizeQuoteAppendix(appendix, index){
     const raw = (appendix && typeof appendix === "object") ? appendix : {};
     return {
@@ -3333,26 +3354,57 @@ Tack!</div>
     };
   }
 
-  function quoteLineTotals(line){
-    const ln = normalizeQuoteLine(line, line && line.quoteId, Number(line && line.sortOrder) || 0);
-    const subtotal = quoteRound2(ln.qty * ln.unitPriceExVat);
-    const vat = quoteRound2(subtotal * ((Number(ln.vatRate) || 0) / 100));
-    const total = quoteRound2(subtotal + vat);
-    return { subtotal, vat, total };
+  function quoteLineAmounts(line){
+    const qty = quoteRound2(Number(line?.qty ?? line?.quantity ?? 0) || 0);
+    const unitPriceExVat = quoteRound2(Number(line?.unitPriceExVat ?? line?.unit_price_ex_vat ?? line?.price ?? 0) || 0);
+    const vatRate = quoteRound2(Number(line?.vatRate ?? line?.vat_rate ?? line?.vat ?? 0) || 0);
+    const lineTotalExVat = quoteRound2(qty * unitPriceExVat);
+    const lineVatAmount = quoteRound2(lineTotalExVat * (vatRate / 100));
+    const lineTotalIncVat = quoteRound2(lineTotalExVat + lineVatAmount);
+    return {
+      qty,
+      unitPriceExVat,
+      vatRate,
+      line_total_ex_vat: lineTotalExVat,
+      line_vat_amount: lineVatAmount,
+      line_total_inc_vat: lineTotalIncVat,
+      lineTotalExVat,
+      lineVatAmount,
+      lineTotalIncVat,
+      subtotal: lineTotalExVat,
+      vat: lineVatAmount,
+      total: lineTotalIncVat
+    };
   }
 
-  function quoteTotals(lines){
-    const arr = Array.isArray(lines) ? lines : [];
-    let subtotal = 0;
-    let vat = 0;
-    let total = 0;
+  function quoteLineTotals(line){
+    return quoteLineAmounts(line);
+  }
+
+  function quoteTotals(quoteOrLines){
+    const arr = Array.isArray(quoteOrLines)
+      ? quoteOrLines
+      : (Array.isArray(quoteOrLines?.lines) ? quoteOrLines.lines : []);
+    let subtotalExVat = 0;
+    let vatTotal = 0;
+    let totalIncVat = 0;
     arr.forEach(line => {
-      const sums = quoteLineTotals(line);
-      subtotal += sums.subtotal;
-      vat += sums.vat;
-      total += sums.total;
+      const amounts = quoteLineAmounts(line);
+      subtotalExVat += amounts.lineTotalExVat;
+      vatTotal += amounts.lineVatAmount;
+      totalIncVat += amounts.lineTotalIncVat;
     });
-    return { subtotal: quoteRound2(subtotal), vat: quoteRound2(vat), total: quoteRound2(total) };
+    subtotalExVat = quoteRound2(subtotalExVat);
+    vatTotal = quoteRound2(vatTotal);
+    totalIncVat = quoteRound2(totalIncVat);
+    return {
+      subtotal_ex_vat: subtotalExVat,
+      vat_total: vatTotal,
+      total_inc_vat: totalIncVat,
+      subtotal: subtotalExVat,
+      vat: vatTotal,
+      total: totalIncVat
+    };
   }
 
   function normalizeQuoteRecord(quote, index){
@@ -4613,7 +4665,7 @@ cur = {
     const customer = getCustomerRecordById(q.customerId || "");
     const selectedContact = resolveQuoteSelectedContact(q, customer);
     const selectedDeliveryAddress = resolveQuoteSelectedDeliveryAddress(q, customer);
-    const totals = quoteTotals(q.lines || []);
+    const totals = quoteTotals(q);
     const currency = String(q.currency || company.currency || "SEK").trim() || "SEK";
     const publicSections = quotePublicSections(q);
     const lines = [];
@@ -4665,22 +4717,19 @@ cur = {
 
     const quoteLines = Array.isArray(q.lines) ? q.lines.slice().sort((a,b)=> Number(a?.sortOrder || 0) - Number(b?.sortOrder || 0)) : [];
     quoteLines.forEach((ln, idx) => {
-      const qty = Number(ln?.qty || 0);
-      const price = Number(ln?.unitPriceExVat || 0);
-      const vatRate = Number(ln?.vatRate || 0);
-      const sums = quoteLineTotals(ln);
+      const amounts = quoteLineAmounts(ln);
       const title = String(ln?.title || "").trim() || "(utan titel)";
       lines.push(`Rad ${idx + 1}: ${title}`);
       if (ln?.description) wrapPdfText(String(ln.description), 68).forEach(part => lines.push(`  ${part}`));
       lines.push(`  Typ ${String(ln?.lineType || "").trim() || "service_hourly"}  Kategori ${String(ln?.category || "").trim() || "other"}`);
-      lines.push(`  Antal ${qty} ${String(ln?.unit || "").trim() || quoteDefaultUnit(ln?.lineType)}  A-pris ${fmtSEK(price)}  Moms ${vatRate}%  Belopp ${fmtSEK(sums.total)} ${currency}`);
+      lines.push(`  Antal ${String(amounts.qty).replace(".", ",")} ${String(ln?.unit || "").trim() || quoteDefaultUnit(ln?.lineType)}  Á-pris exkl. moms ${formatMoneyExVat(amounts.unitPriceExVat, currency)}  Moms ${formatVatRate(amounts.vatRate)}  Radbelopp exkl. moms ${formatMoneyExVat(amounts.lineTotalExVat, currency)}`);
       if (ln?.accountSuggestion) lines.push(`  Konto ${String(ln.accountSuggestion).trim()}`);
     });
 
     lines.push("");
-    lines.push(`Summa exkl. moms: ${fmtSEK(totals.subtotal)} ${currency}`);
-    lines.push(`Moms: ${fmtSEK(totals.vat)} ${currency}`);
-    lines.push(`Totalt inkl. moms: ${fmtSEK(totals.total)} ${currency}`);
+    lines.push(`Summa exkl. moms: ${formatMoneyExVat(totals.subtotal_ex_vat, currency)}`);
+    lines.push(`Moms: ${formatMoneyExVat(totals.vat_total, currency)}`);
+    lines.push(`Totalt inkl. moms: ${formatMoneyIncVat(totals.total_inc_vat, currency)}`);
 
     return buildMinimalPdfBlob(lines);
   }
@@ -4692,8 +4741,7 @@ cur = {
     const company = state.company || {};
     const orderLines = Array.isArray(o.lines) ? o.lines.slice().sort((a,b)=> Number(a?.sortOrder || 0) - Number(b?.sortOrder || 0)) : [];
     const currency = String(o.currency || company.currency || "SEK").trim() || "SEK";
-    let subtotal = 0;
-    let vat = 0;
+    const totals = quoteTotals(orderLines);
     const lines = [];
 
     const orderRef = String(o.orderNo || o.order_number || o.sourceQuoteNo || o.id || "").trim() || "(utan nummer)";
@@ -4723,27 +4771,17 @@ cur = {
     lines.push("RADER");
 
     orderLines.forEach((ln, idx) => {
-      const qty = Number(ln?.qty || 0);
-      const price = Number(ln?.unitPriceExVat ?? ln?.unit_price_ex_vat ?? 0);
-      const vatRate = Number(ln?.vatRate ?? ln?.vat_rate ?? 0);
-      const net = quoteRound2(qty * price);
-      const lineVat = quoteRound2(net * (vatRate / 100));
-      const gross = quoteRound2(net + lineVat);
-      subtotal += net;
-      vat += lineVat;
+      const amounts = quoteLineAmounts(ln);
       const title = String(ln?.title || ln?.description || "Rad").trim() || "Rad";
       lines.push(`Rad ${idx + 1}: ${title}`);
       if (ln?.description) wrapPdfText(String(ln.description), 68).forEach(part => lines.push(`  ${part}`));
-      lines.push(`  Antal ${qty} ${String(ln?.unit || "").trim() || quoteDefaultUnit(ln?.lineType)}  A-pris ${fmtSEK(price)}  Moms ${vatRate}%  Belopp ${fmtSEK(gross)} ${currency}`);
+      lines.push(`  Antal ${String(amounts.qty).replace(".", ",")} ${String(ln?.unit || "").trim() || quoteDefaultUnit(ln?.lineType)}  Á-pris exkl. moms ${formatMoneyExVat(amounts.unitPriceExVat, currency)}  Moms ${formatVatRate(amounts.vatRate)}  Radbelopp exkl. moms ${formatMoneyExVat(amounts.lineTotalExVat, currency)}`);
     });
 
-    subtotal = quoteRound2(subtotal);
-    vat = quoteRound2(vat);
-    const total = quoteRound2(subtotal + vat);
     lines.push("");
-    lines.push(`Summa exkl. moms: ${fmtSEK(subtotal)} ${currency}`);
-    lines.push(`Moms: ${fmtSEK(vat)} ${currency}`);
-    lines.push(`Totalt inkl. moms: ${fmtSEK(total)} ${currency}`);
+    lines.push(`Summa exkl. moms: ${formatMoneyExVat(totals.subtotal_ex_vat, currency)}`);
+    lines.push(`Moms: ${formatMoneyExVat(totals.vat_total, currency)}`);
+    lines.push(`Totalt inkl. moms: ${formatMoneyIncVat(totals.total_inc_vat, currency)}`);
     if (o.quoteSnapshot?.notes) {
       lines.push("");
       wrapPdfText(String(o.quoteSnapshot.notes), 72).forEach((part, idx) => lines.push(idx === 0 ? `Notering: ${part}` : `  ${part}`));
@@ -11794,19 +11832,18 @@ if (!d.features) d.features = { sruEnabled: false };
     `).join("");
 
     quoteOrderDraftLines.innerHTML = snapshotLines.map(line => {
-      const qty = quoteRound2(Number(line?.qty) || 0);
-      const unitPrice = quoteRound2(Number(line?.unitPriceExVat ?? line?.unit_price_ex_vat) || 0);
-      const vatRate = quoteRound2(Number(line?.vatRate ?? line?.vat_rate) || 0);
+      const amounts = quoteLineAmounts(line);
       return `
         <tr>
           <td>${escapeHtml(String(line?.lineType || "-"))}</td>
           <td>${escapeHtml(String(line?.category || "-"))}</td>
           <td>${escapeHtml(String(line?.title || ""))}</td>
           <td>${escapeHtml(String(line?.description || ""))}</td>
-          <td class="right">${escapeHtml(String(qty).replace(".", ","))}</td>
+          <td class="right">${escapeHtml(String(amounts.qty).replace(".", ","))}</td>
           <td>${escapeHtml(String(line?.unit || ""))}</td>
-          <td class="right">${fmtSEK(unitPrice)}</td>
-          <td class="right">${escapeHtml(String(vatRate).replace(".", ","))}</td>
+          <td class="right">${fmtSEK(amounts.unitPriceExVat)}</td>
+          <td class="right">${escapeHtml(formatVatRate(amounts.vatRate))}</td>
+          <td class="right">${fmtSEK(amounts.lineTotalExVat)}</td>
         </tr>
       `;
     }).join("");
@@ -12188,7 +12225,7 @@ if (!d.features) d.features = { sruEnabled: false };
   }
 
   function renderQuotePrintHtml(quote){
-    const totals = quoteTotals(quote.lines || []);
+    const totals = quoteTotals(quote);
     const currency = escapeHtml(quote.currency || state.company?.currency || "SEK");
     const publicSections = quotePublicSections(quote);
     const customer = getCustomerRecordById(quote.customerId || "");
@@ -12197,7 +12234,7 @@ if (!d.features) d.features = { sruEnabled: false };
     const contactLines = customerContactSummaryLines(selectedContact);
     const deliveryLines = customerDeliveryAddressSummaryLines(selectedDeliveryAddress, quote.companyName || quote.customerName || "");
     const rows = (quote.lines || []).map((line, idx) => {
-      const sums = quoteLineTotals(line);
+      const amounts = quoteLineAmounts(line);
       const title = String(line.title || line.description || "Rad").trim() || "Rad";
       const desc = String(line.description || "").trim();
       return `<tr>
@@ -12206,21 +12243,23 @@ if (!d.features) d.features = { sruEnabled: false };
           ${desc && desc !== title ? `<div class="muted">${escapeHtml(desc)}</div>` : ""}
           <div class="muted">${escapeHtml(line.lineType || "")} · ${escapeHtml(line.category || "")}</div>
         </td>
-        <td style="text-align:right;">${escapeHtml(String(line.qty ?? 0).replace(".", ","))}</td>
+        <td style="text-align:right;">${escapeHtml(String(amounts.qty).replace(".", ","))}</td>
         <td style="text-align:right;">${escapeHtml(line.unit || "")}</td>
-        <td style="text-align:right;">${fmtSEK(Number(line.unitPriceExVat) || 0)}</td>
-        <td style="text-align:right;">${fmtSEK(sums.total)}</td>
+        <td style="text-align:right;">${fmtSEK(amounts.unitPriceExVat)}</td>
+        <td style="text-align:right;">${escapeHtml(formatVatRate(amounts.vatRate))}</td>
+        <td style="text-align:right;">${fmtSEK(amounts.lineTotalExVat)}</td>
       </tr>`;
     }).join("");
 
     return `
       <style>
         .quote-print-table{ table-layout:fixed; }
-        .quote-print-table col.col-desc{ width:54%; }
-        .quote-print-table col.col-qty{ width:10%; }
-        .quote-print-table col.col-unit{ width:10%; }
-        .quote-print-table col.col-price{ width:13%; }
-        .quote-print-table col.col-total{ width:13%; }
+        .quote-print-table col.col-desc{ width:42%; }
+        .quote-print-table col.col-qty{ width:8%; }
+        .quote-print-table col.col-unit{ width:8%; }
+        .quote-print-table col.col-price{ width:14%; }
+        .quote-print-table col.col-vat{ width:10%; }
+        .quote-print-table col.col-total{ width:18%; }
         .quote-print-table th,
         .quote-print-table td{ padding:8px 10px; }
         .quote-print-table th{ white-space:nowrap; }
@@ -12273,9 +12312,10 @@ if (!d.features) d.features = { sruEnabled: false };
             <col class="col-qty">
             <col class="col-unit">
             <col class="col-price">
+            <col class="col-vat">
             <col class="col-total">
           </colgroup>
-          <thead><tr><th>Rad</th><th class="num">Antal</th><th class="num">Enhet</th><th class="num">A-pris exkl.</th><th class="num">Belopp</th></tr></thead>
+          <thead><tr><th>Rad</th><th class="num">Antal</th><th class="num">Enhet</th><th class="num">Á-pris exkl. moms</th><th class="num">Moms %</th><th class="num">Radbelopp exkl. moms</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>
@@ -12287,9 +12327,9 @@ if (!d.features) d.features = { sruEnabled: false };
       ${publicSections.attachments.length ? `<div class="card"><div style="font-weight:800; margin-bottom:6px;">Bilagor</div>${publicSections.attachments.map((attachment, idx) => `<div class="muted">Bilaga ${idx + 1}: ${escapeHtml(attachment.title || attachment.fileName || "Bilaga")}</div>`).join("")}</div>` : ""}
 
       <div class="card quote-print-totals">
-        <div class="sum-row"><span>Summa exkl. moms</span><span>${fmtSEK(totals.subtotal)} ${currency}</span></div>
-        <div class="sum-row"><span>Moms</span><span>${fmtSEK(totals.vat)} ${currency}</span></div>
-        <div class="sum-row" style="font-weight:900; font-size:18px;"><span>Totalt inkl. moms</span><span>${fmtSEK(totals.total)} ${currency}</span></div>
+        <div class="sum-row"><span>Summa exkl. moms</span><span>${escapeHtml(formatMoneyExVat(totals.subtotal_ex_vat, currency))}</span></div>
+        <div class="sum-row"><span>Moms</span><span>${escapeHtml(formatMoneyExVat(totals.vat_total, currency))}</span></div>
+        <div class="sum-row" style="font-weight:900; font-size:18px;"><span>Totalt inkl. moms</span><span>${escapeHtml(formatMoneyIncVat(totals.total_inc_vat, currency))}</span></div>
       </div>
     `;
   }
@@ -12411,9 +12451,9 @@ if (!d.features) d.features = { sruEnabled: false };
 
   function updateQuoteTotals(){
     const totals = quoteTotals(quoteLines);
-    const currency = String((quoteCurrency && quoteCurrency.value) || state.company?.currency || "SEK").trim() || "SEK";
+    const currency = quoteCurrencyCode((quoteCurrency && quoteCurrency.value) || state.company?.currency || "SEK");
     if (quoteTotalsBox){
-      quoteTotalsBox.innerHTML = `Summa exkl. moms: ${fmtSEK(totals.subtotal)} ${escapeHtml(currency)}<br>Moms: ${fmtSEK(totals.vat)} ${escapeHtml(currency)}<br>Totalt inkl. moms: ${fmtSEK(totals.total)} ${escapeHtml(currency)}`;
+      quoteTotalsBox.innerHTML = `Summa exkl. moms: ${escapeHtml(formatMoneyExVat(totals.subtotal_ex_vat, currency))}<br>Moms: ${escapeHtml(formatMoneyExVat(totals.vat_total, currency))}<br>Totalt inkl. moms: ${escapeHtml(formatMoneyIncVat(totals.total_inc_vat, currency))}`;
     }
     applyQuoteEditorLock();
   }
@@ -12423,6 +12463,7 @@ if (!d.features) d.features = { sruEnabled: false };
     const locked = isQuoteEditorLocked();
     quoteLinesTbody.innerHTML = "";
     quoteLines.forEach((line, idx) => {
+      const amounts = quoteLineAmounts(line);
       const tr = document.createElement("tr");
 
       const tdType = document.createElement("td");
@@ -12509,6 +12550,9 @@ if (!d.features) d.features = { sruEnabled: false };
       inpVat.addEventListener("input", ()=>{ line.vatRate = quoteRound2(parseMoney(inpVat.value)); updateQuoteTotals(); });
       tdVat.appendChild(inpVat);
 
+      const tdLineTotal = document.createElement("td"); tdLineTotal.className = "right";
+      tdLineTotal.textContent = fmtSEK(amounts.lineTotalExVat);
+
       const tdAccount = document.createElement("td");
       const inpAccount = document.createElement("input");
       inpAccount.value = line.accountSuggestion || "";
@@ -12537,6 +12581,7 @@ if (!d.features) d.features = { sruEnabled: false };
       tr.appendChild(tdUnit);
       tr.appendChild(tdPrice);
       tr.appendChild(tdVat);
+      tr.appendChild(tdLineTotal);
       tr.appendChild(tdAccount);
       tr.appendChild(tdX);
       quoteLinesTbody.appendChild(tr);
@@ -12759,7 +12804,7 @@ if (!d.features) d.features = { sruEnabled: false };
     }
 
     list.forEach(quote => {
-      const totals = quoteTotals(quote.lines || []);
+      const totals = quoteTotals(quote);
       const badge = renderQuoteStatusBadge(quote.status || "draft");
       const div = document.createElement("div");
       div.className = "item";
@@ -12767,7 +12812,7 @@ if (!d.features) d.features = { sruEnabled: false };
         <div class="top">
           <div>
             <div class="title">Offert #${escapeHtml(quote.quoteNo || "(utan nr)")} · ${escapeHtml(quote.date || "")} · ${escapeHtml(quote.companyName || quote.customerName || "(kund)")}</div>
-            <div class="meta">${badge} · Giltig t.o.m. ${escapeHtml(quote.expiresAt || "")} · Totalt ${fmtSEK(totals.total)} ${escapeHtml(quote.currency || state.company?.currency || "SEK")}</div>
+            <div class="meta">${badge} · Giltig t.o.m. ${escapeHtml(quote.expiresAt || "")} · Totalt inkl. moms ${fmtSEK(totals.total_inc_vat)} ${escapeHtml(quote.currency || state.company?.currency || "SEK")}</div>
           </div>
           <div class="row">
             <button class="btn secondary" data-act="edit" data-id="${escapeAttr(quote.id)}">Öppna</button>

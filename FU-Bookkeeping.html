@@ -1852,7 +1852,7 @@
                   <summary>Artiklar och tjänster</summary>
                   <div class="quote-section-body">
                     <div class="row" style="justify-content:space-between;">
-                      <div class="muted small">Offertrader med tjänster, produkter, frakt och rabatter. Alla radpriser och radbelopp visas exkl. moms.</div>
+                      <div class="muted small">Offertrader med tjänster, produkter, frakt och rabatter. Alla radpriser lagras exkl. moms, och varje rad visar exkl. moms, momsbelopp och inkl. moms.</div>
                       <div class="row">
                         <button class="btn secondary" id="btnQuoteAddLine">+ Rad</button>
                         <button class="btn danger" id="btnQuoteClear">Rensa</button>
@@ -1871,6 +1871,8 @@
                             <th class="right" style="width:120px;">Á-pris exkl. moms</th>
                             <th class="right" style="width:80px;">Moms %</th>
                             <th class="right" style="width:140px;">Radbelopp exkl. moms</th>
+                            <th class="right" style="width:140px;">Momsbelopp</th>
+                            <th class="right" style="width:140px;">Radbelopp inkl. moms</th>
                             <th style="width:100px;">Konto</th>
                             <th style="width:60px;"></th>
                           </tr>
@@ -1934,7 +1936,7 @@
                     <div id="quoteInternalIndicators" class="row" style="gap:8px; flex-wrap:wrap;" hidden></div>
                     <div class="card" style="padding:10px; border-radius:14px; background:rgba(11,18,32,.90);">
                       <div class="muted small">Summering</div>
-                      <div class="muted small" style="margin-top:4px;">Alla radpriser visas exkl. moms. Moms redovisas separat nedan.</div>
+                      <div class="muted small" style="margin-top:4px;">Alla radpriser lagras exkl. moms. Varje rad räknas som exkl. moms + momsbelopp = inkl. moms.</div>
                       <div id="quoteTotalsBox" style="margin-top:8px; font-weight:700;">Summa exkl. moms: 0,00 SEK<br>Moms: 0,00 SEK<br>Totalt inkl. moms: 0,00 SEK</div>
                     </div>
                   </div>
@@ -2007,6 +2009,8 @@
                           <th class="right" style="width:120px;">Á-pris exkl. moms</th>
                           <th class="right" style="width:80px;">Moms %</th>
                           <th class="right" style="width:140px;">Radbelopp exkl. moms</th>
+                          <th class="right" style="width:140px;">Momsbelopp</th>
+                          <th class="right" style="width:140px;">Radbelopp inkl. moms</th>
                         </tr>
                       </thead>
                       <tbody id="quoteOrderDraftLines"></tbody>
@@ -3365,6 +3369,8 @@ Tack!</div>
       qty,
       unitPriceExVat,
       vatRate,
+      unit_price_ex_vat: unitPriceExVat,
+      vat_rate: vatRate,
       line_total_ex_vat: lineTotalExVat,
       line_vat_amount: lineVatAmount,
       line_total_inc_vat: lineTotalIncVat,
@@ -4722,7 +4728,8 @@ cur = {
       lines.push(`Rad ${idx + 1}: ${title}`);
       if (ln?.description) wrapPdfText(String(ln.description), 68).forEach(part => lines.push(`  ${part}`));
       lines.push(`  Typ ${String(ln?.lineType || "").trim() || "service_hourly"}  Kategori ${String(ln?.category || "").trim() || "other"}`);
-      lines.push(`  Antal ${String(amounts.qty).replace(".", ",")} ${String(ln?.unit || "").trim() || quoteDefaultUnit(ln?.lineType)}  Á-pris exkl. moms ${formatMoneyExVat(amounts.unitPriceExVat, currency)}  Moms ${formatVatRate(amounts.vatRate)}  Radbelopp exkl. moms ${formatMoneyExVat(amounts.lineTotalExVat, currency)}`);
+      lines.push(`  Antal ${String(amounts.qty).replace(".", ",")} ${String(ln?.unit || "").trim() || quoteDefaultUnit(ln?.lineType)}  Á-pris exkl. moms ${formatMoneyExVat(amounts.unitPriceExVat, currency)}  Moms ${formatVatRate(amounts.vatRate)}`);
+      lines.push(`  Radbelopp exkl. moms ${formatMoneyExVat(amounts.lineTotalExVat, currency)}  Momsbelopp ${formatMoneyExVat(amounts.lineVatAmount, currency)}  Radbelopp inkl. moms ${formatMoneyIncVat(amounts.lineTotalIncVat, currency)}`);
       if (ln?.accountSuggestion) lines.push(`  Konto ${String(ln.accountSuggestion).trim()}`);
     });
 
@@ -4775,7 +4782,8 @@ cur = {
       const title = String(ln?.title || ln?.description || "Rad").trim() || "Rad";
       lines.push(`Rad ${idx + 1}: ${title}`);
       if (ln?.description) wrapPdfText(String(ln.description), 68).forEach(part => lines.push(`  ${part}`));
-      lines.push(`  Antal ${String(amounts.qty).replace(".", ",")} ${String(ln?.unit || "").trim() || quoteDefaultUnit(ln?.lineType)}  Á-pris exkl. moms ${formatMoneyExVat(amounts.unitPriceExVat, currency)}  Moms ${formatVatRate(amounts.vatRate)}  Radbelopp exkl. moms ${formatMoneyExVat(amounts.lineTotalExVat, currency)}`);
+      lines.push(`  Antal ${String(amounts.qty).replace(".", ",")} ${String(ln?.unit || "").trim() || quoteDefaultUnit(ln?.lineType)}  Á-pris exkl. moms ${formatMoneyExVat(amounts.unitPriceExVat, currency)}  Moms ${formatVatRate(amounts.vatRate)}`);
+      lines.push(`  Radbelopp exkl. moms ${formatMoneyExVat(amounts.lineTotalExVat, currency)}  Momsbelopp ${formatMoneyExVat(amounts.lineVatAmount, currency)}  Radbelopp inkl. moms ${formatMoneyIncVat(amounts.lineTotalIncVat, currency)}`);
     });
 
     lines.push("");
@@ -11844,6 +11852,8 @@ if (!d.features) d.features = { sruEnabled: false };
           <td class="right">${fmtSEK(amounts.unitPriceExVat)}</td>
           <td class="right">${escapeHtml(formatVatRate(amounts.vatRate))}</td>
           <td class="right">${fmtSEK(amounts.lineTotalExVat)}</td>
+          <td class="right">${fmtSEK(amounts.lineVatAmount)}</td>
+          <td class="right">${fmtSEK(amounts.lineTotalIncVat)}</td>
         </tr>
       `;
     }).join("");
@@ -12248,18 +12258,22 @@ if (!d.features) d.features = { sruEnabled: false };
         <td style="text-align:right;">${fmtSEK(amounts.unitPriceExVat)}</td>
         <td style="text-align:right;">${escapeHtml(formatVatRate(amounts.vatRate))}</td>
         <td style="text-align:right;">${fmtSEK(amounts.lineTotalExVat)}</td>
+        <td style="text-align:right;">${fmtSEK(amounts.lineVatAmount)}</td>
+        <td style="text-align:right;">${fmtSEK(amounts.lineTotalIncVat)}</td>
       </tr>`;
     }).join("");
 
     return `
       <style>
         .quote-print-table{ table-layout:fixed; }
-        .quote-print-table col.col-desc{ width:42%; }
+        .quote-print-table col.col-desc{ width:28%; }
         .quote-print-table col.col-qty{ width:8%; }
         .quote-print-table col.col-unit{ width:8%; }
-        .quote-print-table col.col-price{ width:14%; }
-        .quote-print-table col.col-vat{ width:10%; }
-        .quote-print-table col.col-total{ width:18%; }
+        .quote-print-table col.col-price{ width:12%; }
+        .quote-print-table col.col-vat{ width:8%; }
+        .quote-print-table col.col-total-ex{ width:12%; }
+        .quote-print-table col.col-vat-amount{ width:12%; }
+        .quote-print-table col.col-total-inc{ width:12%; }
         .quote-print-table th,
         .quote-print-table td{ padding:8px 10px; }
         .quote-print-table th{ white-space:nowrap; }
@@ -12305,7 +12319,7 @@ if (!d.features) d.features = { sruEnabled: false };
         ${deliveryLines.length ? `<div class="muted" style="margin-top:10px;">Vald leveransadress</div>${deliveryLines.map(line => `<div class="muted">${escapeHtml(line)}</div>`).join("")}` : ""}
       </div>
 
-      <div class="card">
+      <div class="card" style="overflow:auto;">
         <table class="quote-print-table">
           <colgroup>
             <col class="col-desc">
@@ -12313,9 +12327,11 @@ if (!d.features) d.features = { sruEnabled: false };
             <col class="col-unit">
             <col class="col-price">
             <col class="col-vat">
-            <col class="col-total">
+            <col class="col-total-ex">
+            <col class="col-vat-amount">
+            <col class="col-total-inc">
           </colgroup>
-          <thead><tr><th>Rad</th><th class="num">Antal</th><th class="num">Enhet</th><th class="num">Á-pris exkl. moms</th><th class="num">Moms %</th><th class="num">Radbelopp exkl. moms</th></tr></thead>
+          <thead><tr><th>Rad</th><th class="num">Antal</th><th class="num">Enhet</th><th class="num">Á-pris exkl. moms</th><th class="num">Moms %</th><th class="num">Radbelopp exkl. moms</th><th class="num">Momsbelopp</th><th class="num">Radbelopp inkl. moms</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>
@@ -12553,6 +12569,12 @@ if (!d.features) d.features = { sruEnabled: false };
       const tdLineTotal = document.createElement("td"); tdLineTotal.className = "right";
       tdLineTotal.textContent = fmtSEK(amounts.lineTotalExVat);
 
+      const tdVatAmount = document.createElement("td"); tdVatAmount.className = "right";
+      tdVatAmount.textContent = fmtSEK(amounts.lineVatAmount);
+
+      const tdLineTotalInc = document.createElement("td"); tdLineTotalInc.className = "right";
+      tdLineTotalInc.textContent = fmtSEK(amounts.lineTotalIncVat);
+
       const tdAccount = document.createElement("td");
       const inpAccount = document.createElement("input");
       inpAccount.value = line.accountSuggestion || "";
@@ -12582,6 +12604,8 @@ if (!d.features) d.features = { sruEnabled: false };
       tr.appendChild(tdPrice);
       tr.appendChild(tdVat);
       tr.appendChild(tdLineTotal);
+      tr.appendChild(tdVatAmount);
+      tr.appendChild(tdLineTotalInc);
       tr.appendChild(tdAccount);
       tr.appendChild(tdX);
       quoteLinesTbody.appendChild(tr);

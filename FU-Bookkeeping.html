@@ -1760,7 +1760,10 @@
                   <div class="quote-section-body">
                     <div class="field">
                       <label>Kundregister</label>
-                      <select id="quoteCustomerSelect"></select>
+                      <div class="row" style="gap:8px; align-items:center;">
+                        <select id="quoteCustomerSelect"></select>
+                        <button class="btn secondary" id="btnQuoteAddCustomer" type="button">Ny kund</button>
+                      </div>
                     </div>
                     <div class="quote-meta-grid compact">
                       <div class="field">
@@ -2836,7 +2839,7 @@ Tack!</div>
  
 
   const APP_VERSION = "1.4.34"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.46";  // user-facing revision
+  const APP_SEMVER = "0.3.47";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -11498,6 +11501,7 @@ if (!d.features) d.features = { sruEnabled: false };
   const quoteVatScheme = document.getElementById("quoteVatScheme");
   const quoteRef = document.getElementById("quoteRef");
   const quoteCustomerSelect = document.getElementById("quoteCustomerSelect");
+  const btnQuoteAddCustomer = document.getElementById("btnQuoteAddCustomer");
   const quoteSource = document.getElementById("quoteSource");
   const quoteIntroText = document.getElementById("quoteIntroText");
   const quoteScopeText = document.getElementById("quoteScopeText");
@@ -12878,6 +12882,7 @@ if (!d.features) d.features = { sruEnabled: false };
     if (btnQuoteRefresh) btnQuoteRefresh.addEventListener("click", (e)=>{ e.preventDefault(); renderQuotes(); });
     if (quoteYearSelect) quoteYearSelect.addEventListener("change", renderQuotes);
     if (quoteCustomerSelect) quoteCustomerSelect.addEventListener("change", ()=>{ applyQuoteCustomerSelection(); renderQuotes(); });
+    if (btnQuoteAddCustomer) btnQuoteAddCustomer.addEventListener("click", (e)=>{ e.preventDefault(); openCustomerDialog("quote"); });
     if (quoteContactSelect) quoteContactSelect.addEventListener("change", ()=>{ applyQuoteContactSelection(); updateQuoteTotals(); });
     if (quoteDeliveryAddressSelect) quoteDeliveryAddressSelect.addEventListener("change", updateQuoteTotals);
     if (quoteStatus) quoteStatus.addEventListener("change", ()=>{
@@ -12990,6 +12995,7 @@ if (!d.features) d.features = { sruEnabled: false };
   const btnCustRefresh = document.getElementById("btnCustRefresh");
   let customerContactsDraft = [];
   let customerDeliveryAddressesDraft = [];
+  let customerPickerTarget = "invoice";
 
   // Supplier registry (tab)
   const supEditId = document.getElementById("supEditId");
@@ -14484,8 +14490,26 @@ if (!d.features) d.features = { sruEnabled: false };
     if (companyField) companyField.hidden = useCompanyName;
   }
 
-  function openCustomerDialog(){
+  function applyPickedCustomerToActiveEditor(customerId){
+    const id = String(customerId || "").trim();
+    if (!id) return;
+    if (customerPickerTarget === "quote") {
+      renderQuoteCustomerOptions(id);
+      if (quoteCustomerSelect) quoteCustomerSelect.value = id;
+      applyQuoteCustomerSelection();
+      renderQuotes();
+      return;
+    }
+    invCustomerId = id;
+    invSelectedContactId = "";
+    applySelectedCustomerToInvoiceEditor();
+    renderInvoiceCustomer();
+    updateInvoiceTotals();
+  }
+
+  function openCustomerDialog(target){
     if (!customerDialog) return;
+    customerPickerTarget = String(target || "invoice").trim() || "invoice";
     if (custName) custName.value = "";
     if (custPrimaryContactName) custPrimaryContactName.value = "";
     if (custPrimaryContactRole) custPrimaryContactRole.value = "";
@@ -14533,11 +14557,7 @@ if (!d.features) d.features = { sruEnabled: false };
         const b = e.target.closest("button");
         if (!b) return;
         if (b.dataset.pick){
-          invCustomerId = b.dataset.pick;
-          invSelectedContactId = "";
-          applySelectedCustomerToInvoiceEditor();
-          renderInvoiceCustomer();
-          updateInvoiceTotals();
+          applyPickedCustomerToActiveEditor(b.dataset.pick);
           closeCustomerDialog();
         }
         if (b.dataset.del){
@@ -14574,14 +14594,11 @@ if (!d.features) d.features = { sruEnabled: false };
     }, crypto.randomUUID(), { defaultCurrency: state.company?.currency || "SEK" });
     if (!state.customers) state.customers = {};
     state.customers[customer.id] = customer;
-    invCustomerId = customer.id;
-    invSelectedContactId = "";
-    applySelectedCustomerToInvoiceEditor();
     save();
     renderCustomerList();
     renderCustomers();
-    renderInvoiceCustomer();
-    updateInvoiceTotals();
+    renderQuoteCustomerOptions(quoteCustomerSelect?.value || "");
+    applyPickedCustomerToActiveEditor(customer.id);
     closeCustomerDialog();
   }
 
@@ -15526,7 +15543,7 @@ if (!d.features) d.features = { sruEnabled: false };
     if (btnInvAddItem) btnInvAddItem.addEventListener("click", ()=>{ invLines.push({ kind: "item", desc: "", qty: "1", price: "", vat: "25" });
  renderInvoiceLines(); updateInvoiceTotals(); });
     if (btnInvAddComment) btnInvAddComment.addEventListener("click", ()=>{ invLines.push({kind:"comment", desc:""}); renderInvoiceLines(); updateInvoiceTotals(); });
-    if (btnInvPickCustomer) btnInvPickCustomer.addEventListener("click", openCustomerDialog);
+    if (btnInvPickCustomer) btnInvPickCustomer.addEventListener("click", ()=> openCustomerDialog("invoice"));
     if (invContactSelect) invContactSelect.addEventListener("change", ()=>{ applyInvoiceContactSelection(); updateInvoiceTotals(); });
     if (btnInvSave) btnInvSave.addEventListener("click", saveInvoice);
     if (btnInvPrint) btnInvPrint.addEventListener("click", ()=>{

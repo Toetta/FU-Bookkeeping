@@ -2657,7 +2657,9 @@ Tack!</div>
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="appPromptTitle" aria-describedby="appPromptMessage">
     <div id="appPromptTitle" style="font-weight:800; margin-bottom:6px;">Ange orsak</div>
     <div id="appPromptMessage" class="muted small"></div>
+    <div id="appPromptHelp" class="muted small" style="margin-top:10px; white-space:pre-line;" hidden></div>
     <textarea id="appPromptInput" style="margin-top:10px; width:100%;" placeholder="(valfritt)"></textarea>
+    <select id="appPromptSelect" style="margin-top:10px; width:100%;" hidden></select>
     <div class="actions">
       <button type="button" class="btn secondary" id="appPromptCancel">Avbryt</button>
       <button type="button" class="btn" id="appPromptOk">OK</button>
@@ -2839,7 +2841,7 @@ Tack!</div>
  
 
   const APP_VERSION = "1.4.34"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.54";  // user-facing revision
+  const APP_SEMVER = "0.3.55";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -2979,11 +2981,47 @@ Tack!</div>
   // In-app prompt (replaces browser prompt dialogs)
   const appPrompt = document.getElementById("appPrompt");
   const appPromptMessage = document.getElementById("appPromptMessage");
+  const appPromptHelp = document.getElementById("appPromptHelp");
   const appPromptInput = document.getElementById("appPromptInput");
+  const appPromptSelect = document.getElementById("appPromptSelect");
   const appPromptOk = document.getElementById("appPromptOk");
   const appPromptCancel = document.getElementById("appPromptCancel");
   let promptResolve = null;
   let promptKeyHandler = null;
+
+  function getPromptValue(){
+    if (appPromptSelect && !appPromptSelect.hidden) return String(appPromptSelect.value ?? "");
+    return appPromptInput ? String(appPromptInput.value ?? "") : "";
+  }
+
+  function setPromptSelectOptions(options = {}){
+    if (!appPromptSelect || !appPromptInput) return false;
+    const selectOptions = Array.isArray(options.selectOptions) ? options.selectOptions : [];
+    const useSelect = selectOptions.length > 0;
+    appPromptSelect.hidden = !useSelect;
+    appPromptInput.hidden = useSelect;
+    if (!useSelect) return false;
+
+    appPromptSelect.innerHTML = "";
+    for (const item of selectOptions){
+      if (!item) continue;
+      const opt = document.createElement("option");
+      opt.value = String(item.value ?? "");
+      opt.textContent = String(item.label ?? item.value ?? "");
+      if (item.title != null) opt.title = String(item.title);
+      if (item.disabled) opt.disabled = true;
+      appPromptSelect.appendChild(opt);
+    }
+
+    const defaultValue = String(options.defaultValue ?? "");
+    if (defaultValue && Array.from(appPromptSelect.options).some((opt)=> opt.value === defaultValue && !opt.disabled)){
+      appPromptSelect.value = defaultValue;
+    } else {
+      const firstEnabled = Array.from(appPromptSelect.options).find((opt)=> !opt.disabled);
+      appPromptSelect.value = firstEnabled ? firstEnabled.value : "";
+    }
+    return true;
+  }
 
   function hidePrompt(value, cancelled){
     if (!appPrompt) return;
@@ -3015,6 +3053,12 @@ Tack!</div>
       }
 
       appPromptMessage.textContent = msg;
+      if (appPromptHelp){
+        const helpText = String(options.helpText ?? "").trim();
+        appPromptHelp.textContent = helpText;
+        appPromptHelp.hidden = !helpText;
+      }
+      const useSelect = setPromptSelectOptions(options);
       appPromptInput.value = String(options.defaultValue ?? "");
       appPromptInput.placeholder = String(options.placeholder ?? "(valfritt)");
       const isMultiline = options.multiline === true;
@@ -3035,24 +3079,28 @@ Tack!</div>
         }
         if (e.key === "Enter" && !isMultiline){
           e.preventDefault();
-          hidePrompt(appPromptInput.value, false);
+          hidePrompt(getPromptValue(), false);
           return;
         }
         // In multiline prompts we keep Enter for newline. Use Ctrl+Enter to accept.
         if (e.key === "Enter" && (e.ctrlKey || e.metaKey)){
           e.preventDefault();
-          hidePrompt(appPromptInput.value, false);
+          hidePrompt(getPromptValue(), false);
         }
       };
       document.addEventListener("keydown", promptKeyHandler, true);
 
       setTimeout(()=>{
-        try { appPromptInput.focus(); appPromptInput.select(); } catch {}
+        if (useSelect){
+          try { appPromptSelect.focus(); } catch {}
+        } else {
+          try { appPromptInput.focus(); appPromptInput.select(); } catch {}
+        }
       }, 0);
     });
   }
 
-  if (appPromptOk) appPromptOk.addEventListener("click", ()=> hidePrompt(appPromptInput ? appPromptInput.value : "", false));
+  if (appPromptOk) appPromptOk.addEventListener("click", ()=> hidePrompt(getPromptValue(), false));
   if (appPromptCancel) appPromptCancel.addEventListener("click", ()=> hidePrompt("", true));
   if (appPrompt) appPrompt.addEventListener("click", (e)=>{ if (e.target === appPrompt) hidePrompt("", true); });
 
@@ -13800,6 +13848,51 @@ if (!d.features) d.features = { sruEnabled: false };
     return String(state.bankImport?.settings?.defaultBankAccount || "1930").trim() || "1930";
   }
 
+  function getInvoicePaymentAccountPromptOptions(){
+    const descriptions = {
+      "1910": "Kassa. Välj den här om kunden betalade kontant.",
+      "1920": "PlusGiro. Välj den här om betalningen kom in på PlusGirot.",
+      "1930": "Företagskonto/bank. Vanligast för inbetalning till bankkonto.",
+      "1940": "Övriga bankkonton. Bra för extra företagskonto eller sparkonto.",
+      "1630": "Skattekonto. Används normalt inte för kundbetalningar."
+    };
+    const fallbackNames = {
+      "1910": "Kassa",
+      "1920": "PlusGiro",
+      "1930": "Företagskonto/bank",
+      "1940": "Övriga bankkonton",
+      "1630": "Skattekonto"
+    };
+    const choices = [];
+    const seen = new Set();
+    const preferred = getDefaultInvoicePaymentAccount();
+    const configuredBank = normalizeAccountNo(state.company?.bankAccountNo || "");
+
+    function addChoice(no){
+      const accountNo = normalizeAccountNo(no);
+      if (!accountNo || seen.has(accountNo)) return;
+      const meta = state.accounts?.[accountNo] || null;
+      const fallbackName = fallbackNames[accountNo] || "Likvidkonto";
+      const label = meta ? accountLabel(accountNo) : `${accountNo} – ${fallbackName}`;
+      const desc = descriptions[accountNo] || (meta?.type === "asset"
+        ? "Likvidkonto/tillgångskonto för inbetalningar."
+        : "Kontrollera att detta konto verkligen ska ta emot kundbetalningen.");
+      seen.add(accountNo);
+      choices.push({ value: accountNo, label: `${label} · ${desc}`, title: desc });
+    }
+
+    addChoice(preferred);
+    addChoice(configuredBank);
+    ["1930", "1940", "1910", "1920", "1630"].forEach(addChoice);
+    Object.keys(state.accounts || {})
+      .filter((no)=> /^19\d{2}$/.test(String(no || "")) || String(no || "") === preferred)
+      .sort((a,b)=> String(a).localeCompare(String(b), "sv"))
+      .forEach(addChoice);
+
+    if (!choices.length) addChoice("1930");
+    return choices;
+  }
+
   function isIsoDateString(value){
     const iso = String(value || "").trim();
     const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
@@ -14253,20 +14346,30 @@ if (!d.features) d.features = { sruEnabled: false };
 
       const bankAccount = await promptAsync("Inbetalningskonto", {
         defaultValue: getDefaultInvoicePaymentAccount(),
-        placeholder: "1930",
+        helpText: "Välj det konto där pengarna faktiskt kom in.\n1930 = vanligt företagskonto, 1940 = annat bankkonto, 1910 = kontant/kassa, 1920 = PlusGiro.",
+        selectOptions: getInvoicePaymentAccountPromptOptions(),
         okText: "Registrera betalning",
         cancelText: "Avbryt",
         multiline: false,
       });
       if (bankAccount == null) return;
       const bankAccountNo = String(bankAccount || "").trim();
-      if (!bankAccountNo) return showToast("Ange konto för inbetalningen, t.ex. 1930.", 5500);
+      if (!bankAccountNo) return showToast("Välj konto för inbetalningen.", 5500);
 
       const totals = invoiceTotals(linkedInvoice);
       if (!(totals.gross > 0)) return showToast("Fakturan saknar bokförbart belopp.", 5500);
 
       state.vouchers = Array.isArray(state.vouchers) ? state.vouchers : [];
-      if (!state.accounts[bankAccountNo]) state.accounts[bankAccountNo] = { name: bankAccountNo === "1930" ? "Företagskonto/bank" : `Inbetalningskonto ${bankAccountNo}`, type: "asset" };
+      if (!state.accounts[bankAccountNo]) {
+        const paymentAccountNames = {
+          "1910": "Kassa",
+          "1920": "PlusGiro",
+          "1930": "Företagskonto/bank",
+          "1940": "Övriga bankkonton",
+          "1630": "Skattekonto"
+        };
+        state.accounts[bankAccountNo] = { name: paymentAccountNames[bankAccountNo] || `Inbetalningskonto ${bankAccountNo}`, type: "asset" };
+      }
       if (!state.accounts["1510"]) state.accounts["1510"] = { name:"Kundfordringar", type:"asset" };
       if (!state.accounts["3001"]) state.accounts["3001"] = { name:"Försäljning", type:"income" };
       if (!state.accounts["2611"]) state.accounts["2611"] = { name:"Utgående moms", type:"liability" };

@@ -2839,7 +2839,7 @@ Tack!</div>
  
 
   const APP_VERSION = "1.4.34"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.47";  // user-facing revision
+  const APP_SEMVER = "0.3.48";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -5769,16 +5769,16 @@ cur = {
     }
 
     fillSelect(yearSelect, active);
-  fillSelect(rptYearSelect, active);
-    fillSelect(sieYearSelect, active);
-    fillSelect(archiveYearSelect, active);
+    fillSelect(rptYearSelect);
+    fillSelect(sieYearSelect);
+    fillSelect(archiveYearSelect);
     fillSelect(carryFrom, ys[0]?.id || active);
     fillSelect(carryTo, active);
-    fillSelect(invYearSelect, active);
-    fillSelect(quoteYearSelect, active);
-    fillSelect(siYearSelect, active);
+    fillSelect(invYearSelect);
+    fillSelect(quoteYearSelect);
+    fillSelect(siYearSelect);
     fillSelect(lockYear, active);
-    fillSelect(sruYearSelect, active);
+    fillSelect(sruYearSelect);
 
     if (yearPillSelect){
       const prev = yearPillSelect.value;

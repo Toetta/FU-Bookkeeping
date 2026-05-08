@@ -2839,7 +2839,7 @@ Tack!</div>
  
 
   const APP_VERSION = "1.4.34"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.53";  // user-facing revision
+  const APP_SEMVER = "0.3.54";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -13802,9 +13802,16 @@ if (!d.features) d.features = { sruEnabled: false };
 
   function isIsoDateString(value){
     const iso = String(value || "").trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false;
-    const dt = new Date(`${iso}T00:00:00`);
-    return Number.isFinite(dt.getTime()) && todayISO(dt) === iso;
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+    if (!match) return false;
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const dt = new Date(Date.UTC(year, month - 1, day));
+    return Number.isFinite(dt.getTime())
+      && dt.getUTCFullYear() === year
+      && dt.getUTCMonth() === month - 1
+      && dt.getUTCDate() === day;
   }
 
   function shouldBookInvoiceOnIssue(invoice){

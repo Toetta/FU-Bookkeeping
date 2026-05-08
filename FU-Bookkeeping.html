@@ -2839,7 +2839,7 @@ Tack!</div>
  
 
   const APP_VERSION = "1.4.34"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.50";  // user-facing revision
+  const APP_SEMVER = "0.3.53";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -3074,7 +3074,10 @@ Tack!</div>
     return Number.isFinite(v) ? v : 0;
   };
   const ymd = (d) => d.replaceAll("-", "");
-  const todayISO = () => new Date().toISOString().slice(0,10);
+  const todayISO = (value) => {
+    const date = value instanceof Date ? value : (value != null ? new Date(value) : new Date());
+    return Number.isFinite(date.getTime()) ? date.toISOString().slice(0,10) : "";
+  };
   const clampText = (s, max=120) => String(s ?? "").slice(0,max);
 
   // --- Polyfills ---
@@ -7066,8 +7069,10 @@ if (!d.features) d.features = { sruEnabled: false };
     }
 
     const name = fsHandle && fsHandle.name ? fsHandle.name : "(fil)";
+    const errMsg = String(fsLastError && fsLastError.message ? fsLastError.message : "").trim();
     if (fsLastError){
-      setFsStatus("bad", `${name} · fel`);
+      if (/behörighet nekad/i.test(errMsg)) setFsStatus("bad", `${name} · behörighet krävs`);
+      else setFsStatus("bad", `${name} · fel`);
     } else if (fsLastSavedAt){
       setFsStatus("ok", `${name} · sparad ${fsLastSavedAt}`);
     } else {
@@ -7195,7 +7200,14 @@ if (!d.features) d.features = { sruEnabled: false };
   async function fsLoadState(){
     if (!fsHandle) throw new Error("Ingen fil ansluten");
     const ok = await fsEnsurePermission(true);
-    if (!ok) throw new Error("Behörighet nekad");
+    if (!ok) {
+      fsLastError = new Error("Behörighet nekad");
+      updateFsUI();
+      throw fsLastError;
+    }
+
+    fsLastError = null;
+    updateFsUI();
 
     let txt = "";
     try {
@@ -13734,12 +13746,16 @@ if (!d.features) d.features = { sruEnabled: false };
     const inv = (invoice && typeof invoice === "object") ? invoice : null;
     if (!inv) return null;
     const invoiceId = String(inv.id || "").trim();
+    const invoiceNo = String(inv.no || "").trim();
     const paymentVoucherId = String(inv.paymentVoucherId || "").trim();
     if (paymentVoucherId) {
       const byId = (state.vouchers || []).find(voucher => voucher && String(voucher.id || "").trim() === paymentVoucherId && String(voucher.status || "active").trim() !== "deleted");
       if (byId) return byId;
     }
-    return (state.vouchers || []).find(voucher => voucher && String(voucher.status || "active").trim() !== "deleted" && String(voucher.invoiceEvent || "").trim() === "payment" && String(voucher.invoiceId || "").trim() === invoiceId) || null;
+    return (state.vouchers || []).find(voucher => voucher && String(voucher.status || "active").trim() !== "deleted" && String(voucher.invoiceEvent || "").trim() === "payment" && String(voucher.invoiceId || "").trim() === invoiceId)
+      || (state.vouchers || []).find(voucher => voucher && String(voucher.status || "active").trim() !== "deleted" && String(voucher.invoiceEvent || "").trim() === "payment" && invoiceNo && String(voucher.invoiceNo || "").trim() === invoiceNo)
+      || (state.vouchers || []).find(voucher => voucher && String(voucher.status || "active").trim() !== "deleted" && invoiceNo && String(voucher.text || "").trim() === `Betalning faktura ${invoiceNo}`)
+      || null;
   }
 
   function getInvoiceById(invoiceId){
@@ -14282,16 +14298,25 @@ if (!d.features) d.features = { sruEnabled: false };
       state.vouchers.push(vv);
       appendAudit({ action:"voucher.create", actor: vv.sign || undefined, entityType:"voucher", entityId: vv.id, yearId, details:{ after: summarizeVoucher(vv), source:"invoice_payment" } });
 
-      const invoiceIndex = (state.invoices || []).findIndex(item => item && String(item.id || "").trim() === String(linkedInvoice.id || "").trim());
-      if (invoiceIndex >= 0) {
-        state.invoices[invoiceIndex] = {
-          ...state.invoices[invoiceIndex],
+      const targetInvoiceId = String(linkedInvoice.id || "").trim();
+      const targetInvoiceNo = String(linkedInvoice.no || "").trim();
+      state.invoices = (state.invoices || []).map(item => {
+        if (!item) return item;
+        const sameId = targetInvoiceId && String(item.id || "").trim() === targetInvoiceId;
+        const sameNo = targetInvoiceNo && String(item.no || "").trim() === targetInvoiceNo;
+        if (!sameId && !sameNo) return item;
+        return {
+          ...item,
           status: "paid",
           paidAt: paymentDateIso,
           paidBy: state.company.defaultSign || "",
           paymentVoucherId: vv.id,
         };
-      }
+      });
+      linkedInvoice.status = "paid";
+      linkedInvoice.paidAt = paymentDateIso;
+      linkedInvoice.paidBy = state.company.defaultSign || "";
+      linkedInvoice.paymentVoucherId = vv.id;
 
       state.vouchers.sort((a,b)=> (a.yearId+b.series+a.no+a.date).localeCompare(b.yearId+b.series+b.no+b.date, "sv"));
       save();

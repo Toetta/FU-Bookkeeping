@@ -2839,7 +2839,7 @@ Tack!</div>
  
 
   const APP_VERSION = "1.4.34"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.49";  // user-facing revision
+  const APP_SEMVER = "0.3.50";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -13752,14 +13752,14 @@ if (!d.features) d.features = { sruEnabled: false };
     const inv = (invoice && typeof invoice === "object") ? invoice : {};
     const bookedVoucher = getVoucherForInvoice(inv);
     const paymentVoucher = getPaymentVoucherForInvoice(inv);
-    const paidAt = String(inv.paidAt || inv.paymentRegisteredAt || "").trim();
+    const paidAt = String(inv.paidAt || inv.paymentRegisteredAt || paymentVoucher?.date || "").trim();
     const voidedAt = String(inv.voidedAt || "").trim();
     const issuedAt = String(inv.issuedAt || inv.date || "").trim();
     const fallbackStatus = bookedVoucher ? "booked" : (issuedAt ? "issued" : "draft");
     const normalizedStatus = normalizeInvoiceStatusValue(inv.status || fallbackStatus);
     const status = voidedAt || normalizedStatus === "voided"
       ? "voided"
-      : paidAt || normalizedStatus === "paid"
+      : paidAt || paymentVoucher || normalizedStatus === "paid"
         ? "paid"
         : bookedVoucher || normalizedStatus === "booked"
           ? "booked"
@@ -13922,13 +13922,14 @@ if (!d.features) d.features = { sruEnabled: false };
           const currency = getInvoiceCurrency(inv);
           const booking = invoiceBookingState(inv);
           const bookedVoucher = booking.lifecycle.bookedVoucher;
+          const paymentVoucher = booking.lifecycle.paymentVoucher;
           const div = document.createElement("div");
           div.className = "item";
           div.innerHTML = `
             <div class="top">
               <div>
                 <div class="title">Faktura #${escapeHtml(inv.no)} · ${escapeHtml(inv.date)} · ${escapeHtml(c?.name || "(kund)")} <span class="${escapeAttr(booking.badgeClass)}">${escapeHtml(booking.badgeText)}</span></div>
-                <div class="meta">${escapeHtml(booking.listText)}${bookedVoucher?.series && bookedVoucher?.no ? ` · Verifikation ${escapeHtml(String(bookedVoucher.series) + String(bookedVoucher.no))}` : ""} · Förfaller ${escapeHtml(inv.due)} · Totalt ${fmtSEK(tot.gross)} ${escapeHtml(currency)}</div>
+                <div class="meta">${escapeHtml(booking.listText)}${bookedVoucher?.series && bookedVoucher?.no ? ` · Verifikation ${escapeHtml(String(bookedVoucher.series) + String(bookedVoucher.no))}` : ""}${paymentVoucher?.series && paymentVoucher?.no ? ` · Betalning ${escapeHtml(String(paymentVoucher.series) + String(paymentVoucher.no))}` : ""} · Förfaller ${escapeHtml(inv.due)} · Totalt ${fmtSEK(tot.gross)} ${escapeHtml(currency)}</div>
               </div>
               <div class="row">
                 <button class="btn secondary" data-act="edit" data-id="${inv.id}">Öppna</button>

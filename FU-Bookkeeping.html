@@ -2581,7 +2581,7 @@ Tack!</div>
               <label>Kind</label>
               <select id="docListKindFilter">
                 <option value="">Alla</option>
-                <option value="invoice_pdf">invoice_pdf</option>
+                <option value="invoice_frozen_pdf">invoice_frozen_pdf</option>
                 <option value="order_confirmation_pdf">order_confirmation_pdf</option>
                 <option value="quote_pdf">quote_pdf</option>
                 <option value="quote_attachment">quote_attachment</option>
@@ -2840,8 +2840,8 @@ Tack!</div>
 (function(){
  
 
-  const APP_VERSION = "1.4.38"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.59";  // user-facing revision
+  const APP_VERSION = "1.4.41"; // bump when adding new data fields
+  const APP_SEMVER = "0.3.62";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -3838,7 +3838,7 @@ function yearsWithMirrorCandidates(){
 
 function documentMirrorFolderParts(doc){
   const kind = String(doc?.kind || "document").trim();
-  if (kind === "invoice_pdf" || kind === "order_confirmation_pdf" || kind === "quote_pdf" || kind === "voucher_pdf") return [documentMirrorFolderLabel(doc, "PDF")];
+  if (kind === "invoice_frozen_pdf" || kind === "invoice_pdf" || kind === "order_confirmation_pdf" || kind === "quote_pdf" || kind === "voucher_pdf") return [documentMirrorFolderLabel(doc, "PDF")];
   if (kind === "quote_attachment") return [documentMirrorFolderLabel(doc, "QUOTE_ATTACHMENTS")];
   if (kind.startsWith("webshop_")) return [documentMirrorFolderLabel(doc, "JSON")];
   return [documentMirrorFolderLabel(doc, "OTHER")];
@@ -5206,7 +5206,7 @@ cur = {
     return buildMinimalPdfBlob(lines);
   }
 
-  async function registerGeneratedPdfDocument({ kind, number, date, linkedType, linkedId, blob, yearId, fileName, createdBy }){
+  async function registerGeneratedPdfDocument({ kind, number, date, linkedType, linkedId, blob, yearId, fileName, createdBy, sourceMeta }){
     const docKind = clampText(String(kind || "").trim(), 40) || "invoice_pdf";
     const docYearId = String(yearId || (date ? String(date).slice(0,4) : state.activeYearId) || state.activeYearId || "").trim();
     const docNumber = clampText(String(number || "").trim(), 80);
@@ -5223,6 +5223,7 @@ cur = {
     const size = Number(blob.size || 0) || 0;
     const sha256 = await sha256HexBlob(blob);
     const effectiveFileName = safeFileName(fileName || "document.pdf");
+    const cleanSourceMeta = sourceMeta && typeof sourceMeta === "object" ? JSON.parse(JSON.stringify(sourceMeta)) : null;
 
     const existing = state.documents.find(doc => doc && doc.kind === docKind && String(doc.number || "") === docNumber && String(doc.yearId || "") === docYearId && String(doc.status || "active") === "active");
     if (existing && String(existing.sha256 || "") === sha256 && String(existing.mime || "") === mime && Number(existing.size || 0) === size) {
@@ -5235,6 +5236,7 @@ cur = {
           existing.fileName = effectiveFileName;
           existing.createdBy = existing.createdBy || docCreatedBy;
           existing.status = existing.status || "active";
+          if (cleanSourceMeta) existing.sourceMeta = { ...(existing.sourceMeta && typeof existing.sourceMeta === "object" ? existing.sourceMeta : {}), ...cleanSourceMeta };
           appendAudit({ action:"document.reuse", actor: docCreatedBy || undefined, entityType:"document", entityId: existing.id, yearId: docYearId, details:{ kind: docKind, number: docNumber, linkedType: docLinkedType, linkedId: docLinkedId, sha256 } });
           save({ renderAll:false });
           return existing;
@@ -5260,6 +5262,7 @@ cur = {
       createdBy: existing?.createdBy || docCreatedBy,
       status: "active"
     };
+    if (cleanSourceMeta) record.sourceMeta = cleanSourceMeta;
 
     await idbSet("docBlob:" + docId, blob);
 
@@ -5615,7 +5618,7 @@ cur = {
     function archiveDocumentFolderParts(doc){
       const kind = String(doc?.kind || "document").trim();
       const number = safeStemPart(doc?.number || doc?.linkedId || doc?.id || "document", 80) || "document";
-      if (kind === "invoice_pdf") return ["documents", "invoices", number];
+      if (kind === "invoice_frozen_pdf" || kind === "invoice_pdf") return ["documents", "invoices", number];
       if (kind === "order_confirmation_pdf") return ["documents", "orders", number];
       if (kind === "quote_pdf") return ["documents", "quotes", number];
       if (kind === "quote_attachment") return ["documents", "quotes", "attachments", number];
@@ -5806,7 +5809,8 @@ cur = {
     const kind = safeStemPart(doc?.kind || "document", 40) || "document";
     const number = safeStemPart(doc?.number || doc?.linkedId || doc?.id || "document", 80) || "document";
     if (date && date !== "undated" && number){
-      if (String(doc?.kind || "") === "invoice_pdf") add(`${date}_invoice_${number}.pdf`);
+      if (String(doc?.kind || "") === "invoice_frozen_pdf") add(`${date}_invoice_${number}_original.pdf`);
+      else if (String(doc?.kind || "") === "invoice_pdf") add(`${date}_invoice_${number}.pdf`);
       else add(`${date}_${kind}_${number}.pdf`);
     }
     const withStems = new Set(names);
@@ -5977,30 +5981,7 @@ cur = {
 
     const invoices = (state.invoices || []).filter(inv => inv && String(inv.yearId || "") === targetYearId);
     for (const inv of invoices){
-      try {
-        const invoiceState = await shouldBackfillEntityDocument({ yearId: targetYearId, kind: "invoice_pdf", linkedType: "invoice", linkedId: inv.id });
-        if (!invoiceState.shouldCreate) {
-          stats.skippedExisting++;
-          continue;
-        }
-        const blob = await generateInvoicePdfBlob(inv);
-        const docFileName = safeFileName(`${normalizeDateForFileName(inv.date || "")}_invoice_${safeStemPart(inv.no || inv.id || "invoice", 48) || "invoice"}.pdf`);
-        await registerGeneratedPdfDocument({
-          kind: "invoice_pdf",
-          number: inv.no || inv.id,
-          date: inv.date || todayISO(),
-          linkedType: "invoice",
-          linkedId: inv.id,
-          blob,
-          yearId: inv.yearId,
-          fileName: docFileName,
-          createdBy: state.company?.defaultSign || "",
-        });
-        stats.createdInvoices++;
-      } catch (err) {
-        stats.failed++;
-        console.error("Invoice backfill failed", inv?.id, err);
-      }
+      stats.skippedExisting++;
     }
 
     const vouchers = (state.vouchers || []).filter(v => v && String(v.yearId || "") === targetYearId);
@@ -6106,25 +6087,7 @@ cur = {
 
     const invoices = (state.invoices || []).filter(inv => inv && String(inv.yearId || "") === targetYearId);
     for (const inv of invoices){
-      try {
-        const blob = await generateInvoicePdfBlob(inv);
-        const docFileName = safeFileName(`${normalizeDateForFileName(inv.date || "")}_invoice_${safeStemPart(inv.no || inv.id || "invoice", 48) || "invoice"}.pdf`);
-        await registerGeneratedPdfDocument({
-          kind: "invoice_pdf",
-          number: inv.no || inv.id,
-          date: inv.date || todayISO(),
-          linkedType: "invoice",
-          linkedId: inv.id,
-          blob,
-          yearId: inv.yearId,
-          fileName: docFileName,
-          createdBy: state.company?.defaultSign || "",
-        });
-        stats.regeneratedInvoices++;
-      } catch (err) {
-        stats.failed++;
-        console.error("Invoice PDF regeneration failed", inv?.id, err);
-      }
+      stats.regeneratedInvoices += 0;
     }
 
     const vouchers = (state.vouchers || []).filter(v => v && String(v.yearId || "") === targetYearId);
@@ -13836,27 +13799,6 @@ if (!d.features) d.features = { sruEnabled: false };
     save();
     renderInvoices();
 
-    (async ()=>{
-      try {
-        const blob = await generateInvoicePdfBlob(invoice);
-        const docFileName = safeFileName(`${normalizeDateForFileName(invoice.date || date)}_invoice_${safeStemPart(invoice.no || invoice.id || "invoice", 48) || "invoice"}.pdf`);
-        await registerGeneratedPdfDocument({
-          kind: "invoice_pdf",
-          number: invoice.no || invoice.id,
-          date: invoice.date || date,
-          linkedType: "invoice",
-          linkedId: invoice.id,
-          blob,
-          yearId: invoice.yearId,
-          fileName: docFileName,
-          createdBy: state.company?.defaultSign || "",
-        });
-      } catch (err) {
-        console.error("Invoice PDF archive failed", err);
-        try { showToast("Kunde inte arkivera faktura-PDF lokalt. Fakturan skapades ändå.", 5500); } catch (_) {}
-      }
-    })();
-
     return { invoice, created: true };
   }
 
@@ -14092,34 +14034,20 @@ if (!d.features) d.features = { sruEnabled: false };
     if (idx>=0) state.invoices[idx] = inv; else state.invoices.push(inv);
     state.invoices.sort((a,b)=> (a.yearId+a.no+a.date).localeCompare(b.yearId+b.no+b.date, "sv"));
 
+    try {
+      await ensureFrozenInvoicePdfForInvoice(inv, { requestPermission: true, source: "invoice_save", createdBy: state.company?.defaultSign || "" });
+    } catch (err) {
+      console.error("Frozen invoice PDF archive failed", err);
+      showToast("Fakturan sparades, men den frysta PDF-kopian kunde inte arkiveras. Kontrollera datafil och FU-mapp.", 9000);
+    }
+
     save();
     newInvoice();
     renderInvoices();
 
-    (async ()=>{
-      try {
-        const blob = await generateInvoicePdfBlob(inv);
-        const docFileName = safeFileName(`${normalizeDateForFileName(inv.date || date)}_invoice_${safeStemPart(inv.no || inv.id || "invoice", 48) || "invoice"}.pdf`);
-        await registerGeneratedPdfDocument({
-          kind: "invoice_pdf",
-          number: inv.no || inv.id,
-          date: inv.date || date,
-          linkedType: "invoice",
-          linkedId: inv.id,
-          blob,
-          yearId: inv.yearId,
-          fileName: docFileName,
-          createdBy: state.company?.defaultSign || "",
-        });
-      } catch (err) {
-        console.error("Invoice PDF archive failed", err);
-        try { showToast("Kunde inte arkivera faktura-PDF lokalt. Fakturan sparades ändå.", 5500); } catch (_) {}
-      }
-    })();
-
     if (shouldBookInvoiceOnIssue(inv)) {
       const ok = await confirmAsync("Faktureringsmetoden är vald. Fakturan ska bokföras när den utfärdas. Skapa verifikation nu?", { okText: "Bokför nu", cancelText: "Senare" });
-      if (ok) createVoucherFromInvoice(inv.id);
+      if (ok) await createVoucherFromInvoice(inv.id);
       else showToast("Fakturan är sparad men inte bokförd ännu. Faktureringsmetoden kräver bokföring vid utfärdande.", 7000);
     }
   }
@@ -14193,20 +14121,7 @@ if (!d.features) d.features = { sruEnabled: false };
     const inv = getInvoiceById(invoiceId);
     if (!inv) return showToast("Fakturan hittades inte i kundfakturaregistret.", 6500);
 
-    let doc = getActiveDocumentForEntity({
-      yearId: inv.yearId,
-      kind: "invoice_pdf",
-      linkedType: "invoice",
-      linkedId: inv.id,
-    });
-
-    if (!doc){
-      doc = (state.documents || []).find(item => item
-        && String(item.status || "active") === "active"
-        && String(item.kind || "") === "invoice_pdf"
-        && String(item.yearId || "") === String(inv.yearId || "")
-        && String(item.number || "") === String(inv.no || "")) || null;
-    }
+    const doc = getFrozenInvoiceDocument(inv);
 
     if (doc){
       const blob = await getDocumentBlob(doc, { requestBackupPermission: true });
@@ -14216,30 +14131,154 @@ if (!d.features) d.features = { sruEnabled: false };
       }
     }
 
-    if (options.allowRegenerate === false){
-      showToast("Ingen arkiverad faktura-PDF hittades. Öppna kundfakturan och spara/arkivera den igen.", 8500);
-      return;
-    }
+    showToast("Ingen fryst faktura-PDF finns lagrad. Spara fakturan igen så arkiverar systemet den, eller använd 'Ersätt PDF' om fakturan skapades utanför appen.", 9500);
+  }
 
+  function downloadBlobFile(fileName, blob){
+    if (!(blob instanceof Blob)) return;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = safeFileName(fileName || "faktura.pdf");
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(()=>{ try { URL.revokeObjectURL(url); } catch {}; try { a.remove(); } catch {}; }, 500);
+  }
+
+  async function saveInvoicePdfCopy(invoiceId){
+    const inv = getInvoiceById(invoiceId);
+    if (!inv) return showToast("Fakturan hittades inte i kundfakturaregistret.", 6500);
+    const doc = getFrozenInvoiceDocument(inv);
+    if (!doc) return showToast("Ingen fryst faktura-PDF finns att spara som kopia ännu.", 6500);
+    const blob = await getDocumentBlob(doc, { requestBackupPermission: true });
+    if (!blob) return showToast("Kunde inte läsa den frysta faktura-PDF:en från cache eller FU-mapp.", 7500);
+    downloadBlobFile(doc.fileName || frozenInvoicePdfFileName(inv), blob);
+  }
+
+  function getFrozenInvoiceDocument(invoice){
+    const inv = invoice && typeof invoice === "object" ? invoice : null;
+    if (!inv) return null;
+    let doc = getActiveDocumentForEntity({
+      yearId: inv.yearId,
+      kind: "invoice_frozen_pdf",
+      linkedType: "invoice",
+      linkedId: inv.id,
+    });
+    if (!doc){
+      doc = (state.documents || []).find(item => item
+        && String(item.status || "active") === "active"
+        && String(item.kind || "") === "invoice_frozen_pdf"
+        && String(item.yearId || "") === String(inv.yearId || "")
+        && String(item.number || "") === String(inv.no || "")) || null;
+    }
+    return doc || null;
+  }
+
+  function frozenInvoicePdfFileName(invoice){
+    const inv = invoice && typeof invoice === "object" ? invoice : {};
+    return safeFileName(`${normalizeDateForFileName(inv.date || "")}_invoice_${safeStemPart(inv.no || inv.id || "invoice", 48) || "invoice"}_original.pdf`);
+  }
+
+  function updateFrozenInvoiceVoucherLink(invoice, voucherId){
+    const doc = getFrozenInvoiceDocument(invoice);
+    const id = String(voucherId || invoice?.bookedVoucherId || "").trim();
+    if (!doc || !id) return false;
+    doc.sourceMeta = doc.sourceMeta && typeof doc.sourceMeta === "object" ? doc.sourceMeta : {};
+    if (String(doc.sourceMeta.voucherId || "") === id) return false;
+    doc.sourceMeta.voucherId = id;
+    doc.sourceMeta.linkedVoucherId = id;
+    doc.sourceMeta.updatedAt = nowISO();
+    appendAudit({ action:"document.link_voucher", actor: state.company?.defaultSign || undefined, entityType:"document", entityId: doc.id, yearId: doc.yearId, details:{ kind: doc.kind, invoiceId: invoice?.id || "", voucherId: id } });
+    save({ renderAll:false });
+    return true;
+  }
+
+  async function ensureFrozenInvoicePdfForInvoice(invoice, options = {}){
+    const inv = invoice && typeof invoice === "object" ? invoice : null;
+    if (!inv || !inv.id) throw new Error("ensureFrozenInvoicePdfForInvoice kräver en sparad faktura.");
+    const existing = getFrozenInvoiceDocument(inv);
+    if (existing && !options.force) {
+      if (inv.bookedVoucherId) updateFrozenInvoiceVoucherLink(inv, inv.bookedVoucherId);
+      return existing;
+    }
+    if (options.requirePersistentStorage !== false) {
+      const ready = await ensureUnderlagPersistentStorageReady({ requestPermission: !!options.requestPermission });
+      if (!ready) throw new Error("Saknar datafil eller vald FU-mapp för att lagra fryst faktura-PDF.");
+    }
+    const blob = await generateInvoicePdfBlob(inv);
+    const doc = await registerFrozenInvoicePdf(inv, blob, options.createdBy != null ? options.createdBy : (state.company?.defaultSign || ""), {
+      source: options.source || "invoice_issue",
+      generatedBySystem: true,
+      frozenAt: nowISO(),
+      voucherId: String(options.voucherId || inv.bookedVoucherId || "").trim(),
+    });
+    await syncDocumentsToBackupDir("invoice-frozen-pdf-auto", { requestPermission: !!options.requestPermission, backfill: false });
+    return doc;
+  }
+
+  function pickFrozenInvoicePdfFile(){
+    return new Promise((resolve)=>{
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "application/pdf";
+      input.style.position = "fixed";
+      input.style.left = "-9999px";
+      input.style.top = "-9999px";
+      input.addEventListener("change", ()=>{
+        const file = input.files && input.files[0] ? input.files[0] : null;
+        try { input.remove(); } catch {}
+        resolve(file);
+      }, { once: true });
+      document.body.appendChild(input);
+      input.click();
+    });
+  }
+
+  async function registerFrozenInvoicePdf(invoice, file, createdBy, sourceMeta = {}){
+    const inv = invoice && typeof invoice === "object" ? invoice : null;
+    const blob = file instanceof Blob ? file : null;
+    if (!inv || !inv.id) throw new Error("registerFrozenInvoicePdf kräver en sparad faktura.");
+    if (!blob) throw new Error("registerFrozenInvoicePdf kräver en PDF-fil.");
+    const fileName = frozenInvoicePdfFileName(inv);
+    const doc = await registerGeneratedPdfDocument({
+      kind: "invoice_frozen_pdf",
+      number: inv.no || inv.id,
+      date: inv.date || todayISO(),
+      linkedType: "invoice",
+      linkedId: inv.id,
+      blob,
+      yearId: inv.yearId,
+      fileName,
+      createdBy: createdBy != null ? createdBy : (state.company?.defaultSign || ""),
+      sourceMeta: {
+        source: "manual_pdf",
+        generatedBySystem: false,
+        frozenAt: nowISO(),
+        voucherId: String(inv.bookedVoucherId || "").trim(),
+        ...(sourceMeta && typeof sourceMeta === "object" ? sourceMeta : {}),
+      },
+    });
+    try { await syncDocumentsToBackupDir("invoice-frozen-pdf", { requestPermission: true, backfill: false }); } catch (e){ console.warn("Could not mirror frozen invoice PDF", e); }
+    return doc;
+  }
+
+  async function attachFrozenInvoicePdf(invoiceId){
+    const inv = getInvoiceById(invoiceId);
+    if (!inv) return showToast("Fakturan hittades inte i kundfakturaregistret.", 6500);
+    if (!(await ensureUnderlagPersistentStorageReady({ requestPermission: true }))) return;
+    const file = await pickFrozenInvoicePdfFile();
+    if (!file) return;
+    const isPdf = String(file.type || "").toLowerCase().includes("pdf") || String(file.name || "").toLowerCase().endsWith(".pdf");
+    if (!isPdf) return showToast("Välj en PDF-fil: den frysta fakturakopian som skickades till kunden.", 7500);
     try {
-      const blob = await generateInvoicePdfBlob(inv);
-      const docFileName = safeFileName(`${normalizeDateForFileName(inv.date || "")}_invoice_${safeStemPart(inv.no || inv.id || "invoice", 48) || "invoice"}.pdf`);
-      await registerGeneratedPdfDocument({
-        kind: "invoice_pdf",
-        number: inv.no || inv.id,
-        date: inv.date || todayISO(),
-        linkedType: "invoice",
-        linkedId: inv.id,
-        blob,
-        yearId: inv.yearId,
-        fileName: docFileName,
-        createdBy: state.company?.defaultSign || "",
-      });
-      showToast("Ingen tidigare arkiverad PDF hittades. Visar återskapad faktura från sparad fakturadata.", 7500);
-      openBlobAs(blob, "application/pdf");
+      await registerFrozenInvoicePdf(inv, file, state.company?.defaultSign || "");
+      await fsWriteState();
+      showToast("Fryst faktura-PDF ersatt. 'Visa faktura' öppnar nu den sparade PDF-filen.", 6500);
+      try { renderInvoices(); } catch {}
+      try { renderVouchers(); } catch {}
     } catch (e){
       console.error(e);
-      showToast("Kunde inte öppna eller återskapa faktura-PDF.", 8000);
+      showToast("Kunde inte lagra den frysta faktura-PDF:en.", 8500);
     }
   }
 
@@ -14486,7 +14525,9 @@ if (!d.features) d.features = { sruEnabled: false };
               </div>
               <div class="row">
                 <button class="btn secondary" data-act="edit" data-id="${inv.id}">Öppna</button>
-                <button class="btn secondary" data-act="pdf" data-id="${inv.id}">Visa PDF</button>
+                <button class="btn secondary" data-act="pdf" data-id="${inv.id}">Visa faktura</button>
+                <button class="btn secondary" data-act="save-copy" data-id="${inv.id}">Spara kopia</button>
+                <button class="btn secondary" data-act="attach-pdf" data-id="${inv.id}">Ersätt PDF</button>
                 <button class="btn secondary" data-act="print" data-id="${inv.id}">Skriv ut</button>
                 <button class="btn danger" data-act="del" data-id="${inv.id}">Ta bort</button>
               </div>
@@ -14499,7 +14540,9 @@ if (!d.features) d.features = { sruEnabled: false };
             const act = b.dataset.act;
             if (act==="edit") loadInvoiceToEditor(id);
             if (act==="pdf") await openInvoicePdf(id);
-            if (act==="print") printInvoice(id);
+            if (act==="save-copy") await saveInvoicePdfCopy(id);
+            if (act==="attach-pdf") await attachFrozenInvoicePdf(id);
+            if (act==="print") await openInvoicePdf(id);
             if (act==="del") await deleteInvoice(id);
           });
           invoiceList.appendChild(div);
@@ -14553,9 +14596,11 @@ if (!d.features) d.features = { sruEnabled: false };
     renderInvoices();
   }
 
-  function printInvoice(id){
+  function printInvoice(id, options = {}){
     const inv = (state.invoices||[]).find(x=>x.id===id);
     if (!inv) return;
+    const autoPrint = options.autoPrint !== false;
+    const returnHtmlOnly = !!options.returnHtmlOnly;
     const display = getInvoiceDocumentDisplayData(inv);
     const c = display.snapshot;
     const tot = display.totals;
@@ -14653,9 +14698,11 @@ if (!d.features) d.features = { sruEnabled: false };
 
       ${state.company.invoiceFooter?`<div class="footer">${escapeHtml(state.company.invoiceFooter)}</div>`:""}
 
-      <script>window.onload=()=>window.print();<\/script>
+      ${autoPrint ? `<script>window.onload=()=>window.print();<\/script>` : ""}
 
       </body></html>`;
+
+    if (returnHtmlOnly) return html;
 
     const w = window.open("", "_blank");
     if (!w) return showToast("Popup blockerad. Tillåt popup för att skriva ut.", 6000);
@@ -14664,7 +14711,7 @@ if (!d.features) d.features = { sruEnabled: false };
     w.document.close();
   }
 
-  function createVoucherFromInvoice(invoiceId){
+  async function createVoucherFromInvoice(invoiceId){
     // super-enkel bokning: 1510 Debet, 3001 Kredit (netto), 2611 Kredit (moms)
     const linkedInvoice = invoiceId
       ? getInvoiceById(invoiceId)
@@ -14745,6 +14792,14 @@ if (!d.features) d.features = { sruEnabled: false };
         bookedAt: nowISO(),
         bookedBy: state.company.defaultSign || "",
       };
+    }
+    const invoiceAfterBooking = invoiceIndex >= 0 ? state.invoices[invoiceIndex] : { ...linkedInvoice, bookedVoucherId: vv.id };
+    try {
+      await ensureFrozenInvoicePdfForInvoice(invoiceAfterBooking, { requestPermission: true, source: "invoice_booking", voucherId: vv.id, createdBy: vv.sign || state.company?.defaultSign || "" });
+      updateFrozenInvoiceVoucherLink(invoiceAfterBooking, vv.id);
+    } catch (err) {
+      console.error("Frozen invoice PDF voucher link failed", err);
+      showToast("Verifikationen skapades, men faktura-PDF:en kunde inte arkiveras/kopplas. Kontrollera datafil och FU-mapp.", 9000);
     }
 
     state.vouchers.sort((a,b)=> (a.yearId+b.series+a.no+a.date).localeCompare(b.yearId+b.series+b.no+b.date, "sv"));
@@ -16186,7 +16241,11 @@ if (!d.features) d.features = { sruEnabled: false };
     if (btnInvPickCustomer) btnInvPickCustomer.addEventListener("click", ()=> openCustomerDialog("invoice"));
     if (invContactSelect) invContactSelect.addEventListener("change", ()=>{ applyInvoiceContactSelection(); updateInvoiceTotals(); });
     if (btnInvSave) btnInvSave.addEventListener("click", saveInvoice);
-    if (btnInvPrint) btnInvPrint.addEventListener("click", ()=>{
+    if (btnInvPrint) btnInvPrint.addEventListener("click", async ()=>{
+      if (editingInvoiceId){
+        await openInvoicePdf(editingInvoiceId);
+        return;
+      }
       // print current editor as a "draft" by saving temporarily in memory
       const tmpId = editingInvoiceId || "__draft__";
       const tmp = { id: tmpId, yearId: invoiceYearId(), no: (invNo.value||"").trim()||"Utkast", date: invDate.value||todayISO(), due: invDue.value||addDays(invDate.value||todayISO(), (state.company.payDays||30)), customerId: invCustomerId, selectedContactId: invSelectedContactId, selectedContactSnapshot: (()=>{ const customer = getCustomerRecordById(invCustomerId || ""); const contact = resolveInvoiceContactPerson({ customerId: invCustomerId, selectedContactId: invSelectedContactId }, customer); return contact ? normalizeCustomerContact(contact, 0) : null; })(), ref: invRef.value||"", lines: invLines.map(l=>({kind:l.kind, desc:l.desc||"", qty:parseMoney(l.qty), price:parseMoney(l.price), vat:parseMoney(l.vat)})) };
@@ -16215,7 +16274,7 @@ if (!d.features) d.features = { sruEnabled: false };
         return;
       }
       if (!(await confirmAsync("Skapa en verifikation för fakturan (serie F)?"))) return;
-      createVoucherFromInvoice(currentInvoice.id);
+      await createVoucherFromInvoice(currentInvoice.id);
     });
     if (btnInvRefresh) btnInvRefresh.addEventListener("click", renderInvoices);
     if (invYearSelect) invYearSelect.addEventListener("change", renderInvoices);
@@ -16285,6 +16344,8 @@ if (!d.features) d.features = { sruEnabled: false };
       const openLabel = isVoid ? "Visa" : "Öppna";
       const linkedInvoice = getInvoiceForVoucher(v);
       const invoicePdfBtn = linkedInvoice ? `<button type="button" class="btn secondary" data-act="invoice-pdf" data-id="${escapeAttr(linkedInvoice.id)}">Visa faktura</button>` : "";
+      const saveInvoicePdfCopyBtn = linkedInvoice ? `<button type="button" class="btn secondary" data-act="save-invoice-pdf-copy" data-id="${escapeAttr(linkedInvoice.id)}">Spara kopia</button>` : "";
+      const attachInvoicePdfBtn = linkedInvoice ? `<button type="button" class="btn secondary" data-act="attach-invoice-pdf" data-id="${escapeAttr(linkedInvoice.id)}">Ersätt PDF</button>` : "";
       const voidBtn = "";
 
       div.innerHTML = `
@@ -16296,6 +16357,8 @@ if (!d.features) d.features = { sruEnabled: false };
           <div class="row">
             <button type="button" class="btn secondary" data-act="open" data-id="${escapeAttr(v.id)}">${openLabel}</button>
             ${invoicePdfBtn}
+            ${saveInvoicePdfCopyBtn}
+            ${attachInvoicePdfBtn}
             ${voidBtn}
           </div>
         </div>
@@ -16436,6 +16499,8 @@ if (!d.features) d.features = { sruEnabled: false };
         if (!id) return;
         if (act === "open") viewVoucherToEditor(id);
         if (act === "invoice-pdf") await openInvoicePdf(id);
+        if (act === "save-invoice-pdf-copy") await saveInvoicePdfCopy(id);
+        if (act === "attach-invoice-pdf") await attachFrozenInvoicePdf(id);
         if (act === "void"){
           showToast("Makulering av verifikationer är avstängd. Skapa en rättelseverifikation i stället.", 6500);
         }

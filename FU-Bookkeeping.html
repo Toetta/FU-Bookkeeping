@@ -1630,6 +1630,10 @@
                   <input id="siExchangeRate" inputmode="decimal" placeholder="t.ex. 11,35" />
                 </div>
                 <div class="field" style="min-width:180px;">
+                  <label>Draget/betalt SEK</label>
+                  <input id="siPaidSek" inputmode="decimal" placeholder="t.ex. 15034,21" />
+                </div>
+                <div class="field" style="min-width:180px;">
                   <label>Belopp inkl moms SEK</label>
                   <input id="siGrossSek" inputmode="decimal" placeholder="0" disabled />
                 </div>
@@ -1653,6 +1657,10 @@
                   <label>Beräknad moms SEK</label>
                   <input id="siReverseVatSek" inputmode="decimal" placeholder="0" disabled />
                 </div>
+                <label class="check" style="align-self:flex-end; min-height:38px;">
+                  <input id="siPrivateOutlay" type="checkbox" />
+                  Betalt privat
+                </label>
               </div>
 
               <div class="row" style="gap:10px; margin-top:10px;">
@@ -1671,7 +1679,7 @@
               </div>
 
               <div class="row" style="justify-content:space-between; margin-top:10px;">
-                <div class="muted small">Skapar verifikation i SEK. För utländsk valuta krävs valutakurs; fakturans originalvaluta sparas på leverantörsfakturan.</div>
+                <div class="muted small">Skapar verifikation i SEK. Ange draget SEK-belopp om köpet betalats med kort; då räknas kursen fram från faktisk kortdebitering.</div>
                 <button class="btn secondary" id="btnSiToVoucher">Skapa verifikation (serie L)</button>
               </div>
             </div>
@@ -2966,8 +2974,8 @@ Tack!</div>
 (function(){
  
 
-  const APP_VERSION = "1.4.46"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.67";  // user-facing revision
+  const APP_VERSION = "1.4.47"; // bump when adding new data fields
+  const APP_SEMVER = "0.3.68";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -3857,6 +3865,8 @@ Tack!</div>
       si.taxTreatment = normalizeSupplierInvoiceTaxTreatment(si.taxTreatment || si.vatTreatment || si.reverseChargeType || "normal");
       if (si.exchangeRate == null || !Number.isFinite(Number(si.exchangeRate))) si.exchangeRate = 0;
       else si.exchangeRate = Math.round(Number(si.exchangeRate) * 1000000) / 1000000;
+      si.paidSek = Math.round((Number(si.paidSek)||0)*100)/100;
+      si.privateOutlay = !!si.privateOutlay;
       si.gross = Math.round((Number(si.gross)||0)*100)/100;
       si.vat = Math.round((Number(si.vat)||0)*100)/100;
       si.net = Math.round((Number(si.net)|| (si.gross - si.vat))*100)/100;
@@ -13693,10 +13703,12 @@ if (!d.features) d.features = { sruEnabled: false };
   const siVat = document.getElementById("siVat");
   const siNet = document.getElementById("siNet");
   const siExchangeRate = document.getElementById("siExchangeRate");
+  const siPaidSek = document.getElementById("siPaidSek");
   const siGrossSek = document.getElementById("siGrossSek");
   const siVatSek = document.getElementById("siVatSek");
   const siTaxTreatment = document.getElementById("siTaxTreatment");
   const siReverseVatSek = document.getElementById("siReverseVatSek");
+  const siPrivateOutlay = document.getElementById("siPrivateOutlay");
   const siExpenseAcc = document.getElementById("siExpenseAcc");
   const siVatAcc = document.getElementById("siVatAcc");
   const siLiabAcc = document.getElementById("siLiabAcc");
@@ -15919,6 +15931,8 @@ if (!d.features) d.features = { sruEnabled: false };
   function ensureSupplierInvoiceDefaultAccounts(){
     state.accounts = state.accounts || {};
     if (!state.accounts["2440"]) state.accounts["2440"] = { name:"Leverantörsskulder", type:"liability" };
+    if (!state.accounts["2018"]) state.accounts["2018"] = { name:"Egna insättningar", type:"liability" };
+    if (!state.accounts["2893"]) state.accounts["2893"] = { name:"Skulder till närstående personer", type:"liability" };
     if (!state.accounts["2641"]) state.accounts["2641"] = { name:"Ingående moms", type:"asset" };
     if (!state.accounts["2645"]) state.accounts["2645"] = { name:"Beräknad ingående moms på förvärv från utlandet", type:"asset" };
     if (!state.accounts["2614"]) state.accounts["2614"] = { name:"Utgående moms omvänd skattskyldighet, 25 %", type:"liability" };
@@ -16024,11 +16038,16 @@ if (!d.features) d.features = { sruEnabled: false };
     const vat = parseMoney(siVat && siVat.value);
     const net = Math.round((gross - vat) * 100) / 100;
     if (siNet) siNet.value = (Math.abs(net) > 0.00001) ? String(net).replace(".", ",") : "";
-    const rate = parseMoney(siExchangeRate && siExchangeRate.value);
+    let rate = parseMoney(siExchangeRate && siExchangeRate.value);
+    const paidSek = parseMoney(siPaidSek && siPaidSek.value);
     const currency = String(siSupplierCurrency?.value || state.company?.currency || "SEK").trim().toUpperCase() || "SEK";
     const baseCurrency = String(state.company?.currency || "SEK").trim().toUpperCase() || "SEK";
     const needsRate = currency && currency !== baseCurrency;
-    const grossSek = needsRate ? (gross > 0 && rate > 0 ? round2(gross * rate) : 0) : gross;
+    if (needsRate && paidSek > 0 && gross > 0){
+      rate = Math.round((paidSek / gross) * 1000000) / 1000000;
+      if (siExchangeRate) siExchangeRate.value = String(rate).replace(".", ",");
+    }
+    const grossSek = needsRate ? (paidSek > 0 ? round2(paidSek) : (gross > 0 && rate > 0 ? round2(gross * rate) : 0)) : gross;
     const vatSek = needsRate ? (vat > 0 && rate > 0 ? round2(vat * rate) : 0) : vat;
     if (siGrossSek) siGrossSek.value = (needsRate && grossSek > 0) ? String(grossSek).replace(".", ",") : "";
     if (siVatSek) siVatSek.value = (needsRate && (vatSek > 0 || (vat === 0 && gross > 0 && rate > 0))) ? String(vatSek).replace(".", ",") : "";
@@ -16080,10 +16099,12 @@ if (!d.features) d.features = { sruEnabled: false };
     if (siSupplierBankName) siSupplierBankName.value = "";
     if (siSupplierBankCountry) siSupplierBankCountry.value = "";
     if (siExchangeRate) siExchangeRate.value = "";
+    if (siPaidSek) siPaidSek.value = "";
     if (siGrossSek) siGrossSek.value = "";
     if (siVatSek) siVatSek.value = "";
     if (siTaxTreatment) siTaxTreatment.value = "normal";
     if (siReverseVatSek) siReverseVatSek.value = "";
+    if (siPrivateOutlay) siPrivateOutlay.checked = false;
 
     renderSiAccountSelects(null);
     if (siGross) siGross.value = "";
@@ -16121,7 +16142,9 @@ if (!d.features) d.features = { sruEnabled: false };
     if (siSupplierBankName) siSupplierBankName.value = si.supplierBankName || (si.supplierId ? (state.suppliers?.[si.supplierId]?.bankName || "") : "");
     if (siSupplierBankCountry) siSupplierBankCountry.value = si.supplierBankCountry || (si.supplierId ? (state.suppliers?.[si.supplierId]?.bankCountry || state.suppliers?.[si.supplierId]?.country || "") : "");
     if (siExchangeRate) siExchangeRate.value = si.exchangeRate ? String(si.exchangeRate).replace(".", ",") : "";
+    if (siPaidSek) siPaidSek.value = si.paidSek ? String(si.paidSek).replace(".", ",") : "";
     if (siTaxTreatment) siTaxTreatment.value = normalizeSupplierInvoiceTaxTreatment(si.taxTreatment);
+    if (siPrivateOutlay) siPrivateOutlay.checked = !!si.privateOutlay;
 
     renderSiAccountSelects(si);
 
@@ -16199,12 +16222,15 @@ if (!d.features) d.features = { sruEnabled: false };
     const supplierBankName = clampText((siSupplierBankName && siSupplierBankName.value ? siSupplierBankName.value : "").trim(), 120);
     const supplierBankCountry = clampText((siSupplierBankCountry && siSupplierBankCountry.value ? siSupplierBankCountry.value : "").trim(), 80);
     const taxTreatment = normalizeSupplierInvoiceTaxTreatment(siTaxTreatment && siTaxTreatment.value);
+    const privateOutlay = !!(siPrivateOutlay && siPrivateOutlay.checked);
 
     const gross = Math.round(parseMoney(siGross && siGross.value) * 100) / 100;
     const vat = Math.round(parseMoney(siVat && siVat.value) * 100) / 100;
     const net = Math.round((gross - vat) * 100) / 100;
-    const exchangeRate = Math.round(parseMoney(siExchangeRate && siExchangeRate.value) * 1000000) / 1000000;
-    const grossSek = exchangeRate > 0 ? Math.round(gross * exchangeRate * 100) / 100 : 0;
+    const paidSek = Math.round(parseMoney(siPaidSek && siPaidSek.value) * 100) / 100;
+    const exchangeRateInput = Math.round(parseMoney(siExchangeRate && siExchangeRate.value) * 1000000) / 1000000;
+    const exchangeRate = paidSek > 0 && gross > 0 ? Math.round((paidSek / gross) * 1000000) / 1000000 : exchangeRateInput;
+    const grossSek = paidSek > 0 ? paidSek : (exchangeRate > 0 ? Math.round(gross * exchangeRate * 100) / 100 : 0);
     const vatSek = exchangeRate > 0 ? Math.round(vat * exchangeRate * 100) / 100 : 0;
     const netSek = exchangeRate > 0 ? Math.round(net * exchangeRate * 100) / 100 : 0;
 
@@ -16236,6 +16262,8 @@ if (!d.features) d.features = { sruEnabled: false };
         series,
         currency: supplierCurrency || state.company?.currency || "SEK",
         taxTreatment,
+        paidSek,
+        privateOutlay,
         exchangeRate,
         gross,
         vat,
@@ -16304,6 +16332,8 @@ if (!d.features) d.features = { sruEnabled: false };
       series,
       currency: supplierCurrency || before.currency || (state.company?.currency || "SEK"),
       taxTreatment,
+      paidSek,
+      privateOutlay,
       exchangeRate,
       gross,
       vat,
@@ -16388,6 +16418,8 @@ if (!d.features) d.features = { sruEnabled: false };
     if (!state.accounts[si.expenseAccount]) state.accounts[si.expenseAccount] = { name:"Kostnad", type: guessTypeFromAccountNo(si.expenseAccount) };
     if (!state.accounts[si.vatAccount]) state.accounts[si.vatAccount] = { name:"Ingående moms", type: guessTypeFromAccountNo(si.vatAccount) };
     if (!state.accounts[si.liabAccount]) state.accounts[si.liabAccount] = { name:"Leverantörsskuld", type: guessTypeFromAccountNo(si.liabAccount) };
+    if (!state.accounts["2018"]) state.accounts["2018"] = { name:"Egna insättningar", type:"liability" };
+    if (!state.accounts["2893"]) state.accounts["2893"] = { name:"Skulder till närstående personer", type:"liability" };
     if (!state.accounts["2645"]) state.accounts["2645"] = { name:"Beräknad ingående moms på förvärv från utlandet", type:"asset" };
     if (!state.accounts["2614"]) state.accounts["2614"] = { name:"Utgående moms omvänd skattskyldighet, 25 %", type:"liability" };
 
@@ -16425,13 +16457,16 @@ if (!d.features) d.features = { sruEnabled: false };
     const purchaseText = si.invoiceNo ? (`Lev.fakt ${si.invoiceNo}${isForeignCurrency ? ` ${originalGross} ${invoiceCurrency}` : ""}`) : "Leverantörsfaktura";
     const inputVatAccount = reverseVatRate ? "2645" : si.vatAccount;
     const outputVatAccount = reverseVatRate ? "2614" : "";
+    const creditAccount = si.privateOutlay ? getPrivateOutlayCreditAccount() : si.liabAccount;
+    const creditText = si.privateOutlay ? "Privat utlägg" : supplierName;
+    if (si.privateOutlay) state.accounts[creditAccount] = state.accounts[creditAccount] || { name:getPrivateOutlayCreditAccountName(creditAccount), type:"liability" };
 
     const lines = [
       { account: si.expenseAccount, text: purchaseText, amount: +net },
       (reverseVat ? { account: inputVatAccount, text: "Beräknad ingående moms EU/omvänd", amount: +reverseVat } : null),
       (reverseVat ? { account: outputVatAccount, text: "Beräknad utgående moms EU/omvänd", amount: -reverseVat } : null),
       (!reverseVat && vat && taxTreatment !== "no_vat" ? { account: inputVatAccount, text: "Ingående moms", amount: +vat } : null),
-      { account: si.liabAccount, text: supplierName, amount: -(gross) }
+      { account: creditAccount, text: creditText, amount: -(gross) }
     ].filter(Boolean);
 
     const vv = {
@@ -16448,6 +16483,7 @@ if (!d.features) d.features = { sruEnabled: false };
       exchangeRate: isForeignCurrency ? exchangeRate : 1,
       sourceAmount: isForeignCurrency ? originalGross : null,
       taxTreatment,
+      privateOutlay: !!si.privateOutlay,
       correctionOf: null,
       status: "active"
     };
@@ -16528,7 +16564,9 @@ if (!d.features) d.features = { sruEnabled: false };
       const meta = [
         si.due ? ("Förfaller " + si.due) : "",
         ("Belopp " + fmtSEK(Number(si.gross)||0) + " " + (si.currency||state.company.currency||"SEK")),
+        (si.paidSek ? ("Draget " + fmtSEK(Number(si.paidSek)||0) + " SEK") : ""),
         supplierInvoiceTaxTreatmentLabel(si.taxTreatment),
+        (si.privateOutlay ? "Betalt privat" : ""),
         paymentMeta,
         (uCount ? ("Underlag: " + uCount) : "Underlag: 0"),
         (isBooked ? ("Verifikation: " + String((state.vouchers||[]).find(v=>v.id===si.bookedVoucherId)?.series||"") + String((state.vouchers||[]).find(v=>v.id===si.bookedVoucherId)?.no||"")) : "")
@@ -16596,7 +16634,7 @@ if (!d.features) d.features = { sruEnabled: false };
       });
     }
 
-    [siDate, siDue, siInvoiceNo, siOcr, siSeries, siSupplierName, siSupplierOrgnr, siSupplierEmail, siSupplierPayout, siSupplierBankAccount, siSupplierIban, siSupplierSwift, siSupplierCurrency, siSupplierBankName, siSupplierBankCountry, siGross, siVat, siExchangeRate, siTaxTreatment].filter(Boolean).forEach(el=>{
+    [siDate, siDue, siInvoiceNo, siOcr, siSeries, siSupplierName, siSupplierOrgnr, siSupplierEmail, siSupplierPayout, siSupplierBankAccount, siSupplierIban, siSupplierSwift, siSupplierCurrency, siSupplierBankName, siSupplierBankCountry, siGross, siVat, siExchangeRate, siPaidSek, siTaxTreatment, siPrivateOutlay].filter(Boolean).forEach(el=>{
       el.addEventListener("input", ()=>{
         siRecalcNet();
         siSetSaveEnabled();

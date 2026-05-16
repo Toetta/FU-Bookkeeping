@@ -1630,7 +1630,7 @@
                   <input id="siExchangeRate" inputmode="decimal" placeholder="t.ex. 11,35" />
                 </div>
                 <div class="field" style="min-width:180px;">
-                  <label>Draget/betalt SEK</label>
+                  <label>Kortdebitering SEK</label>
                   <input id="siPaidSek" inputmode="decimal" placeholder="t.ex. 15034,21" />
                 </div>
                 <div class="field" style="min-width:180px;">
@@ -1659,7 +1659,11 @@
                 </div>
                 <label class="check" style="align-self:flex-end; min-height:38px;">
                   <input id="siPrivateOutlay" type="checkbox" />
-                  Betalt privat
+                  Privat kort/utlägg
+                </label>
+                <label class="check" style="align-self:flex-end; min-height:38px;">
+                  <input id="siCompanyPaidDirect" type="checkbox" />
+                  Direkt från företagskonto
                 </label>
               </div>
 
@@ -1673,13 +1677,13 @@
                   <select id="siVatAcc"></select>
                 </div>
                 <div class="field" style="min-width:220px; flex:1;">
-                  <label>Leverantörsskuld (kredit)</label>
+                  <label>Skuld/betalkonto (kredit)</label>
                   <select id="siLiabAcc"></select>
                 </div>
               </div>
 
               <div class="row" style="justify-content:space-between; margin-top:10px;">
-                <div class="muted small">Skapar verifikation i SEK. Ange draget SEK-belopp om köpet betalats med kort; då räknas kursen fram från faktisk kortdebitering.</div>
+                <div class="muted small">Skapar verifikation i SEK. Välj direkt från företagskonto om köpet belastar bolagets konto/kort direkt; då krediteras bankkontot och ingen separat ersättning skapas.</div>
                 <button class="btn secondary" id="btnSiToVoucher">Skapa verifikation (serie L)</button>
               </div>
             </div>
@@ -2974,8 +2978,8 @@ Tack!</div>
 (function(){
  
 
-  const APP_VERSION = "1.4.47"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.68";  // user-facing revision
+  const APP_VERSION = "1.4.49"; // bump when adding new data fields
+  const APP_SEMVER = "0.3.70";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -3867,6 +3871,12 @@ Tack!</div>
       else si.exchangeRate = Math.round(Number(si.exchangeRate) * 1000000) / 1000000;
       si.paidSek = Math.round((Number(si.paidSek)||0)*100)/100;
       si.privateOutlay = !!si.privateOutlay;
+      si.companyPaidDirect = !!si.companyPaidDirect;
+      if (si.companyPaidDirect) si.privateOutlay = false;
+      if (si.reimbursedAt == null) si.reimbursedAt = "";
+      if (si.reimbursedBy == null) si.reimbursedBy = "";
+      if (si.reimbursementVoucherId == null) si.reimbursementVoucherId = "";
+      if (si.reimbursementAccount == null) si.reimbursementAccount = "";
       si.gross = Math.round((Number(si.gross)||0)*100)/100;
       si.vat = Math.round((Number(si.vat)||0)*100)/100;
       si.net = Math.round((Number(si.net)|| (si.gross - si.vat))*100)/100;
@@ -13709,6 +13719,7 @@ if (!d.features) d.features = { sruEnabled: false };
   const siTaxTreatment = document.getElementById("siTaxTreatment");
   const siReverseVatSek = document.getElementById("siReverseVatSek");
   const siPrivateOutlay = document.getElementById("siPrivateOutlay");
+  const siCompanyPaidDirect = document.getElementById("siCompanyPaidDirect");
   const siExpenseAcc = document.getElementById("siExpenseAcc");
   const siVatAcc = document.getElementById("siVatAcc");
   const siLiabAcc = document.getElementById("siLiabAcc");
@@ -15930,6 +15941,7 @@ if (!d.features) d.features = { sruEnabled: false };
 
   function ensureSupplierInvoiceDefaultAccounts(){
     state.accounts = state.accounts || {};
+    if (!state.accounts["1930"]) state.accounts["1930"] = { name:"Företagskonto/bank", type:"asset" };
     if (!state.accounts["2440"]) state.accounts["2440"] = { name:"Leverantörsskulder", type:"liability" };
     if (!state.accounts["2018"]) state.accounts["2018"] = { name:"Egna insättningar", type:"liability" };
     if (!state.accounts["2893"]) state.accounts["2893"] = { name:"Skulder till närstående personer", type:"liability" };
@@ -16105,6 +16117,7 @@ if (!d.features) d.features = { sruEnabled: false };
     if (siTaxTreatment) siTaxTreatment.value = "normal";
     if (siReverseVatSek) siReverseVatSek.value = "";
     if (siPrivateOutlay) siPrivateOutlay.checked = false;
+    if (siCompanyPaidDirect) siCompanyPaidDirect.checked = false;
 
     renderSiAccountSelects(null);
     if (siGross) siGross.value = "";
@@ -16145,6 +16158,7 @@ if (!d.features) d.features = { sruEnabled: false };
     if (siPaidSek) siPaidSek.value = si.paidSek ? String(si.paidSek).replace(".", ",") : "";
     if (siTaxTreatment) siTaxTreatment.value = normalizeSupplierInvoiceTaxTreatment(si.taxTreatment);
     if (siPrivateOutlay) siPrivateOutlay.checked = !!si.privateOutlay;
+    if (siCompanyPaidDirect) siCompanyPaidDirect.checked = !!si.companyPaidDirect;
 
     renderSiAccountSelects(si);
 
@@ -16222,7 +16236,8 @@ if (!d.features) d.features = { sruEnabled: false };
     const supplierBankName = clampText((siSupplierBankName && siSupplierBankName.value ? siSupplierBankName.value : "").trim(), 120);
     const supplierBankCountry = clampText((siSupplierBankCountry && siSupplierBankCountry.value ? siSupplierBankCountry.value : "").trim(), 80);
     const taxTreatment = normalizeSupplierInvoiceTaxTreatment(siTaxTreatment && siTaxTreatment.value);
-    const privateOutlay = !!(siPrivateOutlay && siPrivateOutlay.checked);
+    const companyPaidDirect = !!(siCompanyPaidDirect && siCompanyPaidDirect.checked);
+    const privateOutlay = companyPaidDirect ? false : !!(siPrivateOutlay && siPrivateOutlay.checked);
 
     const gross = Math.round(parseMoney(siGross && siGross.value) * 100) / 100;
     const vat = Math.round(parseMoney(siVat && siVat.value) * 100) / 100;
@@ -16236,7 +16251,8 @@ if (!d.features) d.features = { sruEnabled: false };
 
     const expenseAccount = (siExpenseAcc && siExpenseAcc.value ? siExpenseAcc.value : "4010");
     const vatAccount = (siVatAcc && siVatAcc.value ? siVatAcc.value : "2641");
-    const liabAccount = (siLiabAcc && siLiabAcc.value ? siLiabAcc.value : "2440");
+    const liabAccountRaw = (siLiabAcc && siLiabAcc.value ? siLiabAcc.value : "2440");
+    const liabAccount = companyPaidDirect && (!liabAccountRaw || liabAccountRaw === "2440") ? "1930" : liabAccountRaw;
 
     if (!silent){
       if (!date) { showToast("Ange fakturadatum.", 4500); return null; }
@@ -16264,6 +16280,7 @@ if (!d.features) d.features = { sruEnabled: false };
         taxTreatment,
         paidSek,
         privateOutlay,
+        companyPaidDirect,
         exchangeRate,
         gross,
         vat,
@@ -16334,6 +16351,7 @@ if (!d.features) d.features = { sruEnabled: false };
       taxTreatment,
       paidSek,
       privateOutlay,
+      companyPaidDirect,
       exchangeRate,
       gross,
       vat,
@@ -16418,6 +16436,7 @@ if (!d.features) d.features = { sruEnabled: false };
     if (!state.accounts[si.expenseAccount]) state.accounts[si.expenseAccount] = { name:"Kostnad", type: guessTypeFromAccountNo(si.expenseAccount) };
     if (!state.accounts[si.vatAccount]) state.accounts[si.vatAccount] = { name:"Ingående moms", type: guessTypeFromAccountNo(si.vatAccount) };
     if (!state.accounts[si.liabAccount]) state.accounts[si.liabAccount] = { name:"Leverantörsskuld", type: guessTypeFromAccountNo(si.liabAccount) };
+    if (!state.accounts["1930"]) state.accounts["1930"] = { name:"Företagskonto/bank", type:"asset" };
     if (!state.accounts["2018"]) state.accounts["2018"] = { name:"Egna insättningar", type:"liability" };
     if (!state.accounts["2893"]) state.accounts["2893"] = { name:"Skulder till närstående personer", type:"liability" };
     if (!state.accounts["2645"]) state.accounts["2645"] = { name:"Beräknad ingående moms på förvärv från utlandet", type:"asset" };
@@ -16457,9 +16476,11 @@ if (!d.features) d.features = { sruEnabled: false };
     const purchaseText = si.invoiceNo ? (`Lev.fakt ${si.invoiceNo}${isForeignCurrency ? ` ${originalGross} ${invoiceCurrency}` : ""}`) : "Leverantörsfaktura";
     const inputVatAccount = reverseVatRate ? "2645" : si.vatAccount;
     const outputVatAccount = reverseVatRate ? "2614" : "";
-    const creditAccount = si.privateOutlay ? getPrivateOutlayCreditAccount() : si.liabAccount;
-    const creditText = si.privateOutlay ? "Privat utlägg" : supplierName;
+    const companyPaidDirect = !!si.companyPaidDirect;
+    const creditAccount = si.privateOutlay ? getPrivateOutlayCreditAccount() : (companyPaidDirect ? (si.liabAccount || "1930") : si.liabAccount);
+    const creditText = si.privateOutlay ? "Privat utlägg" : (companyPaidDirect ? "Direktbetalning företagskonto" : supplierName);
     if (si.privateOutlay) state.accounts[creditAccount] = state.accounts[creditAccount] || { name:getPrivateOutlayCreditAccountName(creditAccount), type:"liability" };
+    if (companyPaidDirect && !state.accounts[creditAccount]) state.accounts[creditAccount] = { name: creditAccount === "1930" ? "Företagskonto/bank" : `Betalkonto ${creditAccount}`, type:"asset" };
 
     const lines = [
       { account: si.expenseAccount, text: purchaseText, amount: +net },
@@ -16484,6 +16505,7 @@ if (!d.features) d.features = { sruEnabled: false };
       sourceAmount: isForeignCurrency ? originalGross : null,
       taxTreatment,
       privateOutlay: !!si.privateOutlay,
+      companyPaidDirect,
       correctionOf: null,
       status: "active"
     };
@@ -16518,6 +16540,102 @@ if (!d.features) d.features = { sruEnabled: false };
       showToast("Skapade verifikation från leverantörsfakturan. Kontrollera konton och moms innan du använder skarpt.", 8000);
     } catch (e){
       showToast("Skapade verifikation från leverantörsfakturan.", 4500);
+    }
+  }
+
+  function supplierInvoiceBookedSekAmount(si){
+    const amount = Number(si?.grossSek || si?.paidSek || 0) || 0;
+    if (amount > 0) return Math.round(amount * 100) / 100;
+    const gross = Math.round((Number(si?.gross)||0) * 100) / 100;
+    const currency = String(si?.currency || si?.supplierCurrency || state.company?.currency || "SEK").trim().toUpperCase() || "SEK";
+    const baseCurrency = String(state.company?.currency || "SEK").trim().toUpperCase() || "SEK";
+    const rate = Number(si?.exchangeRate || 0) || 0;
+    if (currency !== baseCurrency && rate > 0) return Math.round(gross * rate * 100) / 100;
+    return gross;
+  }
+
+  async function registerSupplierInvoicePrivateOutlayReimbursement(siId){
+    const si = (state.supplierInvoices||[]).find(x=>x && x.id===siId);
+    if (!si) return;
+    if (!si.bookedVoucherId) return showToast("Bokför leverantörsfakturan först, så finns skulden till dig att ersätta.", 6500);
+    if (!si.privateOutlay) return showToast("Fakturan är inte markerad som privat kort/utlägg.", 6000);
+    if (si.reimbursementVoucherId) return showToast("Ersättningen är redan bokförd.", 5500);
+
+    const amount = supplierInvoiceBookedSekAmount(si);
+    if (!(amount > 0)) return showToast("Saknar SEK-belopp att ersätta.", 5500);
+
+    const reimbursementDate = await promptAsync("Datum då företagskontot betalade/ersatte (YYYY-MM-DD)", {
+      defaultValue: todayISO(),
+      placeholder: "2026-05-16",
+      okText: "Fortsätt",
+      cancelText: "Avbryt",
+      multiline: false,
+    });
+    if (reimbursementDate == null) return;
+    const reimbursementDateIso = String(reimbursementDate || "").trim();
+    if (!isIsoDateString(reimbursementDateIso)) return showToast("Ange datum som YYYY-MM-DD.", 5500);
+
+    const bankAccount = await promptAsync("Utbetalningskonto", {
+      defaultValue: getDefaultInvoicePaymentAccount(),
+      helpText: "Välj företagskontot som betalade kreditkortsposten eller ersättningen. Vanligtvis 1930.",
+      selectOptions: getInvoicePaymentAccountPromptOptions(),
+      okText: "Bokför ersättning",
+      cancelText: "Avbryt",
+      multiline: false,
+    });
+    if (bankAccount == null) return;
+    const bankAccountNo = String(bankAccount || "").trim();
+    if (!bankAccountNo) return showToast("Välj utbetalningskonto.", 5500);
+
+    ensureSupplierInvoiceDefaultAccounts();
+    if (!state.accounts[bankAccountNo]) state.accounts[bankAccountNo] = { name: bankAccountNo === "1930" ? "Företagskonto/bank" : `Utbetalningskonto ${bankAccountNo}`, type:"asset" };
+    const privateAccount = getPrivateOutlayCreditAccount();
+    if (!state.accounts[privateAccount]) state.accounts[privateAccount] = { name:getPrivateOutlayCreditAccountName(privateAccount), type:"liability" };
+
+    const yearId = getYearIdForDate(reimbursementDateIso);
+    const no = nextVerno(yearId, "B");
+    const supplierName = (si.supplierName || "").trim() || "Leverantör";
+    const invoiceNo = String(si.invoiceNo || "").trim();
+    const vv = {
+      id: crypto.randomUUID(),
+      yearId,
+      series: "B",
+      no,
+      date: reimbursementDateIso,
+      text: clampText(`Ersatt privat utlägg ${supplierName} ${invoiceNo}`.trim(), 120),
+      regDate: todayISO(),
+      sign: state.company.defaultSign || "",
+      supplierInvoiceId: String(si.id || "").trim(),
+      supplierInvoiceEvent: "private_outlay_reimbursement",
+      paymentAccount: bankAccountNo,
+      lines: [
+        { account: privateAccount, text: "Reglering privat utlägg", amount: +amount },
+        { account: bankAccountNo, text: "Utbetalning", amount: -amount }
+      ],
+      correctionOf: null,
+      status: "active"
+    };
+
+    const before = { ...si };
+    state.vouchers = Array.isArray(state.vouchers) ? state.vouchers : [];
+    state.vouchers.push(vv);
+    si.reimbursedAt = reimbursementDateIso;
+    si.reimbursedBy = clampText((state.company?.defaultSign || "").trim(), 60);
+    si.reimbursementVoucherId = vv.id;
+    si.reimbursementAccount = bankAccountNo;
+    appendAudit({ action:"voucher.create", actor: vv.sign || undefined, entityType:"voucher", entityId: vv.id, yearId, details:{ after: summarizeVoucher(vv), source:"supplierInvoice_privateOutlayReimbursement", supplierInvoiceId: si.id } });
+    appendAudit({ action:"supplierInvoice.reimbursePrivateOutlay", actor: si.reimbursedBy || undefined, entityType:"supplierInvoice", entityId: si.id, yearId: si.yearId || yearId, details:{ before, after: si, voucherId: vv.id } });
+    state.vouchers.sort((a,b)=> (a.yearId+b.series+a.no+a.date).localeCompare(b.yearId+b.series+b.no+b.date, "sv"));
+    save();
+    try { renderVouchers(); } catch (e){}
+    try { renderSupplierInvoices(); } catch (e){}
+    try { loadSupplierInvoiceToEditor(si.id); } catch (e){}
+    try {
+      activateTab("vouchers");
+      viewVoucherToEditor(vv.id);
+      showToast("Bokförde ersättning av privat utlägg.", 5500);
+    } catch {
+      showToast("Bokförde ersättning av privat utlägg.", 4500);
     }
   }
 
@@ -16556,7 +16674,8 @@ if (!d.features) d.features = { sruEnabled: false };
     list.forEach(si=>{
       const isVoided = String(si.status||"") === "voided";
       const isBooked = !!si.bookedVoucherId;
-      const badge = isVoided ? '<span class="status">Makulerad</span>' : (isBooked ? '<span class="status ok">Bokförd</span>' : '<span class="status">Mottagen</span>');
+      const isReimbursed = !!si.reimbursementVoucherId;
+      const badge = isVoided ? '<span class="status">Makulerad</span>' : (isBooked ? `<span class="status ok">${isReimbursed ? "Ersatt" : "Bokförd"}</span>` : '<span class="status">Mottagen</span>');
       const uCount = supplierInvoiceUnderlagCount(si);
 
       const title = `${escapeHtml(si.date||"")} · ${escapeHtml(si.supplierName||"Leverantör")} · ${escapeHtml(si.invoiceNo||"(utan nr)")}`;
@@ -16564,9 +16683,10 @@ if (!d.features) d.features = { sruEnabled: false };
       const meta = [
         si.due ? ("Förfaller " + si.due) : "",
         ("Belopp " + fmtSEK(Number(si.gross)||0) + " " + (si.currency||state.company.currency||"SEK")),
-        (si.paidSek ? ("Draget " + fmtSEK(Number(si.paidSek)||0) + " SEK") : ""),
+        (si.paidSek ? ("Kortdebitering " + fmtSEK(Number(si.paidSek)||0) + " SEK") : ""),
         supplierInvoiceTaxTreatmentLabel(si.taxTreatment),
-        (si.privateOutlay ? "Betalt privat" : ""),
+        (si.companyPaidDirect ? "Direkt från företagskonto" : ""),
+        (si.privateOutlay ? (si.reimbursementVoucherId ? "Privat utlägg ersatt" : "Privat utlägg väntar ersättning") : ""),
         paymentMeta,
         (uCount ? ("Underlag: " + uCount) : "Underlag: 0"),
         (isBooked ? ("Verifikation: " + String((state.vouchers||[]).find(v=>v.id===si.bookedVoucherId)?.series||"") + String((state.vouchers||[]).find(v=>v.id===si.bookedVoucherId)?.no||"")) : "")
@@ -16575,6 +16695,8 @@ if (!d.features) d.features = { sruEnabled: false };
       const btnOpen = `<button class="btn secondary" data-act="open" data-id="${escapeAttr(si.id)}">Öppna</button>`;
       const btnVoucher = (!isBooked && !isVoided) ? `<button class="btn" data-act="voucher" data-id="${escapeAttr(si.id)}">Bokför</button>` : "";
       const btnShowVoucher = (isBooked) ? `<button class="btn secondary" data-act="show-voucher" data-id="${escapeAttr(si.id)}">Visa verifikation</button>` : "";
+      const btnReimburse = (isBooked && si.privateOutlay && !si.reimbursementVoucherId && !isVoided) ? `<button class="btn" data-act="reimburse-private" data-id="${escapeAttr(si.id)}">Bokför ersättning</button>` : "";
+      const btnShowReimbursement = (si.reimbursementVoucherId) ? `<button class="btn secondary" data-act="show-reimbursement" data-id="${escapeAttr(si.id)}">Visa ersättning</button>` : "";
       const btnVoid = (!isVoided) ? `<button class="btn danger" data-act="void" data-id="${escapeAttr(si.id)}">Makulera</button>` : "";
 
       const div = document.createElement("div");
@@ -16588,6 +16710,8 @@ if (!d.features) d.features = { sruEnabled: false };
           <div class="row">
             ${btnOpen}
             ${btnShowVoucher}
+            ${btnShowReimbursement}
+            ${btnReimburse}
             ${btnVoucher}
             ${btnVoid}
           </div>
@@ -16634,7 +16758,7 @@ if (!d.features) d.features = { sruEnabled: false };
       });
     }
 
-    [siDate, siDue, siInvoiceNo, siOcr, siSeries, siSupplierName, siSupplierOrgnr, siSupplierEmail, siSupplierPayout, siSupplierBankAccount, siSupplierIban, siSupplierSwift, siSupplierCurrency, siSupplierBankName, siSupplierBankCountry, siGross, siVat, siExchangeRate, siPaidSek, siTaxTreatment, siPrivateOutlay].filter(Boolean).forEach(el=>{
+    [siDate, siDue, siInvoiceNo, siOcr, siSeries, siSupplierName, siSupplierOrgnr, siSupplierEmail, siSupplierPayout, siSupplierBankAccount, siSupplierIban, siSupplierSwift, siSupplierCurrency, siSupplierBankName, siSupplierBankCountry, siGross, siVat, siExchangeRate, siPaidSek, siTaxTreatment, siPrivateOutlay, siCompanyPaidDirect].filter(Boolean).forEach(el=>{
       el.addEventListener("input", ()=>{
         siRecalcNet();
         siSetSaveEnabled();
@@ -16647,6 +16771,13 @@ if (!d.features) d.features = { sruEnabled: false };
           const t = normalizeSupplierInvoiceTaxTreatment(siTaxTreatment.value);
           if (t === "eu_goods_25" && (!siExpenseAcc.value || siExpenseAcc.value === "4010" || siExpenseAcc.value === "4535")) siExpenseAcc.value = "4515";
           if (t === "eu_services_25" && (!siExpenseAcc.value || siExpenseAcc.value === "4010" || siExpenseAcc.value === "4515")) siExpenseAcc.value = "4535";
+        }
+        if (el === siCompanyPaidDirect && siCompanyPaidDirect.checked){
+          if (siPrivateOutlay) siPrivateOutlay.checked = false;
+          if (siLiabAcc && (!siLiabAcc.value || siLiabAcc.value === "2440")) siLiabAcc.value = "1930";
+        }
+        if (el === siPrivateOutlay && siPrivateOutlay.checked){
+          if (siCompanyPaidDirect) siCompanyPaidDirect.checked = false;
         }
         siRecalcNet();
         siSetSaveEnabled();
@@ -16771,12 +16902,20 @@ if (!d.features) d.features = { sruEnabled: false };
         if (!id) return;
         if (act === "open"){ loadSupplierInvoiceToEditor(id); }
         if (act === "voucher"){ await createVoucherFromSupplierInvoice(id); }
+        if (act === "reimburse-private"){ await registerSupplierInvoicePrivateOutlayReimbursement(id); }
         if (act === "void"){ await voidSupplierInvoice(id); }
         if (act === "show-voucher"){
           const si = (state.supplierInvoices||[]).find(x=>x && x.id===id);
           if (si && si.bookedVoucherId){
             activateTab("vouchers");
             viewVoucherToEditor(si.bookedVoucherId);
+          }
+        }
+        if (act === "show-reimbursement"){
+          const si = (state.supplierInvoices||[]).find(x=>x && x.id===id);
+          if (si && si.reimbursementVoucherId){
+            activateTab("vouchers");
+            viewVoucherToEditor(si.reimbursementVoucherId);
           }
         }
       });

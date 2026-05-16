@@ -2840,8 +2840,8 @@ Tack!</div>
 (function(){
  
 
-  const APP_VERSION = "1.4.34"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.55";  // user-facing revision
+  const APP_VERSION = "1.4.35"; // bump when adding new data fields
+  const APP_SEMVER = "0.3.56";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -3758,6 +3758,7 @@ Tack!</div>
 const OLD_AUTO_BACKUP_LAST_DAY_KEY = "FU_AUTOBACKUP_LAST_DAY_V1"; // legacy single-company key (migration/fallback)
 const AUTO_BACKUP_ENABLED_KEY  = "FU_AUTOBACKUP_ENABLED_V1";
 const DOC_MIRROR_MANIFEST_KEY_PREFIX = "FU_DOC_MIRROR_MANIFEST_V1:";
+const UNDERLAG_MIRROR_MANIFEST_KEY_PREFIX = "FU_UNDERLAG_MIRROR_MANIFEST_V1:";
 let backupDirHandle = null;
 
 function documentMirrorManifestKey(){
@@ -3766,6 +3767,14 @@ function documentMirrorManifestKey(){
     if (activeId) return DOC_MIRROR_MANIFEST_KEY_PREFIX + String(activeId);
   } catch {}
   return DOC_MIRROR_MANIFEST_KEY_PREFIX + "default";
+}
+
+function underlagMirrorManifestKey(){
+  try {
+    const activeId = CompanyManager.getActiveCompanyId();
+    if (activeId) return UNDERLAG_MIRROR_MANIFEST_KEY_PREFIX + String(activeId);
+  } catch {}
+  return UNDERLAG_MIRROR_MANIFEST_KEY_PREFIX + "default";
 }
 
 function companyOrgnrForMirror(){
@@ -3804,6 +3813,10 @@ function documentMirrorIndexFolderName(){
   return safeFileName(`FU_DOKUMENTINDEX_${companyOrgnrForMirror()}`);
 }
 
+function underlagMirrorIndexFolderName(){
+  return safeFileName(`FU_UNDERLAGINDEX_${companyOrgnrForMirror()}`);
+}
+
 function yearsWithMirrorCandidates(){
   const years = new Set();
   (state.invoices || []).forEach(inv => {
@@ -3823,6 +3836,28 @@ function documentMirrorFolderParts(doc){
   if (kind === "quote_attachment") return [documentMirrorFolderLabel(doc, "QUOTE_ATTACHMENTS")];
   if (kind.startsWith("webshop_")) return [documentMirrorFolderLabel(doc, "JSON")];
   return [documentMirrorFolderLabel(doc, "OTHER")];
+}
+
+function underlagMirrorFolderParts(u){
+  const rawYearId = String(u?.yearId || "").trim();
+  const rawDate = String(u?.date || "").trim();
+  const year = rawYearId
+    ? mirrorYearLabel(rawYearId)
+    : (/^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate.slice(0, 4) : mirrorYearLabel(state.activeYearId || ""));
+  const orgnr = companyOrgnrForMirror();
+  const suffix = String(u?.status || "active") === "detached" ? "UNDERLAG_BORTKOPPLAT" : "UNDERLAG";
+  const series = safeStemPart(u?.series || "_", 24) || "_";
+  const no = safeStemPart(padVerno(u?.no || "") || String(u?.voucherId || "").slice(0, 8) || "utan_verifikation", 40) || "utan_verifikation";
+  return [safeFileName(`${year}_${orgnr}_${suffix}`), series, no];
+}
+
+function underlagMirrorFileName(u){
+  const idPart = safeStemPart(String(u?.id || "").slice(0, 8), 12) || "underlag";
+  return safeFileName(`${idPart}_${buildDatedUnderlagFileName(u)}`);
+}
+
+function underlagMirrorRelPath(u){
+  return underlagMirrorFolderParts(u).concat([underlagMirrorFileName(u)]).join("/");
 }
 
 async function backupEnsureDir(rootDir, parts){
@@ -3846,6 +3881,126 @@ async function backupWriteBlobFile(dir, name, blob){
   const w = await fh.createWritable();
   await w.write(blob);
   await w.close();
+}
+
+async function backupReadBlobByRelPath(relPath, requestPermission){
+  if (!backupDirHandle) return null;
+  const ok = await backupEnsurePermission(!!requestPermission);
+  if (!ok) return null;
+  const parts = String(relPath || "").split("/").map(p=>p.trim()).filter(Boolean);
+  if (parts.length < 2) return null;
+  try {
+    let dir = backupDirHandle;
+    for (const part of parts.slice(0, -1)){
+      dir = await dir.getDirectoryHandle(part, { create: false });
+    }
+    const fh = await dir.getFileHandle(parts[parts.length - 1], { create: false });
+    return await fh.getFile();
+  } catch {
+    return null;
+  }
+}
+
+async function getUnderlagBlob(id, options = {}){
+  const key = "underlagBlob:" + id;
+  const localBlob = await idbGet(key).catch(()=> null);
+  if (localBlob) return localBlob;
+
+  const rec = (state.underlag || []).find(u => u && u.id === id);
+  if (!rec) return null;
+  const relPath = String(rec.mirrorRelPath || "").trim() || underlagMirrorRelPath(rec);
+  const backupBlob = await backupReadBlobByRelPath(relPath, !!options.requestBackupPermission);
+  if (!backupBlob) return null;
+
+  try { await idbSet(key, backupBlob); } catch (e){ console.warn("Could not rehydrate underlag blob", id, e); }
+  return backupBlob;
+}
+
+async function syncUnderlagToBackupDir(reason, options = {}){
+  if (!backupDirHandle || !fsHandle) return false;
+  if (!CompanyManager.hasActiveCompany || !CompanyManager.hasActiveCompany()) return false;
+
+  const ok = await backupEnsurePermission(!!options.requestPermission);
+  if (!ok) return false;
+
+  const underlag = (state.underlag || [])
+    .filter(u => u && u.id)
+    .slice()
+    .sort((a,b)=> String(a.createdAt || "").localeCompare(String(b.createdAt || ""), "sv") || String(a.id || "").localeCompare(String(b.id || ""), "sv"));
+
+  const manifestKey = underlagMirrorManifestKey();
+  const previousManifest = await idbGet(manifestKey).catch(()=> null);
+  const previousItems = previousManifest && previousManifest.items && typeof previousManifest.items === "object" ? previousManifest.items : {};
+  const nextItems = {};
+  const indexItems = [];
+
+  for (const u of underlag){
+    const folderParts = underlagMirrorFolderParts(u);
+    const exportFileName = underlagMirrorFileName(u);
+    const relPath = folderParts.concat([exportFileName]).join("/");
+    const signature = `${String(u?.fileName || "")}|${String(u?.size || 0)}|${String(u?.status || "active")}|${String(u?.createdAt || "")}`;
+    const previous = previousItems[u.id] || null;
+    const blob = await idbGet("underlagBlob:" + u.id).catch(()=> null);
+
+    if (blob && (!previous || previous.signature !== signature || previous.relPath !== relPath)){
+      const dir = await backupEnsureDir(backupDirHandle, folderParts);
+      await backupWriteBlobFile(dir, exportFileName, blob);
+    }
+
+    nextItems[u.id] = {
+      signature,
+      relPath,
+      mirroredAt: blob ? nowISO() : (previous && previous.mirroredAt) ? previous.mirroredAt : null,
+    };
+
+    indexItems.push({
+      id: u.id,
+      voucherId: u.voucherId || "",
+      yearId: u.yearId || "",
+      series: u.series || "",
+      no: u.no || "",
+      date: u.date || "",
+      type: u.type || "",
+      ref: u.ref || "",
+      fileName: u.fileName || exportFileName,
+      relPath: blob ? relPath : null,
+      size: Number(u.size || 0) || 0,
+      mime: u.mime || "",
+      status: u.status || "active",
+      hasLocalBlob: !!blob,
+    });
+  }
+
+  const indexDir = await backupEnsureDir(backupDirHandle, [underlagMirrorIndexFolderName()]);
+  await backupWriteTextFile(indexDir, "index.json", JSON.stringify({
+    root: underlagMirrorIndexFolderName(),
+    folderFormat: "YYYY_ORGNR_UNDERLAG/series/no",
+    dataFile: fsHandle && fsHandle.name ? String(fsHandle.name) : "",
+    updatedAt: nowISO(),
+    reason: String(reason || "sync"),
+    items: indexItems,
+  }, null, 2) + "\n", "application/json");
+
+  await idbSet(manifestKey, {
+    version: 1,
+    rootName: underlagMirrorIndexFolderName(),
+    updatedAt: nowISO(),
+    items: nextItems,
+  }).catch(()=> null);
+
+  return true;
+}
+
+async function syncLocalFilesToBackupDir(reason, options = {}){
+  const docsOk = await syncDocumentsToBackupDir(reason, options).catch(e => {
+    console.warn("Document mirror sync failed", e);
+    return false;
+  });
+  const underlagOk = await syncUnderlagToBackupDir(reason, options).catch(e => {
+    console.warn("Underlag mirror sync failed", e);
+    return false;
+  });
+  return !!(docsOk || underlagOk);
 }
 
 async function syncDocumentsToBackupDir(reason, options = {}){
@@ -4050,8 +4205,8 @@ async function chooseBackupFolder(){
     updateBackupUI();
     // Create today's backup immediately (still max 1/day)
     await maybeDailyAutoBackup("choose-folder");
-    try { await syncDocumentsToBackupDir("choose-folder", { requestPermission: false, backfill: true }); } catch (e) { console.warn("Document mirror sync failed", e); }
-    showToast("Backup-mapp vald. Dokument speglas nu hit i mappsystem.", 3000);
+    try { await syncLocalFilesToBackupDir("choose-folder", { requestPermission: false, backfill: true }); } catch (e) { console.warn("File mirror sync failed", e); }
+    showToast("Backup-mapp vald. Dokument och underlag speglas nu hit i mappsystem.", 3000);
   } catch (e){
     if (e && e.name === "AbortError") return;
     console.error(e);
@@ -4103,7 +4258,7 @@ function updateBackupUI(){
       } else if (!has){
         el.textContent = "Ingen backup-mapp vald.";
       } else {
-        el.textContent = last ? (`Senast backup: ${last} · dokument speglas också hit.`) : "Backup-mapp vald. Dokument speglas också hit.";
+        el.textContent = last ? (`Senast backup: ${last} · dokument och underlag speglas också hit.`) : "Backup-mapp vald. Dokument och underlag speglas också hit.";
       }
     }
   } catch {}
@@ -6982,7 +7137,7 @@ if (!d.features) d.features = { sruEnabled: false };
       try { renderAll(); } catch (e){ console.error(e); }
     }
     try { scheduleFileAutosave(); } catch (e){ console.error(e); }
-    try { scheduleDocumentMirrorSync("save"); } catch (e){ console.error(e); }
+    try { scheduleFileMirrorSync("save"); } catch (e){ console.error(e); }
     return persisted;
   }
 
@@ -7508,19 +7663,21 @@ if (!d.features) d.features = { sruEnabled: false };
     }, 600);
   }
 
-  function scheduleDocumentMirrorSync(reason){
+  function scheduleFileMirrorSync(reason){
     if (!backupApiSupported()) return;
     if (!backupDirHandle || !fsHandle) return;
 
     if (fsDocumentMirrorTimer) clearTimeout(fsDocumentMirrorTimer);
     fsDocumentMirrorTimer = setTimeout(async ()=>{
       try {
-        await syncDocumentsToBackupDir(reason || "save", { requestPermission: false, backfill: !((state.documents || []).length) });
+        await syncLocalFilesToBackupDir(reason || "save", { requestPermission: false, backfill: !((state.documents || []).length) });
       } catch (e){
-        console.warn("Document mirror autosync failed", e);
+        console.warn("File mirror autosync failed", e);
       }
     }, 1200);
   }
+
+  const scheduleDocumentMirrorSync = scheduleFileMirrorSync;
 
   // --- State ---
   let state = normalizeImportedState(load());
@@ -15620,6 +15777,7 @@ if (!d.features) d.features = { sruEnabled: false };
         const no = invoiceNo || ("SI-" + (editingSupplierInvoiceId || targetId).slice(-8));
 
         state.underlag = Array.isArray(state.underlag) ? state.underlag : [];
+        let addedCount = 0;
         for (const f of Array.from(files)){
           const id = crypto.randomUUID();
           const rec = {
@@ -15639,14 +15797,16 @@ if (!d.features) d.features = { sruEnabled: false };
             createdAt: new Date().toISOString(),
             createdBy: clampText((state.company?.defaultSign || "").trim(), 60)
           };
+          try { await idbSet("underlagBlob:" + id, f); }
+          catch (e){ console.error(e); showToast("Kunde inte spara underlaget lokalt (IndexedDB). Posten skapades inte.", 6500); continue; }
           state.underlag.push(rec);
-          try { await idbSet("underlagBlob:" + id, f); } catch (e){ console.error(e); showToast("Kunde inte spara underlaget lokalt (IndexedDB).", 6500); }
+          addedCount++;
           appendAudit({ action:"underlag.add", actor: rec.createdBy || undefined, entityType:"underlag", entityId:id, yearId, details:{ voucherId: targetId, series, no, date, type: rec.type, ref: rec.ref, fileName: rec.fileName, size: rec.size, doc:"supplierInvoice" } });
         }
         save();
         try { renderUnderlagInto(siUnderlagList, targetId); } catch (e){}
         try { renderSupplierInvoices(); } catch (e){}
-        showToast(`Lade till ${files.length} underlag till leverantörsfakturan.`, 4500);
+        showToast(`Lade till ${addedCount} underlag till leverantörsfakturan.`, 4500);
       } finally {
         try { siFiles.value = ""; } catch {}
       }
@@ -16697,6 +16857,7 @@ if (!d.features) d.features = { sruEnabled: false };
 
     state.underlag = Array.isArray(state.underlag) ? state.underlag : [];
 
+    let addedCount = 0;
     for (const f of files){
       const id = crypto.randomUUID();
       const rec = {
@@ -16720,21 +16881,23 @@ if (!d.features) d.features = { sruEnabled: false };
         createdAt: new Date().toISOString(),
         createdBy: clampText((state.company?.defaultSign || "").trim(), 60)
       };
+      try { await idbSet("underlagBlob:" + id, f); }
+      catch (e){ console.error(e); showToast("Kunde inte spara underlaget lokalt (IndexedDB). Posten skapades inte.", 6500); continue; }
       state.underlag.push(rec);
-      try { await idbSet("underlagBlob:" + id, f); } catch (e){ console.error(e); showToast("Kunde inte spara underlaget lokalt (IndexedDB).", 6500); }
+      addedCount++;
       appendAudit({ action:"underlag.add", actor: rec.createdBy || undefined, entityType:"underlag", entityId:id, yearId, details:{ voucherId, series, no, date, type, ref, fileName: rec.fileName, size: rec.size } });
     }
     save();
     renderUnderlag();
     try { renderVouchers(); } catch (e){}
-    showToast(`Lade till ${files.length} underlag.`, 3500);
+    showToast(`Lade till ${addedCount} underlag.`, 3500);
   }
 
   async function openUnderlag(id){
     const rec = (state.underlag||[]).find(u=>u && u.id===id);
     if (!rec) return showToast("Underlaget hittades inte.", 3500);
-    const blob = await idbGet("underlagBlob:" + id);
-    if (!blob) return showToast("Filen finns inte kvar lokalt (IndexedDB).", 6500);
+    const blob = await getUnderlagBlob(id, { requestBackupPermission: true });
+    if (!blob) return showToast("Filen finns inte kvar lokalt (IndexedDB) och hittades inte i vald backup-mapp.", 7500);
     const url = URL.createObjectURL(blob);
     window.open(url, "_blank");
     setTimeout(()=>{ try { URL.revokeObjectURL(url); } catch {} }, 60_000);
@@ -17357,9 +17520,9 @@ if (!d.features) d.features = { sruEnabled: false };
       return null;
     }
 
-    const blob = await idbGet("underlagBlob:" + underlagId);
+    const blob = await getUnderlagBlob(underlagId, { requestBackupPermission: true });
     if (!blob){
-      showToast("Filen finns inte kvar lokalt (IndexedDB).", 6500);
+      showToast("Filen finns inte kvar lokalt (IndexedDB) och hittades inte i vald backup-mapp.", 7500);
       return null;
     }
 
@@ -19944,7 +20107,7 @@ if (sOrgnr) sOrgnr.addEventListener("input", ()=>{ try { updateWsCredIdPreview()
     const yearId = (archiveYearSelect && archiveYearSelect.value) || state.activeYearId;
     const stats = await regeneratePdfDocumentsForYear(yearId);
     try {
-      await syncDocumentsToBackupDir("pdf-regenerate", { requestPermission: false, backfill: false });
+      await syncLocalFilesToBackupDir("pdf-regenerate", { requestPermission: false, backfill: false });
     } catch (e) {
       console.warn("PDF mirror sync failed", e);
     }

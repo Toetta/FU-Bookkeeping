@@ -1683,7 +1683,7 @@
               </div>
 
               <div class="row" style="justify-content:space-between; margin-top:10px;">
-                <div class="muted small">Skapar verifikation i SEK. Välj direkt från företagskonto om köpet belastar bolagets konto/kort direkt; då krediteras bankkontot och ingen separat ersättning skapas.</div>
+                <div class="muted small">Spara registrerar fakturan och originalunderlaget. Skapa verifikation först när fakturan ska bokföras; vid kontantmetoden är det normalt när betalningen sker.</div>
                 <button class="btn secondary" id="btnSiToVoucher">Skapa verifikation (serie L)</button>
               </div>
             </div>
@@ -2978,8 +2978,8 @@ Tack!</div>
 (function(){
  
 
-  const APP_VERSION = "1.4.53"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.74";  // user-facing revision
+  const APP_VERSION = "1.4.54"; // bump when adding new data fields
+  const APP_SEMVER = "0.3.75";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -3862,6 +3862,7 @@ Tack!</div>
       if (!si.date) si.date = todayISO();
       if (!si.yearId) si.yearId = String(si.date).slice(0,4) || o.activeYearId;
       if (!si.due) si.due = si.date;
+      si.accountingMethod = normalizeAccountingMethod(si.accountingMethod || (o.company && o.company.accountingMethod) || "cash");
       if (si.invoiceNo == null) si.invoiceNo = "";
       if (si.ocr == null) si.ocr = "";
       if (!si.series) si.series = "L";
@@ -15980,6 +15981,14 @@ if (!d.features) d.features = { sruEnabled: false };
     return "2614";
   }
 
+  function supplierInvoiceAccountingMethod(si){
+    return normalizeAccountingMethod(si?.accountingMethod || getCompanyAccountingMethod());
+  }
+
+  function isSupplierInvoiceCashMethod(si){
+    return supplierInvoiceAccountingMethod(si) === "cash";
+  }
+
   function maybeAutoSelectSupplierInvoiceReverseVat(reason){
     const currency = String(siSupplierCurrency?.value || "").trim().toUpperCase();
     const baseCurrency = String(state.company?.currency || "SEK").trim().toUpperCase() || "SEK";
@@ -16299,6 +16308,7 @@ if (!d.features) d.features = { sruEnabled: false };
         yearId,
         date,
         due,
+        accountingMethod: getCompanyAccountingMethod(),
         invoiceNo,
         ocr,
         series,
@@ -16370,6 +16380,7 @@ if (!d.features) d.features = { sruEnabled: false };
       yearId,
       date,
       due,
+      accountingMethod: before.accountingMethod || getCompanyAccountingMethod(),
       invoiceNo,
       ocr,
       series,
@@ -16453,7 +16464,27 @@ if (!d.features) d.features = { sruEnabled: false };
     if (si.bookedVoucherId) return showToast("Leverantörsfakturan är redan bokförd (har verifikation).", 6500);
     if (String(si.status||"") === "voided") return showToast("Leverantörsfakturan är makulerad. Bokför inte.", 6500);
 
-    const ok = await confirmAsync(`Skapa en verifikation (serie ${si.series||"L"}) för leverantörsfakturan?`);
+    const cashMethod = isSupplierInvoiceCashMethod(si);
+    if (cashMethod && !si.companyPaidDirect && !si.privateOutlay){
+      const liabilityOk = await confirmAsync("Kontantmetoden är vald. Om fakturan inte är betald ännu ska den normalt bara vara registrerad med underlag och bokföras först vid betalning. Vill du ändå bokföra den som leverantörsskuld, t.ex. vid årsskifte eller om du medvetet använder skuldflöde?", { okText:"Bokför skuld", cancelText:"Vänta" });
+      if (!liabilityOk) return;
+    }
+
+    let voucherDate = si.date || todayISO();
+    if (cashMethod){
+      const paymentDate = await promptAsync("Betalningsdatum för bokföringen (YYYY-MM-DD)", {
+        defaultValue: todayISO(),
+        placeholder: "2026-06-12",
+        okText: "Fortsätt",
+        cancelText: "Avbryt",
+        multiline: false,
+      });
+      if (paymentDate == null) return;
+      voucherDate = String(paymentDate || "").trim();
+      if (!isIsoDateString(voucherDate)) return showToast("Ange betalningsdatum som YYYY-MM-DD.", 5500);
+    }
+
+    const ok = await confirmAsync(`${cashMethod ? "Kontantmetoden: skapa verifikation på betalningsdatum" : "Skapa en verifikation"} (serie ${si.series||"L"}) för leverantörsfakturan?`);
     if (!ok) return;
 
     ensureSupplierInvoiceDefaultAccounts();
@@ -16469,8 +16500,8 @@ if (!d.features) d.features = { sruEnabled: false };
     if (!state.accounts["2645"]) state.accounts["2645"] = { name:"Beräknad ingående moms på förvärv från utlandet", type:"asset" };
     if (!state.accounts["2614"]) state.accounts["2614"] = { name:"Utgående moms omvänd skattskyldighet, 25 %", type:"liability" };
 
-    const yearId = si.yearId || String(si.date||"").slice(0,4) || state.activeYearId;
-    const date = si.date || todayISO();
+    const yearId = getYearIdForDate(voucherDate) || si.yearId || String(voucherDate||"").slice(0,4) || state.activeYearId;
+    const date = voucherDate;
     const series = (si.series || "L").trim() || "L";
     const no = nextVerno(yearId, series);
 

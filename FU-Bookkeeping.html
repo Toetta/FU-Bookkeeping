@@ -1350,13 +1350,45 @@
               <input id="supRegAddr" placeholder="Gata, postnr, ort" />
             </div>
             <div class="row" style="gap:10px;">
+              <div class="field" style="min-width:160px;">
+                <label>Postnr</label>
+                <input id="supRegZip" placeholder="60314" />
+              </div>
+              <div class="field" style="flex:1; min-width:180px;">
+                <label>Ort</label>
+                <input id="supRegCity" placeholder="Frankfurt am Main" />
+              </div>
+              <div class="field" style="flex:1; min-width:180px;">
+                <label>Land</label>
+                <input id="supRegCountry" placeholder="Tyskland" />
+              </div>
+            </div>
+            <div class="row" style="gap:10px;">
               <div class="field" style="flex:1; min-width:220px;">
                 <label>E-post (valfritt)</label>
                 <input id="supRegEmail" placeholder="leverantor@exempel.se" />
               </div>
               <div class="field" style="min-width:180px;">
+                <label>Telefon (valfritt)</label>
+                <input id="supRegPhone" placeholder="+49 ..." />
+              </div>
+              <div class="field" style="flex:1; min-width:220px;">
+                <label>Webb (valfritt)</label>
+                <input id="supRegWeb" placeholder="https://..." />
+              </div>
+            </div>
+            <div class="row" style="gap:10px;">
+              <div class="field" style="min-width:180px;">
                 <label>Org.nr (valfritt)</label>
                 <input id="supRegOrgnr" placeholder="559999-9999" />
+              </div>
+              <div class="field" style="flex:1; min-width:220px;">
+                <label>VAT/Tax ID (utland)</label>
+                <input id="supRegVatNo" placeholder="DE360354704" />
+              </div>
+              <div class="field" style="min-width:140px;">
+                <label>Valuta</label>
+                <input id="supRegCurrency" placeholder="EUR" maxlength="12" />
               </div>
             </div>
             <div class="row" style="gap:10px;">
@@ -1364,8 +1396,44 @@
                 <label>Bankgiro/Plusgiro (valfritt)</label>
                 <input id="supRegPayout" placeholder="BG/PG" />
               </div>
+              <div class="field" style="flex:1; min-width:220px;">
+                <label>Bankkonto (nationellt)</label>
+                <input id="supRegBankAccount" placeholder="Kontonummer" />
+              </div>
             </div>
-            <div class="muted small">Leverantörer är förberett för kommande inköp/leverantörsfakturor.</div>
+            <div class="row" style="gap:10px;">
+              <div class="field" style="flex:1; min-width:260px;">
+                <label>IBAN</label>
+                <input id="supRegIban" placeholder="DE00 0000 0000 0000 0000 00" />
+              </div>
+              <div class="field" style="min-width:180px;">
+                <label>BIC/SWIFT</label>
+                <input id="supRegSwift" placeholder="DEUTDEFF" />
+              </div>
+            </div>
+            <div class="row" style="gap:10px;">
+              <div class="field" style="flex:1; min-width:220px;">
+                <label>Banknamn</label>
+                <input id="supRegBankName" placeholder="Bank" />
+              </div>
+              <div class="field" style="flex:1; min-width:180px;">
+                <label>Bankland</label>
+                <input id="supRegBankCountry" placeholder="Tyskland" />
+              </div>
+              <div class="field" style="min-width:150px;">
+                <label>Betalvillkor</label>
+                <input id="supRegPayDays" type="number" min="0" step="1" placeholder="30" />
+              </div>
+            </div>
+            <div class="field">
+              <label>Betalningsnotering / referenskrav</label>
+              <input id="supRegPaymentNote" placeholder="t.ex. ange invoice number som referens" />
+            </div>
+            <div class="field">
+              <label>Intern anteckning</label>
+              <textarea id="supRegNotes" rows="3" placeholder="Övrigt om leverantören, import, moms, betalning..."></textarea>
+            </div>
+            <div class="muted small">Spara bank- och utlandsuppgifter här så följer de med när leverantörsfakturor registreras.</div>
           </div>
         </div>
 
@@ -1444,9 +1512,37 @@
                     <label>BG/PG (valfritt)</label>
                     <input id="siSupplierPayout" placeholder="BG/PG" />
                   </div>
+                  <div class="field" style="flex:1; min-width:220px;">
+                    <label>Bankkonto (valfritt)</label>
+                    <input id="siSupplierBankAccount" placeholder="Kontonummer" />
+                  </div>
                   <div class="field" style="min-width:220px;">
                     <label>E-post (valfritt)</label>
                     <input id="siSupplierEmail" placeholder="leverantor@exempel.se" />
+                  </div>
+                </div>
+                <div class="row" style="gap:10px;">
+                  <div class="field" style="flex:1; min-width:260px;">
+                    <label>IBAN</label>
+                    <input id="siSupplierIban" placeholder="IBAN" />
+                  </div>
+                  <div class="field" style="min-width:180px;">
+                    <label>BIC/SWIFT</label>
+                    <input id="siSupplierSwift" placeholder="BIC/SWIFT" />
+                  </div>
+                  <div class="field" style="min-width:120px;">
+                    <label>Valuta</label>
+                    <input id="siSupplierCurrency" placeholder="EUR" maxlength="12" />
+                  </div>
+                </div>
+                <div class="row" style="gap:10px;">
+                  <div class="field" style="flex:1; min-width:220px;">
+                    <label>Banknamn</label>
+                    <input id="siSupplierBankName" placeholder="Bank" />
+                  </div>
+                  <div class="field" style="flex:1; min-width:180px;">
+                    <label>Bankland</label>
+                    <input id="siSupplierBankCountry" placeholder="Land" />
                   </div>
                 </div>
               </div>
@@ -2840,8 +2936,8 @@ Tack!</div>
 (function(){
  
 
-  const APP_VERSION = "1.4.43"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.64";  // user-facing revision
+  const APP_VERSION = "1.4.44"; // bump when adding new data fields
+  const APP_SEMVER = "0.3.65";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -3688,6 +3784,35 @@ Tack!</div>
 
     if (!o.customers) o.customers = {};
     if (!o.suppliers) o.suppliers = {};
+    try {
+      Object.keys(o.suppliers || {}).forEach(id => {
+        const s = o.suppliers[id] && typeof o.suppliers[id] === "object" ? o.suppliers[id] : {};
+        if (s.addr == null) s.addr = "";
+        if (s.zip == null) s.zip = "";
+        if (s.city == null) s.city = "";
+        if (s.country == null) s.country = "";
+        if (s.email == null) s.email = "";
+        if (s.phone == null) s.phone = "";
+        if (s.web == null) s.web = "";
+        if (s.orgnr == null) s.orgnr = "";
+        if (s.vatNo == null) s.vatNo = s.vat || s.taxId || "";
+        if (s.taxId == null) s.taxId = s.vatNo || s.vat || "";
+        if (s.currency == null) s.currency = "";
+        if (s.payout == null) s.payout = "";
+        if (s.bankAccount == null) s.bankAccount = s.bankAccountNo || "";
+        if (s.bankAccountNo == null) s.bankAccountNo = s.bankAccount || "";
+        if (s.iban == null) s.iban = "";
+        if (s.swift == null) s.swift = s.bic || "";
+        if (s.bic == null) s.bic = s.swift || "";
+        if (s.bankName == null) s.bankName = "";
+        if (s.bankCountry == null) s.bankCountry = "";
+        if (s.payDays == null || !Number.isFinite(Number(s.payDays))) s.payDays = null;
+        else s.payDays = Math.round(Number(s.payDays));
+        if (s.paymentNote == null) s.paymentNote = "";
+        if (s.notes == null) s.notes = "";
+        o.suppliers[id] = s;
+      });
+    } catch (e){ console.error(e); }
     if (!Array.isArray(o.supplierInvoices)) o.supplierInvoices = [];
     o.supplierInvoices = o.supplierInvoices.filter(x=>x && typeof x==="object").map(si=>{
       if (!si.id) si.id = crypto.randomUUID();
@@ -3716,6 +3841,13 @@ Tack!</div>
       if (si.supplierOrgnr == null) si.supplierOrgnr = "";
       if (si.supplierEmail == null) si.supplierEmail = "";
       if (si.supplierPayout == null) si.supplierPayout = "";
+      if (si.supplierBankAccount == null) si.supplierBankAccount = "";
+      if (si.supplierIban == null) si.supplierIban = "";
+      if (si.supplierSwift == null) si.supplierSwift = si.supplierBic || "";
+      if (si.supplierBic == null) si.supplierBic = si.supplierSwift || "";
+      if (si.supplierCurrency == null) si.supplierCurrency = si.currency || "";
+      if (si.supplierBankName == null) si.supplierBankName = "";
+      if (si.supplierBankCountry == null) si.supplierBankCountry = "";
       return si;
     });
     if (!Array.isArray(o.invoices)) o.invoices = [];
@@ -5577,7 +5709,7 @@ cur = {
         // fallback: store what was on the invoice itself (if user didn't create a supplier)
         const k = ("_adHoc_" + (si.supplierName||"")).trim();
         if (si.supplierName && !suppliers[k]){
-          suppliers[k] = { name: si.supplierName || "", orgnr: si.supplierOrgnr || "", email: si.supplierEmail || "", payout: si.supplierPayout || "", addr: "" };
+          suppliers[k] = { name: si.supplierName || "", orgnr: si.supplierOrgnr || "", email: si.supplierEmail || "", payout: si.supplierPayout || "", bankAccount: si.supplierBankAccount || "", iban: si.supplierIban || "", swift: si.supplierSwift || si.supplierBic || "", currency: si.supplierCurrency || si.currency || "", bankName: si.supplierBankName || "", bankCountry: si.supplierBankCountry || "", addr: "" };
         }
       }
     }
@@ -13477,9 +13609,24 @@ if (!d.features) d.features = { sruEnabled: false };
   const supEditId = document.getElementById("supEditId");
   const supRegName = document.getElementById("supRegName");
   const supRegAddr = document.getElementById("supRegAddr");
+  const supRegZip = document.getElementById("supRegZip");
+  const supRegCity = document.getElementById("supRegCity");
+  const supRegCountry = document.getElementById("supRegCountry");
   const supRegEmail = document.getElementById("supRegEmail");
+  const supRegPhone = document.getElementById("supRegPhone");
+  const supRegWeb = document.getElementById("supRegWeb");
   const supRegOrgnr = document.getElementById("supRegOrgnr");
+  const supRegVatNo = document.getElementById("supRegVatNo");
+  const supRegCurrency = document.getElementById("supRegCurrency");
   const supRegPayout = document.getElementById("supRegPayout");
+  const supRegBankAccount = document.getElementById("supRegBankAccount");
+  const supRegIban = document.getElementById("supRegIban");
+  const supRegSwift = document.getElementById("supRegSwift");
+  const supRegBankName = document.getElementById("supRegBankName");
+  const supRegBankCountry = document.getElementById("supRegBankCountry");
+  const supRegPayDays = document.getElementById("supRegPayDays");
+  const supRegPaymentNote = document.getElementById("supRegPaymentNote");
+  const supRegNotes = document.getElementById("supRegNotes");
   const supSearch = document.getElementById("supSearch");
   const suppliersList = document.getElementById("suppliersList");
   const btnSupNew = document.getElementById("btnSupNew");
@@ -13500,6 +13647,12 @@ if (!d.features) d.features = { sruEnabled: false };
   const siSupplierOrgnr = document.getElementById("siSupplierOrgnr");
   const siSupplierEmail = document.getElementById("siSupplierEmail");
   const siSupplierPayout = document.getElementById("siSupplierPayout");
+  const siSupplierBankAccount = document.getElementById("siSupplierBankAccount");
+  const siSupplierIban = document.getElementById("siSupplierIban");
+  const siSupplierSwift = document.getElementById("siSupplierSwift");
+  const siSupplierCurrency = document.getElementById("siSupplierCurrency");
+  const siSupplierBankName = document.getElementById("siSupplierBankName");
+  const siSupplierBankCountry = document.getElementById("siSupplierBankCountry");
   const siGross = document.getElementById("siGross");
   const siVat = document.getElementById("siVat");
   const siNet = document.getElementById("siNet");
@@ -15556,9 +15709,24 @@ if (!d.features) d.features = { sruEnabled: false };
     if (supEditId) supEditId.value = "";
     if (supRegName) supRegName.value = "";
     if (supRegAddr) supRegAddr.value = "";
+    if (supRegZip) supRegZip.value = "";
+    if (supRegCity) supRegCity.value = "";
+    if (supRegCountry) supRegCountry.value = "";
     if (supRegEmail) supRegEmail.value = "";
+    if (supRegPhone) supRegPhone.value = "";
+    if (supRegWeb) supRegWeb.value = "";
     if (supRegOrgnr) supRegOrgnr.value = "";
+    if (supRegVatNo) supRegVatNo.value = "";
+    if (supRegCurrency) supRegCurrency.value = "";
     if (supRegPayout) supRegPayout.value = "";
+    if (supRegBankAccount) supRegBankAccount.value = "";
+    if (supRegIban) supRegIban.value = "";
+    if (supRegSwift) supRegSwift.value = "";
+    if (supRegBankName) supRegBankName.value = "";
+    if (supRegBankCountry) supRegBankCountry.value = "";
+    if (supRegPayDays) supRegPayDays.value = "";
+    if (supRegPaymentNote) supRegPaymentNote.value = "";
+    if (supRegNotes) supRegNotes.value = "";
   }
 
   function loadSupplierToEditor(id){
@@ -15567,20 +15735,65 @@ if (!d.features) d.features = { sruEnabled: false };
     if (supEditId) supEditId.value = id;
     if (supRegName) supRegName.value = s.name || "";
     if (supRegAddr) supRegAddr.value = s.addr || "";
+    if (supRegZip) supRegZip.value = s.zip || "";
+    if (supRegCity) supRegCity.value = s.city || "";
+    if (supRegCountry) supRegCountry.value = s.country || "";
     if (supRegEmail) supRegEmail.value = s.email || "";
+    if (supRegPhone) supRegPhone.value = s.phone || "";
+    if (supRegWeb) supRegWeb.value = s.web || "";
     if (supRegOrgnr) supRegOrgnr.value = s.orgnr || "";
+    if (supRegVatNo) supRegVatNo.value = s.vatNo || s.vat || s.taxId || "";
+    if (supRegCurrency) supRegCurrency.value = s.currency || "";
     if (supRegPayout) supRegPayout.value = s.payout || "";
+    if (supRegBankAccount) supRegBankAccount.value = s.bankAccount || s.bankAccountNo || "";
+    if (supRegIban) supRegIban.value = s.iban || "";
+    if (supRegSwift) supRegSwift.value = s.swift || s.bic || "";
+    if (supRegBankName) supRegBankName.value = s.bankName || "";
+    if (supRegBankCountry) supRegBankCountry.value = s.bankCountry || "";
+    if (supRegPayDays) supRegPayDays.value = s.payDays != null ? String(s.payDays) : "";
+    if (supRegPaymentNote) supRegPaymentNote.value = s.paymentNote || "";
+    if (supRegNotes) supRegNotes.value = s.notes || "";
+  }
+
+  function supplierPaymentSummary(s){
+    const parts = [];
+    if (s?.payout) parts.push(`BG/PG ${s.payout}`);
+    if (s?.bankAccount || s?.bankAccountNo) parts.push(`Konto ${s.bankAccount || s.bankAccountNo}`);
+    if (s?.iban) parts.push(`IBAN ${s.iban}`);
+    if (s?.swift || s?.bic) parts.push(`BIC ${s.swift || s.bic}`);
+    if (s?.currency) parts.push(String(s.currency).toUpperCase());
+    return parts.join(" · ");
   }
 
   function saveSupplierFromRegistry(){
     const name = (supRegName?.value || "").trim();
     if (!name) return showToast("Ange leverantörsnamn.", 3500);
+    const payDaysText = String(supRegPayDays?.value || "").trim();
+    const payDaysRaw = payDaysText ? Number(payDaysText) : NaN;
     const s = {
       name,
       addr: (supRegAddr?.value || "").trim(),
+      zip: (supRegZip?.value || "").trim(),
+      city: (supRegCity?.value || "").trim(),
+      country: (supRegCountry?.value || "").trim(),
       email: (supRegEmail?.value || "").trim(),
+      phone: (supRegPhone?.value || "").trim(),
+      web: (supRegWeb?.value || "").trim(),
       orgnr: (supRegOrgnr?.value || "").trim(),
-      payout: (supRegPayout?.value || "").trim()
+      vatNo: (supRegVatNo?.value || "").trim(),
+      taxId: (supRegVatNo?.value || "").trim(),
+      currency: (supRegCurrency?.value || "").trim().toUpperCase(),
+      payout: (supRegPayout?.value || "").trim(),
+      bankAccount: (supRegBankAccount?.value || "").trim(),
+      bankAccountNo: (supRegBankAccount?.value || "").trim(),
+      iban: (supRegIban?.value || "").trim(),
+      swift: (supRegSwift?.value || "").trim(),
+      bic: (supRegSwift?.value || "").trim(),
+      bankName: (supRegBankName?.value || "").trim(),
+      bankCountry: (supRegBankCountry?.value || "").trim(),
+      payDays: Number.isFinite(payDaysRaw) && payDaysRaw >= 0 ? Math.round(payDaysRaw) : null,
+      paymentNote: (supRegPaymentNote?.value || "").trim(),
+      notes: (supRegNotes?.value || "").trim()
     };
     const id = (supEditId?.value || "").trim() || (crypto && crypto.randomUUID ? crypto.randomUUID() : (String(Date.now()) + "-" + Math.random().toString(16).slice(2)));
     state.suppliers = state.suppliers || {};
@@ -15621,8 +15834,12 @@ if (!d.features) d.features = { sruEnabled: false };
 
     keys.forEach(id=>{
       const s = state.suppliers[id];
-      const hay = `${s.name||""} ${s.addr||""} ${s.email||""} ${s.orgnr||""} ${s.payout||""}`.toLowerCase();
+      const hay = `${s.name||""} ${s.addr||""} ${s.zip||""} ${s.city||""} ${s.country||""} ${s.email||""} ${s.phone||""} ${s.orgnr||""} ${s.vatNo||""} ${s.payout||""} ${s.bankAccount||""} ${s.iban||""} ${s.swift||""} ${s.bankName||""} ${s.currency||""}`.toLowerCase();
       if (q && !hay.includes(q)) return;
+      const taxLine = [s.orgnr ? `Org.nr ${s.orgnr}` : "", (s.vatNo || s.taxId) ? `VAT/Tax ${s.vatNo || s.taxId}` : ""].filter(Boolean).join(" · ");
+      const placeLine = [s.addr || "", [s.zip || "", s.city || ""].filter(Boolean).join(" "), s.country || ""].filter(Boolean).join(", ");
+      const contactLine = [s.email || "", s.phone || "", s.web || ""].filter(Boolean).join(" · ");
+      const paymentLine = supplierPaymentSummary(s);
 
       const div = document.createElement("div");
       div.className = "item";
@@ -15630,8 +15847,10 @@ if (!d.features) d.features = { sruEnabled: false };
         <div class="top">
           <div>
             <div class="title">${escapeHtml(s.name||"(namn)")}</div>
-            <div class="meta">${escapeHtml(s.addr||"")}</div>
-            <div class="meta">${escapeHtml(s.email||"")}${s.orgnr?(" · "+escapeHtml(s.orgnr)):""}${s.payout?(" · "+escapeHtml(s.payout)):""}</div>
+            ${placeLine ? `<div class="meta">${escapeHtml(placeLine)}</div>` : ""}
+            ${taxLine ? `<div class="meta">${escapeHtml(taxLine)}</div>` : ""}
+            ${contactLine ? `<div class="meta">${escapeHtml(contactLine)}</div>` : ""}
+            ${paymentLine ? `<div class="meta">${escapeHtml(paymentLine)}</div>` : ""}
           </div>
           <div class="row">
             <button class="btn secondary" data-act="edit" data-id="${id}">Redigera</button>
@@ -15704,10 +15923,37 @@ if (!d.features) d.features = { sruEnabled: false };
       const s = state.suppliers[id] || {};
       const opt = document.createElement("option");
       opt.value = id;
-      opt.textContent = `${s.name||"(namn)"}${s.orgnr?(" · "+s.orgnr):""}`;
+      opt.textContent = `${s.name||"(namn)"}${s.orgnr?(" · "+s.orgnr):""}${(s.vatNo||s.taxId)?(" · "+(s.vatNo||s.taxId)):""}${s.country?(" · "+s.country):""}`;
       siSupplierSelect.appendChild(opt);
     });
     siSupplierSelect.value = keys.includes(prev) ? prev : "";
+  }
+
+  function fillInputFromSupplier(input, value){
+    if (!input) return;
+    if (String(input.value || "").trim()) return;
+    input.value = value || "";
+  }
+
+  function applySupplierToSupplierInvoiceFields(s){
+    if (!s) return;
+    fillInputFromSupplier(siSupplierName, s.name || "");
+    fillInputFromSupplier(siSupplierOrgnr, s.orgnr || s.vatNo || s.taxId || "");
+    fillInputFromSupplier(siSupplierEmail, s.email || "");
+    fillInputFromSupplier(siSupplierPayout, s.payout || "");
+    fillInputFromSupplier(siSupplierBankAccount, s.bankAccount || s.bankAccountNo || "");
+    fillInputFromSupplier(siSupplierIban, s.iban || "");
+    fillInputFromSupplier(siSupplierSwift, s.swift || s.bic || "");
+    fillInputFromSupplier(siSupplierCurrency, s.currency || "");
+    fillInputFromSupplier(siSupplierBankName, s.bankName || "");
+    fillInputFromSupplier(siSupplierBankCountry, s.bankCountry || s.country || "");
+    const payDays = Number(s.payDays || 0);
+    if (siDue && Number.isFinite(payDays) && payDays > 0) {
+      const baseDate = (siDate && siDate.value) || todayISO();
+      const currentDue = String(siDue.value || "").trim();
+      const defaultDue = addDays(baseDate, 30);
+      if (!currentDue || currentDue === defaultDue) siDue.value = addDays(baseDate, payDays);
+    }
   }
 
   function siRecalcNet(){
@@ -15753,6 +15999,12 @@ if (!d.features) d.features = { sruEnabled: false };
     if (siSupplierOrgnr) siSupplierOrgnr.value = "";
     if (siSupplierEmail) siSupplierEmail.value = "";
     if (siSupplierPayout) siSupplierPayout.value = "";
+    if (siSupplierBankAccount) siSupplierBankAccount.value = "";
+    if (siSupplierIban) siSupplierIban.value = "";
+    if (siSupplierSwift) siSupplierSwift.value = "";
+    if (siSupplierCurrency) siSupplierCurrency.value = "";
+    if (siSupplierBankName) siSupplierBankName.value = "";
+    if (siSupplierBankCountry) siSupplierBankCountry.value = "";
 
     renderSiAccountSelects(null);
     if (siGross) siGross.value = "";
@@ -15783,6 +16035,12 @@ if (!d.features) d.features = { sruEnabled: false };
     if (siSupplierOrgnr) siSupplierOrgnr.value = si.supplierOrgnr || (si.supplierId ? (state.suppliers?.[si.supplierId]?.orgnr || "") : "");
     if (siSupplierEmail) siSupplierEmail.value = si.supplierEmail || (si.supplierId ? (state.suppliers?.[si.supplierId]?.email || "") : "");
     if (siSupplierPayout) siSupplierPayout.value = si.supplierPayout || (si.supplierId ? (state.suppliers?.[si.supplierId]?.payout || "") : "");
+    if (siSupplierBankAccount) siSupplierBankAccount.value = si.supplierBankAccount || (si.supplierId ? (state.suppliers?.[si.supplierId]?.bankAccount || state.suppliers?.[si.supplierId]?.bankAccountNo || "") : "");
+    if (siSupplierIban) siSupplierIban.value = si.supplierIban || (si.supplierId ? (state.suppliers?.[si.supplierId]?.iban || "") : "");
+    if (siSupplierSwift) siSupplierSwift.value = si.supplierSwift || si.supplierBic || (si.supplierId ? (state.suppliers?.[si.supplierId]?.swift || state.suppliers?.[si.supplierId]?.bic || "") : "");
+    if (siSupplierCurrency) siSupplierCurrency.value = si.currency || si.supplierCurrency || (si.supplierId ? (state.suppliers?.[si.supplierId]?.currency || "") : "");
+    if (siSupplierBankName) siSupplierBankName.value = si.supplierBankName || (si.supplierId ? (state.suppliers?.[si.supplierId]?.bankName || "") : "");
+    if (siSupplierBankCountry) siSupplierBankCountry.value = si.supplierBankCountry || (si.supplierId ? (state.suppliers?.[si.supplierId]?.bankCountry || state.suppliers?.[si.supplierId]?.country || "") : "");
 
     renderSiAccountSelects(si);
 
@@ -15853,6 +16111,12 @@ if (!d.features) d.features = { sruEnabled: false };
     const supplierOrgnr = clampText((siSupplierOrgnr && siSupplierOrgnr.value ? siSupplierOrgnr.value : "").trim(), 40);
     const supplierEmail = clampText((siSupplierEmail && siSupplierEmail.value ? siSupplierEmail.value : "").trim(), 120);
     const supplierPayout = clampText((siSupplierPayout && siSupplierPayout.value ? siSupplierPayout.value : "").trim(), 80);
+    const supplierBankAccount = clampText((siSupplierBankAccount && siSupplierBankAccount.value ? siSupplierBankAccount.value : "").trim(), 120);
+    const supplierIban = clampText((siSupplierIban && siSupplierIban.value ? siSupplierIban.value : "").trim(), 80);
+    const supplierSwift = clampText((siSupplierSwift && siSupplierSwift.value ? siSupplierSwift.value : "").trim(), 40);
+    const supplierCurrency = clampText((siSupplierCurrency && siSupplierCurrency.value ? siSupplierCurrency.value : "").trim().toUpperCase(), 12);
+    const supplierBankName = clampText((siSupplierBankName && siSupplierBankName.value ? siSupplierBankName.value : "").trim(), 120);
+    const supplierBankCountry = clampText((siSupplierBankCountry && siSupplierBankCountry.value ? siSupplierBankCountry.value : "").trim(), 80);
 
     const gross = Math.round(parseMoney(siGross && siGross.value) * 100) / 100;
     const vat = Math.round(parseMoney(siVat && siVat.value) * 100) / 100;
@@ -15884,7 +16148,7 @@ if (!d.features) d.features = { sruEnabled: false };
         invoiceNo,
         ocr,
         series,
-        currency: state.company?.currency || "SEK",
+        currency: supplierCurrency || state.company?.currency || "SEK",
         gross,
         vat,
         net,
@@ -15896,6 +16160,13 @@ if (!d.features) d.features = { sruEnabled: false };
         supplierOrgnr,
         supplierEmail,
         supplierPayout,
+        supplierBankAccount,
+        supplierIban,
+        supplierSwift,
+        supplierBic: supplierSwift,
+        supplierCurrency,
+        supplierBankName,
+        supplierBankCountry,
         status: "received",
         bookedVoucherId: null,
         createdAt: nowIso,
@@ -15940,7 +16211,7 @@ if (!d.features) d.features = { sruEnabled: false };
       invoiceNo,
       ocr,
       series,
-      currency: before.currency || (state.company?.currency || "SEK"),
+      currency: supplierCurrency || before.currency || (state.company?.currency || "SEK"),
       gross,
       vat,
       net,
@@ -15952,6 +16223,13 @@ if (!d.features) d.features = { sruEnabled: false };
       supplierOrgnr,
       supplierEmail,
       supplierPayout,
+      supplierBankAccount,
+      supplierIban,
+      supplierSwift,
+      supplierBic: supplierSwift,
+      supplierCurrency,
+      supplierBankName,
+      supplierBankCountry,
       updatedAt: nowIso,
       updatedBy: actor,
       ocrMeta: (currentSiOcrMeta || before.ocrMeta || null)
@@ -16119,9 +16397,11 @@ if (!d.features) d.features = { sruEnabled: false };
       const uCount = supplierInvoiceUnderlagCount(si);
 
       const title = `${escapeHtml(si.date||"")} · ${escapeHtml(si.supplierName||"Leverantör")} · ${escapeHtml(si.invoiceNo||"(utan nr)")}`;
+      const paymentMeta = supplierPaymentSummary({ payout: si.supplierPayout, bankAccount: si.supplierBankAccount, iban: si.supplierIban, swift: si.supplierSwift || si.supplierBic, currency: si.supplierCurrency || si.currency });
       const meta = [
         si.due ? ("Förfaller " + si.due) : "",
         ("Belopp " + fmtSEK(Number(si.gross)||0) + " " + (si.currency||state.company.currency||"SEK")),
+        paymentMeta,
         (uCount ? ("Underlag: " + uCount) : "Underlag: 0"),
         (isBooked ? ("Verifikation: " + String((state.vouchers||[]).find(v=>v.id===si.bookedVoucherId)?.series||"") + String((state.vouchers||[]).find(v=>v.id===si.bookedVoucherId)?.no||"")) : "")
       ].filter(Boolean).join(" · ");
@@ -16183,16 +16463,12 @@ if (!d.features) d.features = { sruEnabled: false };
         if (!id) return;
         const s = state.suppliers?.[id];
         if (!s) return;
-        // fill fields from register
-        if (siSupplierName && !String(siSupplierName.value||"").trim()) siSupplierName.value = s.name || "";
-        if (siSupplierOrgnr && !String(siSupplierOrgnr.value||"").trim()) siSupplierOrgnr.value = s.orgnr || "";
-        if (siSupplierEmail && !String(siSupplierEmail.value||"").trim()) siSupplierEmail.value = s.email || "";
-        if (siSupplierPayout && !String(siSupplierPayout.value||"").trim()) siSupplierPayout.value = s.payout || "";
+        applySupplierToSupplierInvoiceFields(s);
         siSetSaveEnabled();
       });
     }
 
-    [siDate, siDue, siInvoiceNo, siOcr, siSeries, siSupplierName, siSupplierOrgnr, siSupplierEmail, siSupplierPayout, siGross, siVat].filter(Boolean).forEach(el=>{
+    [siDate, siDue, siInvoiceNo, siOcr, siSeries, siSupplierName, siSupplierOrgnr, siSupplierEmail, siSupplierPayout, siSupplierBankAccount, siSupplierIban, siSupplierSwift, siSupplierCurrency, siSupplierBankName, siSupplierBankCountry, siGross, siVat].filter(Boolean).forEach(el=>{
       el.addEventListener("input", ()=>{
         siRecalcNet();
         siSetSaveEnabled();

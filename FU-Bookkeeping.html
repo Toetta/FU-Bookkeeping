@@ -3901,6 +3901,78 @@ async function backupReadBlobByRelPath(relPath, requestPermission){
   }
 }
 
+function fileNameStemLower(name){
+  return String(name || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\.[a-z0-9]{1,8}$/i, "");
+}
+
+function underlagBackupCandidateNames(rec){
+  const names = new Set();
+  const add = (value)=>{
+    const name = safeFileName(String(value || "").trim());
+    if (name) names.add(name);
+  };
+
+  add(rec?.fileName);
+  add(buildDatedUnderlagFileName(rec));
+  add(underlagMirrorFileName(rec));
+
+  const date = normalizeDateForFileName(rec?.date || rec?.createdAt || "");
+  const seriesNo = safeStemPart(`${rec?.series || ""}${rec?.no || ""}`, 48);
+  const ref = safeStemPart(rec?.ref || "", 48);
+  if (date && date !== "undated" && seriesNo){
+    add(`${date}_voucher_${seriesNo}.pdf`);
+    add(`${date}_verifikation_${seriesNo}.pdf`);
+  }
+  if (date && date !== "undated" && ref) add(`${date}_${ref}.pdf`);
+
+  const withStems = new Set(names);
+  names.forEach(name => {
+    const stem = fileNameStemLower(name);
+    if (stem) withStems.add(stem);
+  });
+  return withStems;
+}
+
+async function backupFindFileByCandidateNames(candidateNames, options = {}){
+  if (!backupDirHandle || !candidateNames || !candidateNames.size) return null;
+  const ok = await backupEnsurePermission(!!options.requestPermission);
+  if (!ok) return null;
+
+  const wanted = new Set(Array.from(candidateNames).map(fileNameStemLower).filter(Boolean));
+  if (!wanted.size) return null;
+
+  const maxEntries = Number(options.maxEntries || 8000);
+  const maxDepth = Number(options.maxDepth || 8);
+  let visited = 0;
+
+  async function walk(dir, pathParts, depth){
+    if (!dir || depth > maxDepth || visited >= maxEntries) return null;
+    for await (const [name, handle] of dir.entries()){
+      visited++;
+      if (visited > maxEntries) return null;
+      if (handle.kind === "file"){
+        const stem = fileNameStemLower(name);
+        if (wanted.has(stem)){
+          try {
+            return { blob: await handle.getFile(), relPath: pathParts.concat([name]).join("/") };
+          } catch {
+            return null;
+          }
+        }
+      } else if (handle.kind === "directory"){
+        const found = await walk(handle, pathParts.concat([name]), depth + 1);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  return walk(backupDirHandle, [], 0);
+}
+
 async function getUnderlagBlob(id, options = {}){
   const key = "underlagBlob:" + id;
   const localBlob = await idbGet(key).catch(()=> null);
@@ -3910,7 +3982,18 @@ async function getUnderlagBlob(id, options = {}){
   if (!rec) return null;
   const relPath = String(rec.mirrorRelPath || "").trim() || underlagMirrorRelPath(rec);
   const backupBlob = await backupReadBlobByRelPath(relPath, !!options.requestBackupPermission);
-  if (!backupBlob) return null;
+  if (!backupBlob){
+    const found = await backupFindFileByCandidateNames(underlagBackupCandidateNames(rec), {
+      requestPermission: !!options.requestBackupPermission,
+    });
+    if (!found || !found.blob) return null;
+    try {
+      rec.mirrorRelPath = found.relPath || rec.mirrorRelPath || "";
+      await idbSet(key, found.blob);
+      save({ renderAll: false });
+    } catch (e){ console.warn("Could not cache recovered underlag blob", id, e); }
+    return found.blob;
+  }
 
   try { await idbSet(key, backupBlob); } catch (e){ console.warn("Could not rehydrate underlag blob", id, e); }
   return backupBlob;

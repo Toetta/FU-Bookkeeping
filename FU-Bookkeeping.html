@@ -2978,8 +2978,8 @@ Tack!</div>
 (function(){
  
 
-  const APP_VERSION = "1.4.49"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.70";  // user-facing revision
+  const APP_VERSION = "1.4.50"; // bump when adding new data fields
+  const APP_SEMVER = "0.3.71";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -15946,6 +15946,7 @@ if (!d.features) d.features = { sruEnabled: false };
     if (!state.accounts["2018"]) state.accounts["2018"] = { name:"Egna insättningar", type:"liability" };
     if (!state.accounts["2893"]) state.accounts["2893"] = { name:"Skulder till närstående personer", type:"liability" };
     if (!state.accounts["2641"]) state.accounts["2641"] = { name:"Ingående moms", type:"asset" };
+    if (!state.accounts["2647"]) state.accounts["2647"] = { name:"Ingående moms omvänd skattskyldighet 25%", type:"asset" };
     if (!state.accounts["2645"]) state.accounts["2645"] = { name:"Beräknad ingående moms på förvärv från utlandet", type:"asset" };
     if (!state.accounts["2614"]) state.accounts["2614"] = { name:"Utgående moms omvänd skattskyldighet, 25 %", type:"liability" };
     if (!state.accounts["4010"]) state.accounts["4010"] = { name:"Inköp", type:"expense" };
@@ -15969,6 +15970,14 @@ if (!d.features) d.features = { sruEnabled: false };
   function supplierInvoiceReverseVatRate(value){
     const v = normalizeSupplierInvoiceTaxTreatment(value);
     return (v === "eu_goods_25" || v === "eu_services_25") ? 0.25 : 0;
+  }
+
+  function supplierInvoiceReverseInputVatAccount(){
+    return state.accounts?.["2647"] ? "2647" : "2645";
+  }
+
+  function supplierInvoiceReverseOutputVatAccount(){
+    return "2614";
   }
 
   function fillAccountSelectOptions(sel, prefer){
@@ -16439,6 +16448,7 @@ if (!d.features) d.features = { sruEnabled: false };
     if (!state.accounts["1930"]) state.accounts["1930"] = { name:"Företagskonto/bank", type:"asset" };
     if (!state.accounts["2018"]) state.accounts["2018"] = { name:"Egna insättningar", type:"liability" };
     if (!state.accounts["2893"]) state.accounts["2893"] = { name:"Skulder till närstående personer", type:"liability" };
+    if (!state.accounts["2647"]) state.accounts["2647"] = { name:"Ingående moms omvänd skattskyldighet 25%", type:"asset" };
     if (!state.accounts["2645"]) state.accounts["2645"] = { name:"Beräknad ingående moms på förvärv från utlandet", type:"asset" };
     if (!state.accounts["2614"]) state.accounts["2614"] = { name:"Utgående moms omvänd skattskyldighet, 25 %", type:"liability" };
 
@@ -16474,8 +16484,8 @@ if (!d.features) d.features = { sruEnabled: false };
     }
     const reverseVat = reverseVatRate ? Math.round(gross * reverseVatRate * 100) / 100 : 0;
     const purchaseText = si.invoiceNo ? (`Lev.fakt ${si.invoiceNo}${isForeignCurrency ? ` ${originalGross} ${invoiceCurrency}` : ""}`) : "Leverantörsfaktura";
-    const inputVatAccount = reverseVatRate ? "2645" : si.vatAccount;
-    const outputVatAccount = reverseVatRate ? "2614" : "";
+    const inputVatAccount = reverseVatRate ? supplierInvoiceReverseInputVatAccount() : si.vatAccount;
+    const outputVatAccount = reverseVatRate ? supplierInvoiceReverseOutputVatAccount() : "";
     const companyPaidDirect = !!si.companyPaidDirect;
     const creditAccount = si.privateOutlay ? getPrivateOutlayCreditAccount() : (companyPaidDirect ? (si.liabAccount || "1930") : si.liabAccount);
     const creditText = si.privateOutlay ? "Privat utlägg" : (companyPaidDirect ? "Direktbetalning företagskonto" : supplierName);
@@ -16771,6 +16781,8 @@ if (!d.features) d.features = { sruEnabled: false };
           const t = normalizeSupplierInvoiceTaxTreatment(siTaxTreatment.value);
           if (t === "eu_goods_25" && (!siExpenseAcc.value || siExpenseAcc.value === "4010" || siExpenseAcc.value === "4535")) siExpenseAcc.value = "4515";
           if (t === "eu_services_25" && (!siExpenseAcc.value || siExpenseAcc.value === "4010" || siExpenseAcc.value === "4515")) siExpenseAcc.value = "4535";
+          if (supplierInvoiceReverseVatRate(t) && siVatAcc) siVatAcc.value = supplierInvoiceReverseInputVatAccount();
+          if (t === "normal" && siVatAcc && (siVatAcc.value === "2647" || siVatAcc.value === "2645")) siVatAcc.value = "2641";
         }
         if (el === siCompanyPaidDirect && siCompanyPaidDirect.checked){
           if (siPrivateOutlay) siPrivateOutlay.checked = false;

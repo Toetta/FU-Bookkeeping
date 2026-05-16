@@ -2840,8 +2840,8 @@ Tack!</div>
 (function(){
  
 
-  const APP_VERSION = "1.4.41"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.62";  // user-facing revision
+  const APP_VERSION = "1.4.43"; // bump when adding new data fields
+  const APP_SEMVER = "0.3.64";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -3526,6 +3526,64 @@ Tack!</div>
     };
   }
 
+  function repairInvoiceDocumentRegistryLinks(data){
+    const o = data && typeof data === "object" ? data : null;
+    if (!o || !Array.isArray(o.documents) || !Array.isArray(o.invoices)) return 0;
+    const invoices = o.invoices.filter(inv => inv && typeof inv === "object");
+    const vouchers = Array.isArray(o.vouchers) ? o.vouchers.filter(v => v && typeof v === "object") : [];
+    const invoiceById = new Map(invoices.map(inv => [String(inv.id || "").trim(), inv]).filter(([id]) => id));
+    const invoiceByYearNo = new Map();
+    invoices.forEach(inv => {
+      const key = `${String(inv.yearId || "").trim()}|${String(inv.no || "").trim()}`;
+      if (String(inv.no || "").trim() && !invoiceByYearNo.has(key)) invoiceByYearNo.set(key, inv);
+    });
+    const voucherByInvoiceId = new Map();
+    const voucherByYearInvoiceNo = new Map();
+    vouchers.forEach(v => {
+      if (String(v.status || "active") === "deleted") return;
+      const invoiceId = String(v.invoiceId || "").trim();
+      const invoiceNo = String(v.invoiceNo || "").trim();
+      if (invoiceId && !voucherByInvoiceId.has(invoiceId)) voucherByInvoiceId.set(invoiceId, v);
+      if (invoiceNo) {
+        const key = `${String(v.yearId || "").trim()}|${invoiceNo}`;
+        if (!voucherByYearInvoiceNo.has(key)) voucherByYearInvoiceNo.set(key, v);
+      }
+    });
+    let changed = 0;
+    o.documents.forEach(doc => {
+      if (!doc || typeof doc !== "object") return;
+      const kind = String(doc.kind || "").trim();
+      const isInvoiceDoc = kind === "invoice_frozen_pdf" || kind === "invoice_pdf";
+      if (!isInvoiceDoc || String(doc.status || "active") !== "active") return;
+      let invoice = null;
+      if (String(doc.linkedType || "").trim() === "invoice") invoice = invoiceById.get(String(doc.linkedId || "").trim()) || null;
+      if (!invoice) invoice = invoiceByYearNo.get(`${String(doc.yearId || "").trim()}|${String(doc.number || "").trim()}`) || null;
+      if (!invoice) return;
+
+      if (doc.kind !== "invoice_frozen_pdf") { doc.kind = "invoice_frozen_pdf"; changed++; }
+      if (String(doc.yearId || "").trim() !== String(invoice.yearId || "").trim()) { doc.yearId = String(invoice.yearId || "").trim(); changed++; }
+      if (String(doc.number || "").trim() !== String(invoice.no || invoice.id || "").trim()) { doc.number = String(invoice.no || invoice.id || "").trim(); changed++; }
+      if (String(doc.date || "").trim() !== String(invoice.date || doc.date || "").trim()) { doc.date = String(invoice.date || doc.date || "").trim(); changed++; }
+      if (String(doc.linkedType || "").trim() !== "invoice") { doc.linkedType = "invoice"; changed++; }
+      if (String(doc.linkedId || "").trim() !== String(invoice.id || "").trim()) { doc.linkedId = String(invoice.id || "").trim(); changed++; }
+      const expectedFileName = safeFileName(`${normalizeDateForFileName(invoice.date || doc.date || "")}_invoice_${safeStemPart(invoice.no || invoice.id || "invoice", 48) || "invoice"}_original.pdf`);
+      if (expectedFileName && (!String(doc.fileName || "").trim() || String(doc.fileName || "").trim() === "document.pdf" || kind === "invoice_pdf")) { doc.fileName = expectedFileName; changed++; }
+      if (!String(doc.mime || "").trim()) { doc.mime = "application/pdf"; changed++; }
+      doc.sourceMeta = doc.sourceMeta && typeof doc.sourceMeta === "object" ? doc.sourceMeta : {};
+      const voucher = String(invoice.bookedVoucherId || "").trim()
+        ? vouchers.find(v => String(v.id || "").trim() === String(invoice.bookedVoucherId || "").trim()) || null
+        : (voucherByInvoiceId.get(String(invoice.id || "").trim()) || voucherByYearInvoiceNo.get(`${String(invoice.yearId || "").trim()}|${String(invoice.no || "").trim()}`) || null);
+      const voucherId = String(voucher?.id || invoice.bookedVoucherId || "").trim();
+      if (voucherId && String(doc.sourceMeta.voucherId || "").trim() !== voucherId) { doc.sourceMeta.voucherId = voucherId; changed++; }
+      if (voucherId && String(doc.sourceMeta.linkedVoucherId || "").trim() !== voucherId) { doc.sourceMeta.linkedVoucherId = voucherId; changed++; }
+      if (!doc.sourceMeta.source) { doc.sourceMeta.source = kind === "invoice_pdf" ? "registry_repair_legacy_invoice_pdf" : "registry_repair"; changed++; }
+      if (!doc.sourceMeta.repairedAt) { doc.sourceMeta.repairedAt = nowISO(); changed++; }
+    });
+    repairInvoiceDocumentRegistryLinks.lastChanged = changed;
+    return changed;
+  }
+  repairInvoiceDocumentRegistryLinks.lastChanged = 0;
+
   function normalizeImportedState(d){
     const base = defaultData();
     const o = (d && typeof d === "object") ? d : base;
@@ -3687,6 +3745,7 @@ Tack!</div>
       if (!doc.status) doc.status = "active";
       return doc;
     });
+    try { repairInvoiceDocumentRegistryLinks(o); } catch (e){ console.error(e); }
     if (!o.locks || typeof o.locks !== "object") o.locks = {};
     if (!o.compliance) o.compliance = { immutableVouchers: true };
 
@@ -3842,6 +3901,30 @@ function documentMirrorFolderParts(doc){
   if (kind === "quote_attachment") return [documentMirrorFolderLabel(doc, "QUOTE_ATTACHMENTS")];
   if (kind.startsWith("webshop_")) return [documentMirrorFolderLabel(doc, "JSON")];
   return [documentMirrorFolderLabel(doc, "OTHER")];
+}
+
+function documentMirrorRelPath(doc){
+  if (!doc) return "";
+  const exportFileName = safeFileName(doc?.fileName || (String(doc?.kind || "").startsWith("webshop_") ? "document.json" : "document.pdf"));
+  return documentMirrorFolderParts(doc).concat([exportFileName]).join("/");
+}
+
+async function backupRemoveFileByRelPath(relPath, requestPermission){
+  if (!backupDirHandle) return false;
+  const ok = await backupEnsurePermission(!!requestPermission);
+  if (!ok) return false;
+  const parts = String(relPath || "").split("/").map(p=>p.trim()).filter(Boolean);
+  if (parts.length < 2) return false;
+  try {
+    let dir = backupDirHandle;
+    for (const part of parts.slice(0, -1)){
+      dir = await dir.getDirectoryHandle(part, { create: false });
+    }
+    await dir.removeEntry(parts[parts.length - 1]);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function underlagMirrorFolderParts(u){
@@ -4183,7 +4266,7 @@ async function syncDocumentsToBackupDir(reason, options = {}){
   for (const doc of docs){
     const folderParts = documentMirrorFolderParts(doc);
     const exportFileName = safeFileName(doc?.fileName || (String(doc?.kind || "").startsWith("webshop_") ? "document.json" : "document.pdf"));
-    const relPath = folderParts.concat([exportFileName]).join("/");
+    const relPath = documentMirrorRelPath(doc);
     const signature = `${String(doc?.sha256 || "")}|${String(doc?.size || 0)}|${exportFileName}|${String(doc?.status || "active")}`;
     const previous = previousItems[doc.id] || null;
     const blob = await idbGet("docBlob:" + doc.id).catch(()=> null);
@@ -7846,6 +7929,7 @@ if (!d.features) d.features = { sruEnabled: false };
 
   // --- State ---
   let state = normalizeImportedState(load());
+  const startupInvoiceDocumentRegistryRepairCount = Number(repairInvoiceDocumentRegistryLinks.lastChanged || 0) || 0;
   let editingVoucherId = null;
   let correctionOfId = null;
   let draftVoucherId = crypto.randomUUID();
@@ -14270,14 +14354,38 @@ if (!d.features) d.features = { sruEnabled: false };
     if (!file) return;
     const isPdf = String(file.type || "").toLowerCase().includes("pdf") || String(file.name || "").toLowerCase().endsWith(".pdf");
     if (!isPdf) return showToast("Välj en PDF-fil: den frysta fakturakopian som skickades till kunden.", 7500);
+    const previousDocuments = JSON.parse(JSON.stringify(state.documents || []));
+    const previousDoc = getFrozenInvoiceDocument(inv);
+    const previousDocSnapshot = previousDoc ? JSON.parse(JSON.stringify(previousDoc)) : null;
+    const previousBlob = previousDocSnapshot?.id ? await idbGet("docBlob:" + previousDocSnapshot.id).catch(()=> undefined) : undefined;
+    const previousRelPath = previousDocSnapshot ? documentMirrorRelPath(previousDocSnapshot) : "";
+    let replacementDoc = null;
     try {
-      await registerFrozenInvoicePdf(inv, file, state.company?.defaultSign || "");
+      replacementDoc = await registerFrozenInvoicePdf(inv, file, state.company?.defaultSign || "");
+      updateFrozenInvoiceVoucherLink(inv, inv.bookedVoucherId || replacementDoc?.sourceMeta?.voucherId || "");
       await fsWriteState();
+      const nextRelPath = documentMirrorRelPath(replacementDoc);
+      if (previousRelPath && nextRelPath && previousRelPath !== nextRelPath) {
+        await backupRemoveFileByRelPath(previousRelPath, true).catch(()=> false);
+      }
       showToast("Fryst faktura-PDF ersatt. 'Visa faktura' öppnar nu den sparade PDF-filen.", 6500);
       try { renderInvoices(); } catch {}
       try { renderVouchers(); } catch {}
     } catch (e){
       console.error(e);
+      state.documents = previousDocuments;
+      if (previousDocSnapshot?.id) {
+        try {
+          if (previousBlob !== undefined) await idbSet("docBlob:" + previousDocSnapshot.id, previousBlob);
+          else await idbDel("docBlob:" + previousDocSnapshot.id);
+        } catch (rollbackErr){ console.error(rollbackErr); }
+      } else if (replacementDoc?.id) {
+        try { await idbDel("docBlob:" + replacementDoc.id); } catch (rollbackErr){ console.error(rollbackErr); }
+      }
+      const replacementRelPath = replacementDoc ? documentMirrorRelPath(replacementDoc) : "";
+      if (replacementRelPath && replacementRelPath !== previousRelPath) {
+        await backupRemoveFileByRelPath(replacementRelPath, true).catch(()=> false);
+      }
       showToast("Kunde inte lagra den frysta faktura-PDF:en.", 8500);
     }
   }
@@ -20391,6 +20499,13 @@ try {
 } catch (e){ console.error(e); }
 
 try { if (typeof renderAccounts === "function") renderAccounts(); } catch (e){ console.error(e); }
+
+try {
+  if (startupInvoiceDocumentRegistryRepairCount > 0) {
+    appendAudit({ action:"document.registry_repair", entityType:"document", entityId:"invoice_frozen_pdf", yearId: state.activeYearId || "", details:{ changedFields: startupInvoiceDocumentRegistryRepairCount } });
+    save({ renderAll:false });
+  }
+} catch (e){ console.error(e); }
 
 // Invoices init
 state.customers = state.customers || {};

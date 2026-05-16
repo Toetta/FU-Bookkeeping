@@ -3615,6 +3615,12 @@ Tack!</div>
       if (!u.fileName) u.fileName = "underlag";
       if (u.mime == null) u.mime = "";
       if (u.size == null) u.size = 0;
+      if (u.originalFileName == null) u.originalFileName = u.fileName || "underlag";
+      if (u.originalMime == null) u.originalMime = u.mime || inferUnderlagMimeFromName(u.originalFileName || u.fileName || "");
+      if (u.originalSize == null) u.originalSize = Number(u.size || 0) || 0;
+      if (u.originalLastModified == null) u.originalLastModified = null;
+      if (u.storageKind == null) u.storageKind = "original_file";
+      if (u.ocrIsDerived == null) u.ocrIsDerived = true;
       if (u.privateOutlay == null) u.privateOutlay = false;
       if (!u.status) u.status = "active";
       if (!u.createdAt) u.createdAt = new Date().toISOString();
@@ -3858,6 +3864,64 @@ function underlagMirrorFileName(u){
 
 function underlagMirrorRelPath(u){
   return underlagMirrorFolderParts(u).concat([underlagMirrorFileName(u)]).join("/");
+}
+
+async function persistUnderlagBlobToBackupDir(rec, blob, options = {}){
+  if (!backupDirHandle || !rec || !(blob instanceof Blob)) return { ok: false, reason: "no-backup-folder" };
+  const ok = await backupEnsurePermission(!!options.requestPermission);
+  if (!ok) return { ok: false, reason: "permission-denied" };
+
+  const folderParts = underlagMirrorFolderParts(rec);
+  const exportFileName = underlagMirrorFileName(rec);
+  const relPath = folderParts.concat([exportFileName]).join("/");
+  const dir = await backupEnsureDir(backupDirHandle, folderParts);
+  await backupWriteBlobFile(dir, exportFileName, blob);
+
+  rec.mirrorRelPath = relPath;
+  rec.mirroredAt = nowISO();
+  return { ok: true, relPath };
+}
+
+async function ensureUnderlagPersistentStorageReady(options = {}){
+  const requestPermission = !!options.requestPermission;
+  if (!state.fileSync || typeof state.fileSync !== "object") state.fileSync = { autosave: true, requireFile: true };
+  if (!state.fileSync.requireFile){
+    state.fileSync.requireFile = true;
+    try { save({ renderAll: false }); } catch {}
+    try { updateFsUI(); } catch {}
+  }
+
+  if (!backupApiSupported()){
+    showToast("Underlag kräver Chrome/Edge + HTTPS/localhost så filerna kan sparas till filsystemet.", 7500);
+    return false;
+  }
+  if (!CompanyManager.hasActiveCompany || !CompanyManager.hasActiveCompany()){
+    showToast("Välj eller skapa ett företag med JSON-datafil innan du lägger till underlag.", 6500);
+    return false;
+  }
+  if (!fsHandle){
+    showToast("Underlag stoppades: koppla eller skapa en JSON-datafil först (Kräv datafil).", 7500);
+    try { updateFsUI(); } catch {}
+    return false;
+  }
+  const fileOk = await fsEnsurePermission(requestPermission);
+  if (!fileOk){
+    showToast("Underlag stoppades: appen saknar skrivbehörighet till JSON-datafilen.", 7500);
+    try { updateFsUI(); } catch {}
+    return false;
+  }
+  if (!backupDirHandle){
+    showToast("Underlag stoppades: välj backup-/underlagsmapp först.", 7500);
+    try { updateBackupUI(); } catch {}
+    return false;
+  }
+  const backupOk = await backupEnsurePermission(requestPermission);
+  if (!backupOk){
+    showToast("Underlag stoppades: appen saknar skrivbehörighet till backup-/underlagsmappen.", 7500);
+    try { updateBackupUI(); } catch {}
+    return false;
+  }
+  return true;
 }
 
 async function backupEnsureDir(rootDir, parts){
@@ -5575,9 +5639,9 @@ cur = {
     const usedByFolder = new Map(); // folderPath -> Set(names)
 
     for (const u of underlag){
-      const originalFileName = safeFileName(u?.fileName || "underlag");
+      const originalFileName = safeFileName(u?.originalFileName || u?.fileName || "underlag");
       const plannedExportFileName = buildDatedUnderlagFileName(u);
-      const blob = await idbGet("underlagBlob:" + u.id);
+      const blob = await getUnderlagBlob(u.id, { requestBackupPermission: true });
       if (!blob){
         underlagIndex.push({
           ...u,
@@ -5585,7 +5649,7 @@ cur = {
           exportFileName: plannedExportFileName,
           relPath: null,
           sha256: null,
-          note2: "SAKNAS LOKALT (IndexedDB)"
+          note2: "SAKNAS: originalfilen hittades varken lokalt eller i vald backup-/underlagsmapp"
         });
         continue;
       }
@@ -15847,8 +15911,9 @@ if (!d.features) d.features = { sruEnabled: false };
     if (siFiles) siFiles.addEventListener("change", async ()=>{
       try {
         const files = (siFiles.files || []);
-        const targetId = currentSiAttachTargetId || ("SI_DRAFT:" + crypto.randomUUID());
         if (!files || !files.length) return;
+        if (!(await ensureUnderlagPersistentStorageReady({ requestPermission: true }))) return;
+        const targetId = currentSiAttachTargetId || ("SI_DRAFT:" + crypto.randomUUID());
 
         const date = (siDate && siDate.value) || todayISO();
         const yearId = String(date).slice(0,4) || state.activeYearId;
@@ -15861,8 +15926,15 @@ if (!d.features) d.features = { sruEnabled: false };
 
         state.underlag = Array.isArray(state.underlag) ? state.underlag : [];
         let addedCount = 0;
+        let mirroredCount = 0;
+        const addedIds = [];
+        const auditLenBefore = Array.isArray(state.auditLog) ? state.auditLog.length : 0;
+        const auditSeqBefore = Number(state.auditSeq || 0) || 0;
         for (const f of Array.from(files)){
           const id = crypto.randomUUID();
+          const originalFileName = safeFileName(f.name || "underlag");
+          const originalMime = String(f.type || "").trim() || inferUnderlagMimeFromName(originalFileName);
+          const originalSize = Number(f.size || 0) || 0;
           const rec = {
             id,
             voucherId: targetId,
@@ -15873,23 +15945,59 @@ if (!d.features) d.features = { sruEnabled: false };
             type: "leverantorsfaktura",
             ref: invoiceNo || "",
             note: supplierName || "",
-            fileName: safeFileName(f.name),
-            mime: f.type || "",
-            size: f.size || 0,
+            fileName: originalFileName,
+            mime: originalMime,
+            size: originalSize,
+            originalFileName,
+            originalMime,
+            originalSize,
+            originalLastModified: Number(f.lastModified || 0) || null,
+            storageKind: "original_file",
+            ocrIsDerived: true,
             status: "active",
             createdAt: new Date().toISOString(),
             createdBy: clampText((state.company?.defaultSign || "").trim(), 60)
           };
+          try {
+            const mirror = await persistUnderlagBlobToBackupDir(rec, f, { requestPermission: true });
+            if (!mirror.ok) throw new Error(mirror.reason || "mirror-failed");
+            mirroredCount++;
+          } catch (e){
+            console.warn("Could not mirror supplier invoice underlag immediately", e);
+            showToast(`Underlaget ${safeFileName(f.name)} sparades inte: kunde inte skriva till FU-mappsystemet.`, 8500);
+            continue;
+          }
           try { await idbSet("underlagBlob:" + id, f); }
-          catch (e){ console.error(e); showToast("Kunde inte spara underlaget lokalt (IndexedDB). Posten skapades inte.", 6500); continue; }
+          catch (e){
+            console.error(e);
+            try { await idbDel("underlagBlob:" + id); } catch {}
+            showToast("Underlaget skrevs till FU-mappsystemet men kunde inte cachas lokalt. Posten skapades inte.", 8500);
+            continue;
+          }
           state.underlag.push(rec);
+          addedIds.push(id);
           addedCount++;
-          appendAudit({ action:"underlag.add", actor: rec.createdBy || undefined, entityType:"underlag", entityId:id, yearId, details:{ voucherId: targetId, series, no, date, type: rec.type, ref: rec.ref, fileName: rec.fileName, size: rec.size, doc:"supplierInvoice" } });
+          appendAudit({ action:"underlag.add", actor: rec.createdBy || undefined, entityType:"underlag", entityId:id, yearId, details:{ voucherId: targetId, series, no, date, type: rec.type, ref: rec.ref, fileName: rec.fileName, size: rec.size, doc:"supplierInvoice", mirrorRelPath: rec.mirrorRelPath || "" } });
+        }
+        if (addedCount > 0){
+          try {
+            await fsWriteState();
+          } catch (e){
+            console.error(e);
+            const rollbackIds = new Set(addedIds);
+            state.underlag = (state.underlag || []).filter(u => !rollbackIds.has(u?.id));
+            if (Array.isArray(state.auditLog)) state.auditLog = state.auditLog.slice(0, auditLenBefore);
+            state.auditSeq = auditSeqBefore;
+            await Promise.all(addedIds.map(id => idbDel("underlagBlob:" + id).catch(()=> null)));
+            save({ renderAll: false });
+            showToast("Underlag stoppades: JSON-datafilen kunde inte uppdateras. Inga underlagsposter skapades.", 9000);
+            return;
+          }
         }
         save();
         try { renderUnderlagInto(siUnderlagList, targetId); } catch (e){}
         try { renderSupplierInvoices(); } catch (e){}
-        showToast(`Lade till ${addedCount} underlag till leverantörsfakturan.`, 4500);
+        showToast(`Lade till ${addedCount} underlag till leverantörsfakturan.${mirroredCount < addedCount ? " Välj/kontrollera backup-mapp för robust filspegling." : " Filerna skrevs också till FU-mappsystemet."}`, 5500);
       } finally {
         try { siFiles.value = ""; } catch {}
       }
@@ -15903,6 +16011,7 @@ if (!d.features) d.features = { sruEnabled: false };
         const id = b.dataset.id;
         if (!id) return;
         if (act === "open-underlag") await openUnderlag(id);
+        if (act === "supplement-original") await supplementOriginalUnderlag(id);
         if (act === "ocr-underlag") await ocrUnderlagToSupplierInvoice(id);
         if (act === "detach-underlag") await detachUnderlag(id);
       });
@@ -16082,6 +16191,7 @@ if (!d.features) d.features = { sruEnabled: false };
         const id = b.dataset.id;
         if (!id) return;
         if (act === "open-underlag") await openUnderlag(id);
+        if (act === "supplement-original") await supplementOriginalUnderlag(id);
         if (act === "ocr-underlag") await ocrUnderlagToVoucher(id);
         if (act === "detach-underlag") await detachUnderlag(id);
       });
@@ -16794,6 +16904,35 @@ if (!d.features) d.features = { sruEnabled: false };
       .trim();
   }
 
+  function inferUnderlagMimeFromName(name){
+    const n = String(name || "").trim().toLowerCase();
+    if (n.endsWith(".pdf")) return "application/pdf";
+    if (n.endsWith(".jpg") || n.endsWith(".jpeg")) return "image/jpeg";
+    if (n.endsWith(".png")) return "image/png";
+    if (n.endsWith(".gif")) return "image/gif";
+    if (n.endsWith(".webp")) return "image/webp";
+    if (n.endsWith(".tif") || n.endsWith(".tiff")) return "image/tiff";
+    return "";
+  }
+
+  function pickOriginalUnderlagFile(){
+    return new Promise((resolve)=>{
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "application/pdf,image/*,.heic,.heif,.tif,.tiff";
+      input.style.position = "fixed";
+      input.style.left = "-9999px";
+      input.style.top = "-9999px";
+      input.addEventListener("change", ()=>{
+        const file = input.files && input.files[0] ? input.files[0] : null;
+        try { input.remove(); } catch {}
+        resolve(file);
+      }, { once: true });
+      document.body.appendChild(input);
+      input.click();
+    });
+  }
+
   function safeStemPart(value, maxLen=48){
     let s = String(value ?? "").trim();
     if (!s) return "";
@@ -16878,6 +17017,7 @@ if (!d.features) d.features = { sruEnabled: false };
         u.note ? ("Not: " + u.note) : "",
         u.linkedTo ? ("Referenskoppling: " + u.linkedTo) : "",
         u.privateOutlay ? "Privat utlägg" : "",
+        (u.originalFileName || u.fileName) ? ("Original: " + (u.originalFileName || u.fileName)) : "",
         u.createdAt ? ("Tillagd: " + String(u.createdAt).slice(0,10)) : "",
         u.ocrTs ? ("OCR: " + String(u.ocrTs).slice(0,10)) : "",
         (u.size ? ("Storlek: " + Math.round((Number(u.size)||0)/1024) + " KB") : "")
@@ -16886,6 +17026,7 @@ if (!d.features) d.features = { sruEnabled: false };
       const canDetach = (st !== "detached"); // we keep blob for traceability; detaching just changes status + audit
       const detachBtn = canDetach ? `<button type="button" class="btn danger" data-act="detach-underlag" data-id="${escapeAttr(u.id)}">Avlänka underlag</button>` : "";
       const openBtn = `<button type="button" class="btn secondary" data-act="open-underlag" data-id="${escapeAttr(u.id)}">Öppna</button>`;
+      const supplementBtn = canDetach ? `<button type="button" class="btn secondary" data-act="supplement-original" data-id="${escapeAttr(u.id)}">Komplettera original</button>` : "";
       const ocrBtn = (targetEl && targetEl.dataset && targetEl.dataset.ocr && st !== "detached")
         ? `<button type="button" class="btn secondary" data-act="ocr-underlag" data-id="${escapeAttr(u.id)}">OCR</button>`
         : "";
@@ -16901,6 +17042,7 @@ if (!d.features) d.features = { sruEnabled: false };
           </div>
           <div class="row">
             ${openBtn}
+            ${supplementBtn}
             ${ocrBtn}
             ${detachBtn}
           </div>
@@ -16920,6 +17062,7 @@ if (!d.features) d.features = { sruEnabled: false };
   async function addUnderlagFiles(fileList){
     const files = Array.from(fileList || []);
     if (!files.length) return;
+    if (!(await ensureUnderlagPersistentStorageReady({ requestPermission: true }))) return;
     if (pendingUnderlagLinkDirty) {
       showToast("Referensvalet är ändrat men inte verkställt. Klicka Verkställ först.", 5000);
       return;
@@ -16941,8 +17084,16 @@ if (!d.features) d.features = { sruEnabled: false };
     state.underlag = Array.isArray(state.underlag) ? state.underlag : [];
 
     let addedCount = 0;
+    let mirroredCount = 0;
+    const addedIds = [];
+    const auditLenBefore = Array.isArray(state.auditLog) ? state.auditLog.length : 0;
+    const auditSeqBefore = Number(state.auditSeq || 0) || 0;
+    const previousLocalBlob = await idbGet("underlagBlob:" + id).catch(()=> undefined);
     for (const f of files){
       const id = crypto.randomUUID();
+      const originalFileName = safeFileName(f.name || "underlag");
+      const originalMime = String(f.type || "").trim() || inferUnderlagMimeFromName(originalFileName);
+      const originalSize = Number(f.size || 0) || 0;
       const rec = {
         id,
         voucherId,
@@ -16957,23 +17108,59 @@ if (!d.features) d.features = { sruEnabled: false };
         linkedEntityType: linkPatch.linkedEntityType || "",
         linkedEntityId: linkPatch.linkedEntityId || "",
         privateOutlay,
-        fileName: safeFileName(f.name),
-        mime: f.type || "",
-        size: f.size || 0,
+        fileName: originalFileName,
+        mime: originalMime,
+        size: originalSize,
+        originalFileName,
+        originalMime,
+        originalSize,
+        originalLastModified: Number(f.lastModified || 0) || null,
+        storageKind: "original_file",
+        ocrIsDerived: true,
         status: "active",
         createdAt: new Date().toISOString(),
         createdBy: clampText((state.company?.defaultSign || "").trim(), 60)
       };
+      try {
+        const mirror = await persistUnderlagBlobToBackupDir(rec, f, { requestPermission: true });
+        if (!mirror.ok) throw new Error(mirror.reason || "mirror-failed");
+        mirroredCount++;
+      } catch (e){
+        console.warn("Could not mirror underlag immediately", e);
+        showToast(`Underlaget ${safeFileName(f.name)} sparades inte: kunde inte skriva till FU-mappsystemet.`, 8500);
+        continue;
+      }
       try { await idbSet("underlagBlob:" + id, f); }
-      catch (e){ console.error(e); showToast("Kunde inte spara underlaget lokalt (IndexedDB). Posten skapades inte.", 6500); continue; }
+      catch (e){
+        console.error(e);
+        try { await idbDel("underlagBlob:" + id); } catch {}
+        showToast("Underlaget skrevs till FU-mappsystemet men kunde inte cachas lokalt. Posten skapades inte.", 8500);
+        continue;
+      }
       state.underlag.push(rec);
+      addedIds.push(id);
       addedCount++;
-      appendAudit({ action:"underlag.add", actor: rec.createdBy || undefined, entityType:"underlag", entityId:id, yearId, details:{ voucherId, series, no, date, type, ref, fileName: rec.fileName, size: rec.size } });
+      appendAudit({ action:"underlag.add", actor: rec.createdBy || undefined, entityType:"underlag", entityId:id, yearId, details:{ voucherId, series, no, date, type, ref, fileName: rec.fileName, size: rec.size, mirrorRelPath: rec.mirrorRelPath || "" } });
+    }
+    if (addedCount > 0){
+      try {
+        await fsWriteState();
+      } catch (e){
+        console.error(e);
+        const rollbackIds = new Set(addedIds);
+        state.underlag = (state.underlag || []).filter(u => !rollbackIds.has(u?.id));
+        if (Array.isArray(state.auditLog)) state.auditLog = state.auditLog.slice(0, auditLenBefore);
+        state.auditSeq = auditSeqBefore;
+        await Promise.all(addedIds.map(id => idbDel("underlagBlob:" + id).catch(()=> null)));
+        save({ renderAll: false });
+        showToast("Underlag stoppades: JSON-datafilen kunde inte uppdateras. Inga underlagsposter skapades.", 9000);
+        return;
+      }
     }
     save();
     renderUnderlag();
     try { renderVouchers(); } catch (e){}
-    showToast(`Lade till ${addedCount} underlag.`, 3500);
+    showToast(`Lade till ${addedCount} underlag.${mirroredCount < addedCount ? " Välj/kontrollera backup-mapp för robust filspegling." : " Filerna skrevs också till FU-mappsystemet."}`, 5500);
   }
 
   async function openUnderlag(id){
@@ -16981,9 +17168,101 @@ if (!d.features) d.features = { sruEnabled: false };
     if (!rec) return showToast("Underlaget hittades inte.", 3500);
     const blob = await getUnderlagBlob(id, { requestBackupPermission: true });
     if (!blob) return showToast("Filen finns inte kvar lokalt (IndexedDB) och hittades inte i vald backup-mapp.", 7500);
-    const url = URL.createObjectURL(blob);
+    const originalMime = String(rec.originalMime || rec.mime || inferUnderlagMimeFromName(rec.originalFileName || rec.fileName || "")).trim();
+    const openBlob = (!blob.type && originalMime) ? blob.slice(0, blob.size, originalMime) : blob;
+    const url = URL.createObjectURL(openBlob);
     window.open(url, "_blank");
     setTimeout(()=>{ try { URL.revokeObjectURL(url); } catch {} }, 60_000);
+  }
+
+  async function supplementOriginalUnderlag(id){
+    const rec = (state.underlag||[]).find(u=>u && u.id===id);
+    if (!rec) return showToast("Underlaget hittades inte.", 3500);
+    if (!(await ensureUnderlagPersistentStorageReady({ requestPermission: true }))) return;
+
+    const file = await pickOriginalUnderlagFile();
+    if (!file) return;
+
+    const originalFileName = safeFileName(file.name || rec.originalFileName || rec.fileName || "underlag");
+    const originalMime = String(file.type || "").trim() || inferUnderlagMimeFromName(originalFileName);
+    const originalSize = Number(file.size || 0) || 0;
+
+    const previous = {
+      fileName: rec.fileName,
+      mime: rec.mime,
+      size: rec.size,
+      originalFileName: rec.originalFileName,
+      originalMime: rec.originalMime,
+      originalSize: rec.originalSize,
+      originalLastModified: rec.originalLastModified,
+      storageKind: rec.storageKind,
+      ocrIsDerived: rec.ocrIsDerived,
+      mirrorRelPath: rec.mirrorRelPath,
+      mirroredAt: rec.mirroredAt,
+    };
+    const auditLenBefore = Array.isArray(state.auditLog) ? state.auditLog.length : 0;
+    const auditSeqBefore = Number(state.auditSeq || 0) || 0;
+
+    rec.fileName = originalFileName;
+    rec.mime = originalMime;
+    rec.size = originalSize;
+    rec.originalFileName = originalFileName;
+    rec.originalMime = originalMime;
+    rec.originalSize = originalSize;
+    rec.originalLastModified = Number(file.lastModified || 0) || null;
+    rec.storageKind = "original_file";
+    rec.ocrIsDerived = true;
+
+    const restore = async ()=>{
+      Object.assign(rec, previous);
+      if (Array.isArray(state.auditLog)) state.auditLog = state.auditLog.slice(0, auditLenBefore);
+      state.auditSeq = auditSeqBefore;
+      try {
+        if (previousLocalBlob !== undefined) await idbSet("underlagBlob:" + id, previousLocalBlob);
+        else await idbDel("underlagBlob:" + id);
+      } catch {}
+      try { save({ renderAll: false }); } catch {}
+    };
+
+    try {
+      const mirror = await persistUnderlagBlobToBackupDir(rec, file, { requestPermission: true });
+      if (!mirror.ok) throw new Error(mirror.reason || "mirror-failed");
+    } catch (e){
+      console.warn("Could not supplement original underlag", e);
+      await restore();
+      showToast("Originalunderlaget sparades inte: kunde inte skriva till FU-mappsystemet.", 8500);
+      return;
+    }
+
+    try {
+      await idbSet("underlagBlob:" + id, file);
+    } catch (e){
+      console.warn("Could not cache supplemented original underlag", e);
+    }
+
+    appendAudit({
+      action: "underlag.original_supplement",
+      actor: rec.createdBy || undefined,
+      entityType: "underlag",
+      entityId: id,
+      yearId: rec.yearId,
+      details: { fileName: rec.fileName, size: rec.size, mime: rec.mime, mirrorRelPath: rec.mirrorRelPath || "" }
+    });
+
+    try {
+      await fsWriteState();
+    } catch (e){
+      console.error(e);
+      await restore();
+      showToast("Originalunderlaget sparades inte: JSON-datafilen kunde inte uppdateras.", 9000);
+      return;
+    }
+
+    save({ renderAll: false });
+    try { renderUnderlag(); } catch {}
+    try { renderUnderlagInto(siUnderlagList, rec.voucherId); } catch {}
+    try { renderSupplierInvoices(); } catch {}
+    showToast("Originalunderlag kompletterat och sparat i FU-mappsystemet.", 5000);
   }
 
   async function detachUnderlag(id){

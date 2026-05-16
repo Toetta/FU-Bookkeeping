@@ -2840,8 +2840,8 @@ Tack!</div>
 (function(){
  
 
-  const APP_VERSION = "1.4.36"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.57";  // user-facing revision
+  const APP_VERSION = "1.4.38"; // bump when adding new data fields
+  const APP_SEMVER = "0.3.59";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -5793,6 +5793,61 @@ cur = {
     } catch (_) {
       return false;
     }
+  }
+
+  function documentBackupCandidateNames(doc){
+    const names = new Set();
+    const add = (value)=>{
+      const name = safeFileName(String(value || "").trim());
+      if (name) names.add(name);
+    };
+    add(doc?.fileName);
+    const date = normalizeDateForFileName(doc?.date || doc?.createdAt || "");
+    const kind = safeStemPart(doc?.kind || "document", 40) || "document";
+    const number = safeStemPart(doc?.number || doc?.linkedId || doc?.id || "document", 80) || "document";
+    if (date && date !== "undated" && number){
+      if (String(doc?.kind || "") === "invoice_pdf") add(`${date}_invoice_${number}.pdf`);
+      else add(`${date}_${kind}_${number}.pdf`);
+    }
+    const withStems = new Set(names);
+    names.forEach(name => {
+      const stem = fileNameStemLower(name);
+      if (stem) withStems.add(stem);
+    });
+    return withStems;
+  }
+
+  async function getDocumentBlob(doc, options = {}){
+    if (!doc || !doc.id) return null;
+    const localBlob = await idbGet("docBlob:" + doc.id).catch(()=> null);
+    if (localBlob) return localBlob;
+
+    const exportFileName = safeFileName(doc?.fileName || (String(doc?.kind || "").startsWith("webshop_") ? "document.json" : "document.pdf"));
+    const relPath = documentMirrorFolderParts(doc).concat([exportFileName]).join("/");
+    const byPath = await backupReadBlobByRelPath(relPath, !!options.requestBackupPermission);
+    if (byPath){
+      try { await idbSet("docBlob:" + doc.id, byPath); } catch (e){ console.warn("Could not cache recovered document blob", doc.id, e); }
+      return byPath;
+    }
+
+    const found = await backupFindFileByCandidateNames(documentBackupCandidateNames(doc), {
+      requestPermission: !!options.requestBackupPermission,
+    });
+    if (found && found.blob){
+      try { await idbSet("docBlob:" + doc.id, found.blob); } catch (e){ console.warn("Could not cache found document blob", doc.id, e); }
+      return found.blob;
+    }
+    return null;
+  }
+
+  function openBlobAs(blob, mime){
+    if (!(blob instanceof Blob)) return false;
+    const type = String(mime || blob.type || "application/pdf").trim() || "application/pdf";
+    const openBlob = (!blob.type && type) ? blob.slice(0, blob.size, type) : blob;
+    const url = URL.createObjectURL(openBlob);
+    window.open(url, "_blank");
+    setTimeout(()=>{ try { URL.revokeObjectURL(url); } catch {} }, 60_000);
+    return true;
   }
 
   async function renderDocumentRegistryList(){
@@ -9193,6 +9248,7 @@ if (!d.features) d.features = { sruEnabled: false };
     state.activeYearId = yid;
     save();
     try { fillYearSelectors(); } catch (e){ console.error(e); }
+    try { if (invYearSelect) invYearSelect.value = yid; } catch (e){ console.error(e); }
     try { if (typeof renderVouchers === "function") renderVouchers(); } catch (e){ console.error(e); }
     try { if (typeof renderInvoices === "function") renderInvoices(); } catch (e){ console.error(e); }
   }
@@ -14116,6 +14172,77 @@ if (!d.features) d.features = { sruEnabled: false };
     return (state.invoices || []).find(invoice => invoice && String(invoice.id || "").trim() === id) || null;
   }
 
+  function getInvoiceForVoucher(voucher){
+    const v = voucher && typeof voucher === "object" ? voucher : null;
+    if (!v) return null;
+    const invoiceId = String(v.invoiceId || "").trim();
+    if (invoiceId) {
+      const byId = getInvoiceById(invoiceId);
+      if (byId) return byId;
+    }
+    const invoiceNo = String(v.invoiceNo || "").trim()
+      || (()=>{
+        const m = String(v.text || "").match(/(?:faktura|Faktura)\s+([A-Za-z0-9._-]+)/);
+        return m ? String(m[1] || "").trim() : "";
+      })();
+    if (!invoiceNo) return null;
+    return (state.invoices || []).find(inv => inv && String(inv.no || "").trim() === invoiceNo) || null;
+  }
+
+  async function openInvoicePdf(invoiceId, options = {}){
+    const inv = getInvoiceById(invoiceId);
+    if (!inv) return showToast("Fakturan hittades inte i kundfakturaregistret.", 6500);
+
+    let doc = getActiveDocumentForEntity({
+      yearId: inv.yearId,
+      kind: "invoice_pdf",
+      linkedType: "invoice",
+      linkedId: inv.id,
+    });
+
+    if (!doc){
+      doc = (state.documents || []).find(item => item
+        && String(item.status || "active") === "active"
+        && String(item.kind || "") === "invoice_pdf"
+        && String(item.yearId || "") === String(inv.yearId || "")
+        && String(item.number || "") === String(inv.no || "")) || null;
+    }
+
+    if (doc){
+      const blob = await getDocumentBlob(doc, { requestBackupPermission: true });
+      if (blob){
+        openBlobAs(blob, doc.mime || "application/pdf");
+        return;
+      }
+    }
+
+    if (options.allowRegenerate === false){
+      showToast("Ingen arkiverad faktura-PDF hittades. Öppna kundfakturan och spara/arkivera den igen.", 8500);
+      return;
+    }
+
+    try {
+      const blob = await generateInvoicePdfBlob(inv);
+      const docFileName = safeFileName(`${normalizeDateForFileName(inv.date || "")}_invoice_${safeStemPart(inv.no || inv.id || "invoice", 48) || "invoice"}.pdf`);
+      await registerGeneratedPdfDocument({
+        kind: "invoice_pdf",
+        number: inv.no || inv.id,
+        date: inv.date || todayISO(),
+        linkedType: "invoice",
+        linkedId: inv.id,
+        blob,
+        yearId: inv.yearId,
+        fileName: docFileName,
+        createdBy: state.company?.defaultSign || "",
+      });
+      showToast("Ingen tidigare arkiverad PDF hittades. Visar återskapad faktura från sparad fakturadata.", 7500);
+      openBlobAs(blob, "application/pdf");
+    } catch (e){
+      console.error(e);
+      showToast("Kunde inte öppna eller återskapa faktura-PDF.", 8000);
+    }
+  }
+
   function getInvoiceLifecycle(invoice){
     const inv = (invoice && typeof invoice === "object") ? invoice : {};
     const bookedVoucher = getVoucherForInvoice(inv);
@@ -14334,7 +14461,13 @@ if (!d.features) d.features = { sruEnabled: false };
     if (invoiceList){
       invoiceList.innerHTML = "";
       if (!list.length){
-        invoiceList.innerHTML = `<div class="muted small">Inga fakturor i detta år ännu.</div>`;
+        const otherYears = Array.from(new Set((state.invoices || [])
+          .map(inv => String(inv?.yearId || "").trim())
+          .filter(year => year && year !== yid)))
+          .sort((a,b)=>a.localeCompare(b, "sv"));
+        invoiceList.innerHTML = otherYears.length
+          ? `<div class="muted small">Inga fakturor i ${escapeHtml(yid)}. Det finns kundfakturor i andra år: ${escapeHtml(otherYears.join(", "))}.</div>`
+          : `<div class="muted small">Inga fakturor i detta år ännu.</div>`;
       } else {
         list.forEach(inv=>{
           const c = getInvoiceCustomerSnapshot(inv);
@@ -14353,6 +14486,7 @@ if (!d.features) d.features = { sruEnabled: false };
               </div>
               <div class="row">
                 <button class="btn secondary" data-act="edit" data-id="${inv.id}">Öppna</button>
+                <button class="btn secondary" data-act="pdf" data-id="${inv.id}">Visa PDF</button>
                 <button class="btn secondary" data-act="print" data-id="${inv.id}">Skriv ut</button>
                 <button class="btn danger" data-act="del" data-id="${inv.id}">Ta bort</button>
               </div>
@@ -14364,6 +14498,7 @@ if (!d.features) d.features = { sruEnabled: false };
             const id = b.dataset.id;
             const act = b.dataset.act;
             if (act==="edit") loadInvoiceToEditor(id);
+            if (act==="pdf") await openInvoicePdf(id);
             if (act==="print") printInvoice(id);
             if (act==="del") await deleteInvoice(id);
           });
@@ -16148,6 +16283,8 @@ if (!d.features) d.features = { sruEnabled: false };
 
       const badge = isVoid ? '<span class="status">Makulerad</span>' : "";
       const openLabel = isVoid ? "Visa" : "Öppna";
+      const linkedInvoice = getInvoiceForVoucher(v);
+      const invoicePdfBtn = linkedInvoice ? `<button type="button" class="btn secondary" data-act="invoice-pdf" data-id="${escapeAttr(linkedInvoice.id)}">Visa faktura</button>` : "";
       const voidBtn = "";
 
       div.innerHTML = `
@@ -16158,6 +16295,7 @@ if (!d.features) d.features = { sruEnabled: false };
           </div>
           <div class="row">
             <button type="button" class="btn secondary" data-act="open" data-id="${escapeAttr(v.id)}">${openLabel}</button>
+            ${invoicePdfBtn}
             ${voidBtn}
           </div>
         </div>
@@ -16297,6 +16435,7 @@ if (!d.features) d.features = { sruEnabled: false };
         const id = b.dataset.id;
         if (!id) return;
         if (act === "open") viewVoucherToEditor(id);
+        if (act === "invoice-pdf") await openInvoicePdf(id);
         if (act === "void"){
           showToast("Makulering av verifikationer är avstängd. Skapa en rättelseverifikation i stället.", 6500);
         }

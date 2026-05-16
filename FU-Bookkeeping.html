@@ -2978,8 +2978,8 @@ Tack!</div>
 (function(){
  
 
-  const APP_VERSION = "1.4.50"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.71";  // user-facing revision
+  const APP_VERSION = "1.4.51"; // bump when adding new data fields
+  const APP_SEMVER = "0.3.72";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -15980,6 +15980,22 @@ if (!d.features) d.features = { sruEnabled: false };
     return "2614";
   }
 
+  function maybeAutoSelectSupplierInvoiceReverseVat(reason){
+    const currency = String(siSupplierCurrency?.value || "").trim().toUpperCase();
+    const baseCurrency = String(state.company?.currency || "SEK").trim().toUpperCase() || "SEK";
+    const gross = parseMoney(siGross && siGross.value);
+    const vat = parseMoney(siVat && siVat.value);
+    const currentTreatment = normalizeSupplierInvoiceTaxTreatment(siTaxTreatment && siTaxTreatment.value);
+    if (!currency || currency === baseCurrency || !(gross > 0) || Math.abs(vat) > 0.004 || currentTreatment !== "normal") return null;
+
+    ensureSupplierInvoiceDefaultAccounts();
+    if (siTaxTreatment) siTaxTreatment.value = "eu_goods_25";
+    if (siExpenseAcc && (!siExpenseAcc.value || siExpenseAcc.value === "4010" || siExpenseAcc.value === "4535")) siExpenseAcc.value = "4515";
+    if (siVatAcc) siVatAcc.value = supplierInvoiceReverseInputVatAccount();
+    siRecalcNet();
+    return { taxTreatment:"eu_goods_25", expenseAccount: siExpenseAcc?.value || "", vatAccount: siVatAcc?.value || "", reason: reason || "foreignZeroVat" };
+  }
+
   function fillAccountSelectOptions(sel, prefer){
     if (!sel) return;
     const accList = Object.keys(state.accounts||{}).sort((a,b)=>a.localeCompare(b,"sv"));
@@ -16770,6 +16786,7 @@ if (!d.features) d.features = { sruEnabled: false };
 
     [siDate, siDue, siInvoiceNo, siOcr, siSeries, siSupplierName, siSupplierOrgnr, siSupplierEmail, siSupplierPayout, siSupplierBankAccount, siSupplierIban, siSupplierSwift, siSupplierCurrency, siSupplierBankName, siSupplierBankCountry, siGross, siVat, siExchangeRate, siPaidSek, siTaxTreatment, siPrivateOutlay, siCompanyPaidDirect].filter(Boolean).forEach(el=>{
       el.addEventListener("input", ()=>{
+        if (el === siSupplierCurrency || el === siGross || el === siVat) maybeAutoSelectSupplierInvoiceReverseVat("input");
         siRecalcNet();
         siSetSaveEnabled();
       });
@@ -16791,6 +16808,7 @@ if (!d.features) d.features = { sruEnabled: false };
         if (el === siPrivateOutlay && siPrivateOutlay.checked){
           if (siCompanyPaidDirect) siCompanyPaidDirect.checked = false;
         }
+        if (el === siSupplierCurrency || el === siGross || el === siVat) maybeAutoSelectSupplierInvoiceReverseVat("change");
         siRecalcNet();
         siSetSaveEnabled();
       });
@@ -18720,6 +18738,8 @@ if (!d.features) d.features = { sruEnabled: false };
     } catch {}
 
     // keep net in sync
+    const autoVat = maybeAutoSelectSupplierInvoiceReverseVat("ocr");
+    if (autoVat) applied.autoVatTreatment = autoVat;
     try { siRecalcNet(); } catch {}
     try { siSetSaveEnabled(); } catch {}
 

@@ -1620,6 +1620,10 @@
                   <input id="siVat" inputmode="decimal" placeholder="0" />
                 </div>
                 <div class="field" style="min-width:180px;">
+                  <label>Öresavrundning</label>
+                  <input id="siRounding" inputmode="decimal" placeholder="t.ex. 0,50" />
+                </div>
+                <div class="field" style="min-width:180px;">
                   <label>Belopp exkl moms</label>
                   <input id="siNet" inputmode="decimal" placeholder="0" disabled />
                 </div>
@@ -3880,9 +3884,11 @@ Tack!</div>
       if (si.reimbursementAccount == null) si.reimbursementAccount = "";
       si.gross = Math.round((Number(si.gross)||0)*100)/100;
       si.vat = Math.round((Number(si.vat)||0)*100)/100;
-      si.net = Math.round((Number(si.net)|| (si.gross - si.vat))*100)/100;
+      si.rounding = Math.round((Number(si.rounding)||0)*100)/100;
+      si.net = Math.round((Number(si.net)|| (si.gross - si.vat - si.rounding))*100)/100;
       si.grossSek = Math.round((Number(si.grossSek)|| (si.exchangeRate ? si.gross * si.exchangeRate : 0))*100)/100;
       si.vatSek = Math.round((Number(si.vatSek)|| (si.exchangeRate ? si.vat * si.exchangeRate : 0))*100)/100;
+      si.roundingSek = Math.round((Number(si.roundingSek)|| (si.exchangeRate ? si.rounding * si.exchangeRate : 0))*100)/100;
       si.netSek = Math.round((Number(si.netSek)|| (si.exchangeRate ? si.net * si.exchangeRate : 0))*100)/100;
       if (!si.expenseAccount) si.expenseAccount = "4010";
       if (!si.vatAccount) si.vatAccount = "2641";
@@ -13712,6 +13718,7 @@ if (!d.features) d.features = { sruEnabled: false };
   const siSupplierBankCountry = document.getElementById("siSupplierBankCountry");
   const siGross = document.getElementById("siGross");
   const siVat = document.getElementById("siVat");
+  const siRounding = document.getElementById("siRounding");
   const siNet = document.getElementById("siNet");
   const siExchangeRate = document.getElementById("siExchangeRate");
   const siPaidSek = document.getElementById("siPaidSek");
@@ -15950,6 +15957,7 @@ if (!d.features) d.features = { sruEnabled: false };
     if (!state.accounts["2647"]) state.accounts["2647"] = { name:"Ingående moms omvänd skattskyldighet 25%", type:"asset" };
     if (!state.accounts["2645"]) state.accounts["2645"] = { name:"Beräknad ingående moms på förvärv från utlandet", type:"asset" };
     if (!state.accounts["2614"]) state.accounts["2614"] = { name:"Utgående moms omvänd skattskyldighet, 25 %", type:"liability" };
+    if (!state.accounts["3740"]) state.accounts["3740"] = { name:"Öres- och kronutjämning", type:"revenue" };
     if (!state.accounts["4010"]) state.accounts["4010"] = { name:"Inköp", type:"expense" };
     if (!state.accounts["4515"]) state.accounts["4515"] = { name:"Inköp av varor från annat EU-land, 25 %", type:"expense" };
     if (!state.accounts["4535"]) state.accounts["4535"] = { name:"Inköp av tjänster från annat EU-land, 25 %", type:"expense" };
@@ -16083,7 +16091,8 @@ if (!d.features) d.features = { sruEnabled: false };
   function siRecalcNet(){
     const gross = parseMoney(siGross && siGross.value);
     const vat = parseMoney(siVat && siVat.value);
-    const net = Math.round((gross - vat) * 100) / 100;
+    const rounding = parseMoney(siRounding && siRounding.value);
+    const net = Math.round((gross - vat - rounding) * 100) / 100;
     if (siNet) siNet.value = (Math.abs(net) > 0.00001) ? String(net).replace(".", ",") : "";
     let rate = parseMoney(siExchangeRate && siExchangeRate.value);
     const paidSek = parseMoney(siPaidSek && siPaidSek.value);
@@ -16096,10 +16105,12 @@ if (!d.features) d.features = { sruEnabled: false };
     }
     const grossSek = needsRate ? (paidSek > 0 ? round2(paidSek) : (gross > 0 && rate > 0 ? round2(gross * rate) : 0)) : gross;
     const vatSek = needsRate ? (vat > 0 && rate > 0 ? round2(vat * rate) : 0) : vat;
+    const roundingSek = needsRate ? (rounding && rate > 0 ? round2(rounding * rate) : 0) : rounding;
     if (siGrossSek) siGrossSek.value = (needsRate && grossSek > 0) ? String(grossSek).replace(".", ",") : "";
     if (siVatSek) siVatSek.value = (needsRate && (vatSek > 0 || (vat === 0 && gross > 0 && rate > 0))) ? String(vatSek).replace(".", ",") : "";
     const reverseRate = supplierInvoiceReverseVatRate(siTaxTreatment && siTaxTreatment.value);
-    const reverseVatSek = reverseRate && grossSek > 0 ? round2(grossSek * reverseRate) : 0;
+    const reverseBaseSek = round2(grossSek - roundingSek);
+    const reverseVatSek = reverseRate && reverseBaseSek > 0 ? round2(reverseBaseSek * reverseRate) : 0;
     if (siReverseVatSek) siReverseVatSek.value = reverseVatSek ? String(reverseVatSek).replace(".", ",") : "";
   }
 
@@ -16157,6 +16168,7 @@ if (!d.features) d.features = { sruEnabled: false };
     renderSiAccountSelects(null);
     if (siGross) siGross.value = "";
     if (siVat) siVat.value = "";
+    if (siRounding) siRounding.value = "";
     siRecalcNet();
 
     setSiAttachTarget(null);
@@ -16199,6 +16211,7 @@ if (!d.features) d.features = { sruEnabled: false };
 
     if (siGross) siGross.value = String(si.gross ?? "").replace(".", ",");
     if (siVat) siVat.value = String(si.vat ?? "").replace(".", ",");
+    if (siRounding) siRounding.value = si.rounding ? String(si.rounding).replace(".", ",") : "";
     siRecalcNet();
 
     // attach target = voucher if booked else docId
@@ -16276,12 +16289,14 @@ if (!d.features) d.features = { sruEnabled: false };
 
     const gross = Math.round(parseMoney(siGross && siGross.value) * 100) / 100;
     const vat = Math.round(parseMoney(siVat && siVat.value) * 100) / 100;
-    const net = Math.round((gross - vat) * 100) / 100;
+    const rounding = Math.round(parseMoney(siRounding && siRounding.value) * 100) / 100;
+    const net = Math.round((gross - vat - rounding) * 100) / 100;
     const paidSek = Math.round(parseMoney(siPaidSek && siPaidSek.value) * 100) / 100;
     const exchangeRateInput = Math.round(parseMoney(siExchangeRate && siExchangeRate.value) * 1000000) / 1000000;
     const exchangeRate = paidSek > 0 && gross > 0 ? Math.round((paidSek / gross) * 1000000) / 1000000 : exchangeRateInput;
     const grossSek = paidSek > 0 ? paidSek : (exchangeRate > 0 ? Math.round(gross * exchangeRate * 100) / 100 : 0);
     const vatSek = exchangeRate > 0 ? Math.round(vat * exchangeRate * 100) / 100 : 0;
+    const roundingSek = exchangeRate > 0 ? Math.round(rounding * exchangeRate * 100) / 100 : 0;
     const netSek = exchangeRate > 0 ? Math.round(net * exchangeRate * 100) / 100 : 0;
 
     const expenseAccount = (siExpenseAcc && siExpenseAcc.value ? siExpenseAcc.value : "4010");
@@ -16320,9 +16335,11 @@ if (!d.features) d.features = { sruEnabled: false };
         exchangeRate,
         gross,
         vat,
+        rounding,
         net,
         grossSek,
         vatSek,
+        roundingSek,
         netSek,
         expenseAccount,
         vatAccount,
@@ -16392,9 +16409,11 @@ if (!d.features) d.features = { sruEnabled: false };
       exchangeRate,
       gross,
       vat,
+      rounding,
       net,
       grossSek,
       vatSek,
+      roundingSek,
       netSek,
       expenseAccount,
       vatAccount,
@@ -16499,6 +16518,7 @@ if (!d.features) d.features = { sruEnabled: false };
     if (!state.accounts["2647"]) state.accounts["2647"] = { name:"Ingående moms omvänd skattskyldighet 25%", type:"asset" };
     if (!state.accounts["2645"]) state.accounts["2645"] = { name:"Beräknad ingående moms på förvärv från utlandet", type:"asset" };
     if (!state.accounts["2614"]) state.accounts["2614"] = { name:"Utgående moms omvänd skattskyldighet, 25 %", type:"liability" };
+    if (!state.accounts["3740"]) state.accounts["3740"] = { name:"Öres- och kronutjämning", type:"revenue" };
 
     const yearId = getYearIdForDate(voucherDate) || si.yearId || String(voucherDate||"").slice(0,4) || state.activeYearId;
     const date = voucherDate;
@@ -16512,7 +16532,8 @@ if (!d.features) d.features = { sruEnabled: false };
     const baseCurrency = String(state.company?.currency || "SEK").trim().toUpperCase() || "SEK";
     const originalGross = Math.round((Number(si.gross)||0) * 100) / 100;
     const originalVat = Math.round((Number(si.vat)||0) * 100) / 100;
-    const originalNet = Math.round((Number(si.net)|| (originalGross - originalVat)) * 100) / 100;
+    const originalRounding = Math.round((Number(si.rounding)||0) * 100) / 100;
+    const originalNet = Math.round((Number(si.net)|| (originalGross - originalVat - originalRounding)) * 100) / 100;
     const exchangeRate = Number(si.exchangeRate || 0) || 0;
     const isForeignCurrency = invoiceCurrency && invoiceCurrency !== baseCurrency;
     if (isForeignCurrency && !(exchangeRate > 0)) {
@@ -16522,6 +16543,7 @@ if (!d.features) d.features = { sruEnabled: false };
     }
     const gross = isForeignCurrency ? Math.round(originalGross * exchangeRate * 100) / 100 : originalGross;
     const vat = isForeignCurrency ? Math.round(originalVat * exchangeRate * 100) / 100 : originalVat;
+    const rounding = isForeignCurrency ? Math.round(originalRounding * exchangeRate * 100) / 100 : originalRounding;
     const net = isForeignCurrency ? Math.round(originalNet * exchangeRate * 100) / 100 : originalNet;
     const taxTreatment = normalizeSupplierInvoiceTaxTreatment(si.taxTreatment);
     const reverseVatRate = supplierInvoiceReverseVatRate(taxTreatment);
@@ -16530,7 +16552,7 @@ if (!d.features) d.features = { sruEnabled: false };
       try { activateTab("supplier_invoices"); if (siVat) siVat.focus(); } catch {}
       return;
     }
-    const reverseVat = reverseVatRate ? Math.round(gross * reverseVatRate * 100) / 100 : 0;
+    const reverseVat = reverseVatRate ? Math.round(net * reverseVatRate * 100) / 100 : 0;
     const purchaseText = si.invoiceNo ? (`Lev.fakt ${si.invoiceNo}${isForeignCurrency ? ` ${originalGross} ${invoiceCurrency}` : ""}`) : "Leverantörsfaktura";
     const inputVatAccount = reverseVatRate ? supplierInvoiceReverseInputVatAccount() : si.vatAccount;
     const outputVatAccount = reverseVatRate ? supplierInvoiceReverseOutputVatAccount() : "";
@@ -16545,6 +16567,7 @@ if (!d.features) d.features = { sruEnabled: false };
       (reverseVat ? { account: inputVatAccount, text: "Beräknad ingående moms EU/omvänd", amount: +reverseVat } : null),
       (reverseVat ? { account: outputVatAccount, text: "Beräknad utgående moms EU/omvänd", amount: -reverseVat } : null),
       (!reverseVat && vat && taxTreatment !== "no_vat" ? { account: inputVatAccount, text: "Ingående moms", amount: +vat } : null),
+      (rounding ? { account: "3740", text: "Öresavrundning", amount: +rounding } : null),
       { account: creditAccount, text: creditText, amount: -(gross) }
     ].filter(Boolean);
 
@@ -16816,7 +16839,7 @@ if (!d.features) d.features = { sruEnabled: false };
       });
     }
 
-    [siDate, siDue, siInvoiceNo, siOcr, siSeries, siSupplierName, siSupplierOrgnr, siSupplierEmail, siSupplierPayout, siSupplierBankAccount, siSupplierIban, siSupplierSwift, siSupplierCurrency, siSupplierBankName, siSupplierBankCountry, siGross, siVat, siExchangeRate, siPaidSek, siTaxTreatment, siPrivateOutlay, siCompanyPaidDirect].filter(Boolean).forEach(el=>{
+    [siDate, siDue, siInvoiceNo, siOcr, siSeries, siSupplierName, siSupplierOrgnr, siSupplierEmail, siSupplierPayout, siSupplierBankAccount, siSupplierIban, siSupplierSwift, siSupplierCurrency, siSupplierBankName, siSupplierBankCountry, siGross, siVat, siRounding, siExchangeRate, siPaidSek, siTaxTreatment, siPrivateOutlay, siCompanyPaidDirect].filter(Boolean).forEach(el=>{
       el.addEventListener("input", ()=>{
         if (el === siSupplierCurrency || el === siGross || el === siVat || el === siPaidSek) maybeAutoSelectSupplierInvoiceReverseVat("input");
         siRecalcNet();

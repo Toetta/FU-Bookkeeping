@@ -5262,6 +5262,12 @@ cur = {
     return pdfTextCommand(text, x - approxWidth, y, options);
   }
 
+  function pdfCenterTextCommand(text, x, y, options = {}){
+    const size = Number(options.size || 10);
+    const approxWidth = pdfApproxTextWidth(text, size);
+    return pdfTextCommand(text, x - (approxWidth / 2), y, options);
+  }
+
   function pdfWrapLines(value, maxChars){
     return wrapPdfText(value, maxChars).length ? wrapPdfText(value, maxChars) : [""];
   }
@@ -5321,6 +5327,7 @@ cur = {
     const add = command => commands.push(command);
     const text = (value, x, y, options) => add(pdfTextCommand(value, x, y, options));
     const rightText = (value, x, y, options) => add(pdfRightTextCommand(value, x, y, options));
+    const centerText = (value, x, y, options) => add(pdfCenterTextCommand(value, x, y, options));
     const line = (x1, y1, x2, y2, width = 0.8, gray = 0.82) => add(`${gray} G ${width} w ${x1} ${y1} m ${x2} ${y2} l S\n0 G\n`);
     const fillRect = (x, y, w, h, gray = 0.97) => add(`${gray} g ${x} ${y} ${w} ${h} re f\n0 g\n`);
     const strokeRect = (x, y, w, h, gray = 0.82) => add(`${gray} G ${x} ${y} ${w} ${h} re S\n0 G\n`);
@@ -5348,12 +5355,13 @@ cur = {
     if (company.invoiceNote) muted(String(company.invoiceNote), margin, titleY - (inv.ref ? 56 : 40), { size: 11 });
 
     let sellerY = titleY - 88;
-    rightText(String(company.name || "").trim(), right, sellerY, { size: 13, bold: true }); sellerY -= 15;
-    if (company.orgnr) { rightText(`Org.nr: ${String(company.orgnr).trim()}`, right, sellerY, { size: 10 }); sellerY -= 13; }
-    if (company.vat) { rightText(`Momsreg.nr: ${String(company.vat).trim()}`, right, sellerY, { size: 10 }); sellerY -= 13; }
+    const sellerCenterX = right - 112;
+    centerText(String(company.name || "").trim(), sellerCenterX, sellerY, { size: 13, bold: true }); sellerY -= 15;
+    if (company.orgnr) { centerText(`Org.nr: ${String(company.orgnr).trim()}`, sellerCenterX, sellerY, { size: 10 }); sellerY -= 13; }
+    if (company.vat) { centerText(`Momsreg.nr: ${String(company.vat).trim()}`, sellerCenterX, sellerY, { size: 10 }); sellerY -= 13; }
     [company.addr, [company.zip, company.city].filter(Boolean).join(" "), company.country, company.email, company.phone, company.web]
       .filter(value => value && String(value).trim())
-      .forEach(value => { rightText(String(value).trim(), right, sellerY, { size: 10 }); sellerY -= 13; });
+      .forEach(value => { centerText(String(value).trim(), sellerCenterX, sellerY, { size: 10 }); sellerY -= 13; });
 
     let recipientY = titleY - 106;
     sectionLabel("Fakturamottagare", margin, recipientY); recipientY -= 15;
@@ -5473,7 +5481,7 @@ cur = {
     return buildStyledInvoicePdfBlob(inv);
   }
 
-  const INVOICE_PDF_LAYOUT_VERSION = "profile_pdf_v4";
+  const INVOICE_PDF_LAYOUT_VERSION = "profile_pdf_v5";
 
   function invoiceFrozenPdfNeedsProfileRefresh(doc){
     if (!doc || String(doc.kind || "") !== "invoice_frozen_pdf") return false;

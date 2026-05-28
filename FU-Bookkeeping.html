@@ -5355,7 +5355,7 @@ cur = {
     if (company.invoiceNote) muted(String(company.invoiceNote), margin, titleY - (inv.ref ? 56 : 40), { size: 11 });
 
     let sellerY = titleY - 88;
-    const sellerCenterX = right - 112;
+    const sellerCenterX = right - 60;
     centerText(String(company.name || "").trim(), sellerCenterX, sellerY, { size: 13, bold: true }); sellerY -= 15;
     if (company.orgnr) { centerText(`Org.nr: ${String(company.orgnr).trim()}`, sellerCenterX, sellerY, { size: 10 }); sellerY -= 13; }
     if (company.vat) { centerText(`Momsreg.nr: ${String(company.vat).trim()}`, sellerCenterX, sellerY, { size: 10 }); sellerY -= 13; }

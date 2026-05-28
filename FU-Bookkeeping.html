@@ -2982,7 +2982,7 @@ Tack!</div>
 (function(){
  
 
-  const APP_VERSION = "1.4.55"; // bump when adding new data fields
+  const APP_VERSION = "1.4.56"; // bump when adding new data fields
   const APP_SEMVER = "0.3.75";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
@@ -5246,9 +5246,19 @@ cur = {
     return `BT /${font} ${size} Tf ${Number(x).toFixed(2)} ${Number(y).toFixed(2)} Td <${pdfHexText(text)}> Tj ET\n`;
   }
 
+  function pdfApproxTextWidth(text, size){
+    return String(text ?? "").split("").reduce((sum, ch) => {
+      if (ch === " ") return sum + size * 0.28;
+      if (".,:;|!iIl'".includes(ch)) return sum + size * 0.25;
+      if ("mwMW@#%".includes(ch)) return sum + size * 0.78;
+      if ("0123456789".includes(ch)) return sum + size * 0.56;
+      return sum + size * 0.52;
+    }, 0);
+  }
+
   function pdfRightTextCommand(text, x, y, options = {}){
     const size = Number(options.size || 10);
-    const approxWidth = String(text ?? "").length * size * 0.52;
+    const approxWidth = pdfApproxTextWidth(text, size);
     return pdfTextCommand(text, x - approxWidth, y, options);
   }
 
@@ -5320,8 +5330,8 @@ cur = {
     fillRect(0, 0, pageWidth, pageHeight, 1);
 
     if (logo) {
-      const maxW = 72;
-      const maxH = 48;
+      const maxW = 58;
+      const maxH = 44;
       const ratio = Math.min(maxW / logo.width, maxH / logo.height);
       const w = Math.max(1, logo.width * ratio);
       const h = Math.max(1, logo.height * ratio);
@@ -5331,12 +5341,13 @@ cur = {
       text(String(company.name || "FU").slice(0, 16), margin + 6, pageHeight - margin - 22, { size: 8, bold: true });
     }
 
-    text(`Faktura #${String(inv.no || "").trim() || "Utkast"}`, margin, 748, { size: 26, bold: true });
-    muted(`Fakturadatum: ${String(inv.date || "").trim() || todayISO()} · Förfallodatum: ${String(inv.due || "").trim() || "-"}`, margin, 724, { size: 11 });
-    if (inv.ref) muted(`Referens: ${String(inv.ref).trim()}`, margin, 708, { size: 11 });
-    if (company.invoiceNote) muted(String(company.invoiceNote), margin, inv.ref ? 692 : 708, { size: 11 });
+    const titleY = logo ? 712 : 748;
+    text(`Faktura #${String(inv.no || "").trim() || "Utkast"}`, margin, titleY, { size: 26, bold: true });
+    muted(`Fakturadatum: ${String(inv.date || "").trim() || todayISO()} · Förfallodatum: ${String(inv.due || "").trim() || "-"}`, margin, titleY - 24, { size: 11 });
+    if (inv.ref) muted(`Referens: ${String(inv.ref).trim()}`, margin, titleY - 40, { size: 11 });
+    if (company.invoiceNote) muted(String(company.invoiceNote), margin, titleY - (inv.ref ? 56 : 40), { size: 11 });
 
-    let sellerY = 656;
+    let sellerY = titleY - 88;
     rightText(String(company.name || "").trim(), right, sellerY, { size: 13, bold: true }); sellerY -= 15;
     if (company.orgnr) { rightText(`Org.nr: ${String(company.orgnr).trim()}`, right, sellerY, { size: 10 }); sellerY -= 13; }
     if (company.vat) { rightText(`Momsreg.nr: ${String(company.vat).trim()}`, right, sellerY, { size: 10 }); sellerY -= 13; }
@@ -5344,7 +5355,7 @@ cur = {
       .filter(value => value && String(value).trim())
       .forEach(value => { rightText(String(value).trim(), right, sellerY, { size: 10 }); sellerY -= 13; });
 
-    let recipientY = 638;
+    let recipientY = titleY - 106;
     sectionLabel("Fakturamottagare", margin, recipientY); recipientY -= 15;
     text(display.recipient.title || "", margin, recipientY, { size: 13, bold: true }); recipientY -= 15;
     display.recipient.addressLines.forEach(value => { muted(value, margin, recipientY); recipientY -= 13; });
@@ -5361,13 +5372,13 @@ cur = {
       if (display.requester.theirReference) { muted(`Er referens: ${display.requester.theirReference}`, margin, recipientY); recipientY -= 13; }
     }
 
-    const tableTop = Math.min(520, recipientY - 24);
-    const col = { desc: margin, qty: 306, price: 386, vat: 454, amount: right };
+    const tableTop = Math.min(500, recipientY - 24);
+    const col = { desc: margin, qty: 312, price: 392, vat: 448, amount: right };
     fillRect(margin, tableTop - 20, right - margin, 24, 0.96);
     text("Rad", col.desc, tableTop - 12, { size: 10, bold: true });
-    rightText("Antal", col.qty + 34, tableTop - 12, { size: 10, bold: true });
-    rightText("Á-pris", col.price + 38, tableTop - 12, { size: 10, bold: true });
-    rightText("Moms", col.vat + 34, tableTop - 12, { size: 10, bold: true });
+    rightText("Antal", col.qty, tableTop - 12, { size: 10, bold: true });
+    rightText("Á-pris", col.price, tableTop - 12, { size: 10, bold: true });
+    rightText("Moms", col.vat, tableTop - 12, { size: 10, bold: true });
     rightText("Belopp", col.amount, tableTop - 12, { size: 10, bold: true });
     line(margin, tableTop - 22, right, tableTop - 22);
 
@@ -5384,14 +5395,14 @@ cur = {
       const price = Number(item?.price || 0);
       const vat = Number(item?.vat || 0);
       const amount = lineAmount({ kind:"item", qty, price, vat });
-      const wrappedDesc = pdfWrapLines(item?.desc || "", 38).slice(0, 3);
+      const wrappedDesc = pdfWrapLines(item?.desc || "", 42).slice(0, 3);
       wrappedDesc.forEach((part, idx) => { muted(part, col.desc, rowY - (idx * 13)); });
-      rightText(String(qty), col.qty + 34, rowY, { size: 10 });
-      rightText(fmtSEK(price), col.price + 38, rowY, { size: 10 });
-      rightText(`${vat}%`, col.vat + 34, rowY, { size: 10 });
+      rightText(String(qty), col.qty, rowY, { size: 10 });
+      rightText(fmtSEK(price), col.price, rowY, { size: 10 });
+      rightText(`${vat}%`, col.vat, rowY, { size: 10 });
       rightText(fmtSEK(amount.gross), col.amount, rowY, { size: 10 });
-      rowY -= Math.max(26, wrappedDesc.length * 13 + 8);
-      line(margin, rowY + 6, right, rowY + 6);
+      rowY -= Math.max(30, wrappedDesc.length * 13 + 14);
+      line(margin, rowY + 4, right, rowY + 4);
     });
 
     const sumX = 330;
@@ -5458,7 +5469,7 @@ cur = {
     return buildStyledInvoicePdfBlob(inv);
   }
 
-  const INVOICE_PDF_LAYOUT_VERSION = "profile_pdf_v2";
+  const INVOICE_PDF_LAYOUT_VERSION = "profile_pdf_v3";
 
   function invoiceFrozenPdfNeedsProfileRefresh(doc){
     if (!doc || String(doc.kind || "") !== "invoice_frozen_pdf") return false;

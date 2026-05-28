@@ -2983,7 +2983,7 @@ Tack!</div>
  
 
   const APP_VERSION = "1.4.54"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.76";  // user-facing revision
+  const APP_SEMVER = "0.3.77";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -5386,9 +5386,12 @@ cur = {
     (Array.isArray(inv.lines) ? inv.lines : []).forEach(item => {
       if (rowY < 252) return;
       if (String(item?.kind || "item") !== "item") {
-        pdfWrapLines(item?.desc || "", 72).slice(0, 2).forEach(part => { muted(part, col.desc, rowY); rowY -= 13; });
-        line(margin, rowY + 2, right, rowY + 2);
-        rowY -= 10;
+        const commentStartY = rowY;
+        const commentLines = pdfWrapLines(item?.desc || "", 72).slice(0, 2);
+        commentLines.forEach((part, idx) => { muted(part, col.desc, commentStartY - (idx * 13)); });
+        const separatorY = commentStartY - Math.max(28, commentLines.length * 13 + 12);
+        line(margin, separatorY, right, separatorY);
+        rowY = separatorY - 20;
         return;
       }
       const qty = Number(item?.qty || 0);
@@ -5401,8 +5404,9 @@ cur = {
       rightText(fmtSEK(price), col.price, rowY, { size: 10 });
       rightText(`${vat}%`, col.vat, rowY, { size: 10 });
       rightText(fmtSEK(amount.gross), col.amount, rowY, { size: 10 });
-      rowY -= Math.max(30, wrappedDesc.length * 13 + 14);
-      line(margin, rowY + 4, right, rowY + 4);
+      const separatorY = rowY - Math.max(28, wrappedDesc.length * 13 + 12);
+      line(margin, separatorY, right, separatorY);
+      rowY = separatorY - 20;
     });
 
     const sumX = 330;
@@ -5469,7 +5473,7 @@ cur = {
     return buildStyledInvoicePdfBlob(inv);
   }
 
-  const INVOICE_PDF_LAYOUT_VERSION = "profile_pdf_v3";
+  const INVOICE_PDF_LAYOUT_VERSION = "profile_pdf_v4";
 
   function invoiceFrozenPdfNeedsProfileRefresh(doc){
     if (!doc || String(doc.kind || "") !== "invoice_frozen_pdf") return false;

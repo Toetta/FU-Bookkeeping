@@ -2510,6 +2510,11 @@
                   <input id="wsApiBaseUrl" placeholder="https://api.innovatio-brutalis.se" />
                   <div class="muted small" style="margin-top:6px;">Lämna standard om du använder Innovatio.</div>
                 </div>
+                <div class="field" style="min-width:260px; flex:1;">
+                  <label>Publik betalningsbas-URL</label>
+                  <input id="wsPublicPaymentBaseUrl" placeholder="https://pay.innovatio-brutalis.se" />
+                  <div class="muted small" style="margin-top:6px;">Används för betallänkar som skickas till kund.</div>
+                </div>
                 <div class="field" style="min-width:240px; flex:1;">
                   <label style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
                     <span>X-FU-Key</span>
@@ -2578,6 +2583,7 @@ Tack!</div>
                 <button class="btn secondary" type="button" id="btnWsImport">Import</button>
               </div>
               <div id="wsStatus" class="muted small" style="margin-top:8px;"></div>
+              <div id="wsPublicPaymentBaseWarning" class="status bad" style="margin-top:8px;" hidden></div>
 
             <div class="row" style="justify-content:flex-end;">
               <button class="btn" id="btnSaveSettings">Spara</button>
@@ -7149,7 +7155,7 @@ cur = {
     const now = new Date();
     const y = now.getFullYear();
     return {
-      company: { name: "FU-BOOKKEEPING", orgnr: "", legalForm: "auto", currency: "SEK", defaultSign: "", addr:"", zip:"", city:"", country:"", email:"", phone:"", web:"", vat:"", payDays:30, accountingMethod:"cash", bankgiro:"", plusgiro:"", swishPhone:"", bankAccountNo:"", iban:"", swift:"", invoiceNote:"", invoiceFooter:"", logoDataUrl:"", webshopSync: { enabled: false, apiBaseUrl: "https://api.innovatio-brutalis.se", apiKey: "", series: "W", pullLimit: 1 } },
+      company: { name: "FU-BOOKKEEPING", orgnr: "", legalForm: "auto", currency: "SEK", defaultSign: "", addr:"", zip:"", city:"", country:"", email:"", phone:"", web:"", vat:"", payDays:30, accountingMethod:"cash", bankgiro:"", plusgiro:"", swishPhone:"", bankAccountNo:"", iban:"", swift:"", invoiceNote:"", invoiceFooter:"", logoDataUrl:"", webshopSync: { enabled: false, apiBaseUrl: "https://api.innovatio-brutalis.se", publicPaymentBaseUrl: "", apiKey: "", series: "W", pullLimit: 1 } },
       features: { sruEnabled: false },
       fileSync: { autosave: true, requireFile: true },
       fiscalYears: [
@@ -8539,6 +8545,7 @@ if (!d.features) d.features = { sruEnabled: false };
   // Webshop sync add-on (Settings)
   const wsEnabled = document.getElementById("wsEnabled");
   const wsApiBaseUrl = document.getElementById("wsApiBaseUrl");
+  const wsPublicPaymentBaseUrl = document.getElementById("wsPublicPaymentBaseUrl");
   const wsApiKey = document.getElementById("wsApiKey");
   const btnWsSaveKeyMgr = document.getElementById("btnWsSaveKeyMgr");
   const wsCredIdPreview = document.getElementById("wsCredIdPreview");
@@ -8550,6 +8557,7 @@ if (!d.features) d.features = { sruEnabled: false };
   const btnWsImport = document.getElementById("btnWsImport");
   const btnWsQuickImport = document.getElementById("btnWsQuickImport");
   const wsStatus = document.getElementById("wsStatus");
+  const wsPublicPaymentBaseWarning = document.getElementById("wsPublicPaymentBaseWarning");
   const osViewFilter = document.getElementById("osViewFilter");
   const btnOsRefresh = document.getElementById("btnOsRefresh");
   const orderstockStatus = document.getElementById("orderstockStatus");
@@ -8560,7 +8568,7 @@ if (!d.features) d.features = { sruEnabled: false };
   let pendingUnderlagLinkDirty = false;
 
   function webshopSyncDefaults(){
-    return { enabled: false, apiBaseUrl: "https://api.innovatio-brutalis.se", apiKey: "", series: "W", pullLimit: 1 };
+    return { enabled: false, apiBaseUrl: "https://api.innovatio-brutalis.se", publicPaymentBaseUrl: "", apiKey: "", series: "W", pullLimit: 1 };
   }
 
   const WEBSHOP_SYNC_FALLBACK_URLS = [
@@ -8610,6 +8618,7 @@ if (!d.features) d.features = { sruEnabled: false };
     return {
       enabled: !!c.enabled,
       apiBaseUrl: String(c.apiBaseUrl || d.apiBaseUrl || "").trim(),
+      publicPaymentBaseUrl: String(c.publicPaymentBaseUrl || "").trim(),
       apiKey: String(c.apiKey || "").trim(),
       series: (String(c.series || d.series).trim() || d.series).slice(0, 3),
       pullLimit,
@@ -8625,6 +8634,7 @@ if (!d.features) d.features = { sruEnabled: false };
     return normalizeWebshopSync({
       enabled: wsEnabled ? wsEnabled.checked : cfgFromState.enabled,
       apiBaseUrl: wsApiBaseUrl ? wsApiBaseUrl.value : cfgFromState.apiBaseUrl,
+      publicPaymentBaseUrl: wsPublicPaymentBaseUrl ? wsPublicPaymentBaseUrl.value : cfgFromState.publicPaymentBaseUrl,
       apiKey: wsApiKey ? wsApiKey.value : cfgFromState.apiKey,
       series: wsSeries ? wsSeries.value : cfgFromState.series,
       pullLimit: wsLimit ? wsLimit.value : cfgFromState.pullLimit,
@@ -8644,6 +8654,29 @@ if (!d.features) d.features = { sruEnabled: false };
   function setWebshopStatus(text){
     if (!wsStatus) return;
     wsStatus.textContent = String(text || "");
+  }
+
+  function updatePublicPaymentBaseWarning(cfg){
+    if (!wsPublicPaymentBaseWarning) return;
+    const c = normalizeWebshopSync(cfg || getWebshopSyncConfigForUi());
+    const shouldWarn = !!String(c.apiBaseUrl || "").trim() && !String(c.publicPaymentBaseUrl || "").trim();
+    wsPublicPaymentBaseWarning.hidden = !shouldWarn;
+    wsPublicPaymentBaseWarning.textContent = shouldWarn
+      ? "Betallänkar använder API-domänen. Ange publik betalningsbas-URL för snyggare kundlänkar."
+      : "";
+  }
+
+  function publicPaymentBaseUrlForConfig(cfg){
+    const c = normalizeWebshopSync(cfg);
+    return String(c.publicPaymentBaseUrl || c.apiBaseUrl || "").trim();
+  }
+
+  function buildCustomPaymentPayUrl(token, cfg){
+    const publicPaymentBaseUrl = publicPaymentBaseUrlForConfig(cfg);
+    if (!publicPaymentBaseUrl) return "";
+    const cleanToken = String(token || "").trim();
+    const payUrl = `${publicPaymentBaseUrl.replace(/\/$/, "")}/pay/${cleanToken}`;
+    return payUrl;
   }
 
   function setOrderstockStatus(text){
@@ -9395,10 +9428,12 @@ if (!d.features) d.features = { sruEnabled: false };
     state.company.webshopSync = normalizeWebshopSync({
       enabled: !!(wsEnabled && wsEnabled.checked),
       apiBaseUrl: (wsApiBaseUrl?.value || "").trim(),
+      publicPaymentBaseUrl: (wsPublicPaymentBaseUrl?.value || "").trim(),
       apiKey: (wsApiKey?.value || "").trim(),
       series: (wsSeries?.value || "W").trim(),
       pullLimit: parseInt(String(wsLimit?.value || "").trim(), 10),
     });
+    updatePublicPaymentBaseWarning(state.company.webshopSync);
 
     state.features.sruEnabled = !!(sSruEnabled && sSruEnabled.checked);
     state.sru.enabled = !!state.features.sruEnabled;
@@ -9773,10 +9808,12 @@ if (!d.features) d.features = { sruEnabled: false };
     const ws = normalizeWebshopSync(c.webshopSync);
     if (wsEnabled) wsEnabled.checked = !!ws.enabled;
     if (wsApiBaseUrl) wsApiBaseUrl.value = ws.apiBaseUrl || "";
+    if (wsPublicPaymentBaseUrl) wsPublicPaymentBaseUrl.value = ws.publicPaymentBaseUrl || "";
     if (wsApiKey) wsApiKey.value = ws.apiKey || "";
     if (wsSeries) wsSeries.value = ws.series || "W";
     if (wsLimit) wsLimit.value = String(ws.pullLimit ?? 1);
     setWebshopStatus("");
+    updatePublicPaymentBaseWarning(ws);
     try { updateWsCredIdPreview(); } catch {}
 
     // Help is per-session UI state; keep collapsed by default.
@@ -21738,7 +21775,8 @@ if (fsAutosave) fsAutosave.addEventListener("change", ()=>{ state.fileSync = sta
 if (fsRequireFile) fsRequireFile.addEventListener("change", ()=>{ state.fileSync = state.fileSync || { autosave:true, requireFile:false }; state.fileSync.requireFile = !!fsRequireFile.checked; save(); updateFsUI(); });
 
 // Webshop key password-manager: live preview of computed username
-if (wsApiBaseUrl) wsApiBaseUrl.addEventListener("input", ()=>{ try { updateWsCredIdPreview(); } catch {} });
+if (wsApiBaseUrl) wsApiBaseUrl.addEventListener("input", ()=>{ try { updateWsCredIdPreview(); updatePublicPaymentBaseWarning(); } catch {} });
+if (wsPublicPaymentBaseUrl) wsPublicPaymentBaseUrl.addEventListener("input", ()=>{ try { updatePublicPaymentBaseWarning(); } catch {} });
 if (sOrgnr) sOrgnr.addEventListener("input", ()=>{ try { updateWsCredIdPreview(); } catch {} });
 
 // Init company registry + restore active company handles (and attempt silent auto-load)

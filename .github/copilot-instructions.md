@@ -1,5 +1,17 @@
 # Copilot-instruktion: Applicera FU-BookKeeping färgtema på fler sidor
 
+## Revisionsregel för `FU-Bookkeeping.html`
+
+När en patch är klar ska rätt användarvisad revision höjas i `FU-Bookkeeping.html`:
+
+```js
+const APP_SEMVER = "0.3.78";  // user-facing revision
+```
+
+Det är `APP_SEMVER` som visas i appens revisionspill. Behandla nuvarande användarrevision som `0.3.78` (visas/benämns ibland som `3.78`) och höj patchdelen med ett steg, t.ex. `0.3.78` -> `0.3.79`.
+
+`APP_VERSION` är inte samma sak som den användarvisade revisionen. Höj `APP_VERSION` endast när patchen lägger till eller ändrar lagrade datafält/schema eller exportformat som är beroende av appversionen. Vid rena UI-, layout-, print-, PDF- eller färgpatchar räcker det normalt att höja `APP_SEMVER`.
+
 Mål: Återanvänd samma färgtema som i `FU-Bookkeeping.html` på övriga HTML-sidor i repo:t (och/eller andra sidor där appen bäddas in), så att bakgrund + kort/paneler matchar logotypens bakgrund.
 
 ## Källvärden (tema)

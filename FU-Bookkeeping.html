@@ -7333,6 +7333,24 @@ cur = {
     };
   }
 
+  function customerHasBillingAddressModel(customer){
+    return !!(customer && typeof customer === "object" && customer.billingAddress && typeof customer.billingAddress === "object");
+  }
+
+  function customerLegacyAddrValue(customer){
+    if (!customer || typeof customer !== "object" || !("addr" in customer)) return "";
+    return clampText(String(customer.addr ?? "").trim(), 240);
+  }
+
+  function customerLegacyAddrCleared(customer){
+    return !!(customer && typeof customer === "object" && customer.legacyAddrCleared === true);
+  }
+
+  function customerAddressHasPostalParts(address){
+    const a = normalizeCustomerAddress(address);
+    return !!(a.attention || a.line1 || a.line2 || a.zip || a.city || a.country);
+  }
+
   function emptyCustomerContact(){
     return { id:"", name:"", role:"", email:"", phone:"", department:"", notes:"", isPrimary:false, useForQuotes:true, useForOrders:true, useForInvoices:true };
   }
@@ -7405,7 +7423,9 @@ cur = {
   }
 
   function getCustomerBillingAddress(customer){
-    return normalizeCustomerAddress(customer?.billingAddress || customer, { company: customer?.name || customer?.legalName || "" });
+    const hasBillingModel = customerHasBillingAddressModel(customer);
+    const legacyAddr = !hasBillingModel && !customerLegacyAddrCleared(customer) ? customerLegacyAddrValue(customer) : "";
+    return normalizeCustomerAddress(hasBillingModel ? customer.billingAddress : customer, { company: customer?.name || customer?.legalName || "", addr: legacyAddr });
   }
 
   function formatCustomerAddressLines(address){
@@ -7422,6 +7442,13 @@ cur = {
 
   function formatCustomerAddressSingleLine(address){
     return formatCustomerAddressLines(address).join(", ");
+  }
+
+  function customerBillingAddressSummary(customer){
+    const billing = getCustomerBillingAddress(customer);
+    const billingSummary = formatCustomerAddressSingleLine(billing);
+    if (customerAddressHasPostalParts(billing)) return billingSummary;
+    return customerLegacyAddrCleared(customer) ? "" : customerLegacyAddrValue(customer);
   }
 
   function normalizeCustomerNameKey(value){
@@ -7583,9 +7610,11 @@ cur = {
     const customerId = clampText(String(id || raw.id || "").trim(), 80) || crypto.randomUUID();
     const defaultCurrency = clampText(String(raw.defaultCurrency || opts.defaultCurrency || "SEK").trim(), 12) || "SEK";
     const fallbackCompany = String(raw.name || raw.legalName || "").trim();
-    const billingAddress = normalizeCustomerAddress(raw.billingAddress || raw, {
+    const hasBillingModel = customerHasBillingAddressModel(raw);
+    const legacyAddr = customerLegacyAddrCleared(raw) ? "" : customerLegacyAddrValue(raw);
+    const billingAddress = normalizeCustomerAddress(hasBillingModel ? raw.billingAddress : raw, {
       company: fallbackCompany,
-      addr: raw.addr,
+      addr: hasBillingModel ? "" : legacyAddr,
       email: raw.email,
       phone: raw.phone,
     });
@@ -7599,7 +7628,8 @@ cur = {
     const kind = String(raw.kind || (raw.orgnr || raw.legalName || raw.customerNo || contacts.length || deliveryAddresses.length ? "company" : "person")).trim().toLowerCase() === "person" ? "person" : "company";
     const email = clampText(String(raw.email || invoiceDefaults.invoiceEmail || billingAddress.email || primaryContact?.email || "").trim(), 160);
     const phone = clampText(String(raw.phone || billingAddress.phone || primaryContact?.phone || "").trim(), 80);
-    const addr = clampText(String(raw.addr || formatCustomerAddressSingleLine(billingAddress)).trim(), 240);
+    const addr = customerLegacyAddrValue(raw);
+    const legacyAddrCleared = customerLegacyAddrCleared(raw) || (("addr" in raw) && !addr);
     const tags = splitCustomerTags(raw.tags);
     const status = CUSTOMER_STATUS_OPTIONS.includes(String(raw.status || "").trim()) ? String(raw.status).trim() : "active";
     return {
@@ -7625,6 +7655,7 @@ cur = {
       createdAt: String(raw.createdAt || now).trim() || now,
       updatedAt: String(raw.updatedAt || now).trim() || now,
       addr,
+      legacyAddrCleared,
       city: billingAddress.city,
       country: billingAddress.country,
     };
@@ -14164,7 +14195,7 @@ if (!d.features) d.features = { sruEnabled: false };
     return {
       companyName: String(inv.companyName || customerDisplayName(customer) || inv.customerName || "").trim(),
       name: String(inv.customerName || inv.companyName || customerDisplayName(customer) || "").trim(),
-      addr: String(inv.customerAddr || formatCustomerAddressSingleLine(billing) || customer.addr || "").trim(),
+      addr: String(inv.customerAddr || customerBillingAddressSummary(customer) || customerLegacyAddrValue(customer) || "").trim(),
       email: String(inv.customerEmail || customerEffectiveInvoiceEmail(customer) || customer.email || "").trim(),
       orgnr: String(inv.customerOrgnr || inv.orgnr || customer.orgnr || "").trim(),
       phone: String(inv.customerPhone || customerEffectivePhone(customer) || customer.phone || "").trim(),
@@ -14461,7 +14492,7 @@ if (!d.features) d.features = { sruEnabled: false };
       selectedContactSnapshot: order.selectedContactSnapshot ? normalizeCustomerContact(order.selectedContactSnapshot, 0) : null,
       customerName: customer.name,
       companyName: customer.name,
-      customerAddr: customer.addr,
+      customerAddr: customerBillingAddressSummary(customer) || customerLegacyAddrValue(customer),
       customerEmail: customer.email,
       customerPhone: customer.phone,
       customerOrgnr: customer.orgnr,
@@ -14700,7 +14731,7 @@ if (!d.features) d.features = { sruEnabled: false };
       selectedContactSnapshot: selectedContact ? normalizeCustomerContact(selectedContact, 0) : null,
       customerName: String(customerDisplayName(customerRecord) || existing?.customerName || existing?.companyName || "").trim(),
       companyName: String(customerDisplayName(customerRecord) || existing?.companyName || existing?.customerName || "").trim(),
-      customerAddr: String(formatCustomerAddressSingleLine(billingAddress) || customerRecord.addr || existing?.customerAddr || "").trim(),
+      customerAddr: String(customerBillingAddressSummary(customerRecord) || customerLegacyAddrValue(customerRecord) || existing?.customerAddr || "").trim(),
       customerEmail: String(customerEffectiveInvoiceEmail(customerRecord) || existing?.customerEmail || "").trim(),
       customerPhone: String(customerEffectivePhone(customerRecord) || existing?.customerPhone || "").trim(),
       customerOrgnr: String(customerRecord.orgnr || existing?.customerOrgnr || existing?.orgnr || "").trim(),
@@ -15847,18 +15878,19 @@ if (!d.features) d.features = { sruEnabled: false };
     const current = existing ? normalizeCustomerRecord(existing, existing.id, { defaultCurrency: state.company?.currency || "SEK" }) : null;
     const useCompanyNameAsRecipient = !!(custRegBillUseCompanyName && custRegBillUseCompanyName.checked);
     const companyName = String(custRegName?.value || current?.name || "").trim();
+    const legacyAddr = String(custRegAddr?.value ?? "").trim();
     const billingAddress = normalizeCustomerAddress({
       company: useCompanyNameAsRecipient
         ? (companyName || current?.billingAddress?.company || "")
-        : (custRegBillCompany?.value || current?.billingAddress?.company || companyName || ""),
-      attention: custRegBillAttention?.value || current?.billingAddress?.attention || "",
-      line1: custRegBillLine1?.value || custRegAddr?.value || current?.billingAddress?.line1 || "",
-      line2: custRegBillLine2?.value || current?.billingAddress?.line2 || "",
-      zip: custRegBillZip?.value || current?.billingAddress?.zip || "",
-      city: custRegBillCity?.value || current?.billingAddress?.city || "",
-      country: custRegBillCountry?.value || current?.billingAddress?.country || "",
-      email: custRegBillEmail?.value || current?.billingAddress?.email || "",
-      phone: custRegBillPhone?.value || current?.billingAddress?.phone || "",
+        : (custRegBillCompany ? custRegBillCompany.value : (current?.billingAddress?.company || companyName || "")),
+      attention: custRegBillAttention ? custRegBillAttention.value : (current?.billingAddress?.attention || ""),
+      line1: custRegBillLine1 ? custRegBillLine1.value : (current?.billingAddress?.line1 || ""),
+      line2: custRegBillLine2 ? custRegBillLine2.value : (current?.billingAddress?.line2 || ""),
+      zip: custRegBillZip ? custRegBillZip.value : (current?.billingAddress?.zip || ""),
+      city: custRegBillCity ? custRegBillCity.value : (current?.billingAddress?.city || ""),
+      country: custRegBillCountry ? custRegBillCountry.value : (current?.billingAddress?.country || ""),
+      email: custRegBillEmail ? custRegBillEmail.value : (current?.billingAddress?.email || ""),
+      phone: custRegBillPhone ? custRegBillPhone.value : (current?.billingAddress?.phone || ""),
     });
     const contacts = customerContactsDraft
       .filter(isMeaningfulCustomerContact)
@@ -15897,7 +15929,8 @@ if (!d.features) d.features = { sruEnabled: false };
       deliveryAddresses,
       contacts,
       invoiceDefaults,
-      addr: String(custRegAddr?.value || formatCustomerAddressSingleLine(billingAddress)).trim(),
+      addr: legacyAddr,
+      legacyAddrCleared: !legacyAddr,
       updatedAt: nowISO(),
     }, current?.id || (custEditId?.value || "").trim() || crypto.randomUUID(), { defaultCurrency: state.company?.currency || "SEK" });
   }
@@ -15973,7 +16006,7 @@ if (!d.features) d.features = { sruEnabled: false };
         <div class="top">
           <div>
             <div class="title">${escapeHtml(customerDisplayName(customer) || "(namn)")}${customer.status === "inactive" ? ` <span class="status">inactive</span>` : ""}</div>
-            <div class="meta">${escapeHtml(formatCustomerAddressSingleLine(getCustomerBillingAddress(customer)) || "")}</div>
+            <div class="meta">${escapeHtml(customerBillingAddressSummary(customer) || "")}</div>
             <div class="meta">${escapeHtml(primaryContact?.name || "")}${primaryContact?.role ? ` · ${escapeHtml(primaryContact.role)}` : ""}${city ? ` · ${escapeHtml(city)}` : ""}</div>
           </div>
           <div class="row">
@@ -16081,7 +16114,7 @@ if (!d.features) d.features = { sruEnabled: false };
     if (custRegKind) custRegKind.value = customer.kind || "company";
     if (custRegName) custRegName.value = customer.name || "";
     if (custRegLegalName) custRegLegalName.value = customer.legalName || "";
-    if (custRegAddr) custRegAddr.value = customer.addr || formatCustomerAddressSingleLine(billing) || "";
+    if (custRegAddr) custRegAddr.value = customerLegacyAddrValue(customer);
     if (custRegEmail) custRegEmail.value = customer.email || "";
     if (custRegPhone) custRegPhone.value = customer.phone || "";
     if (custRegOrgnr) custRegOrgnr.value = customer.orgnr || "";
@@ -16176,6 +16209,7 @@ if (!d.features) d.features = { sruEnabled: false };
       if (q && !hay.includes(q)) return;
       const primaryContact = getCustomerPrimaryContact(customer, "invoice");
       const billing = getCustomerBillingAddress(customer);
+      const addressSummary = customerBillingAddressSummary(customer);
 
       const div = document.createElement("div");
       div.className = "item";
@@ -16185,6 +16219,7 @@ if (!d.features) d.features = { sruEnabled: false };
             <div class="title">${escapeHtml(customerDisplayName(customer) || "(namn)")}${customer.status === "inactive" ? ` <span class="status">inactive</span>` : ""}</div>
             <div class="meta">${escapeHtml(customer.orgnr || "")}${customer.customerNo ? ` · ${escapeHtml(customer.customerNo)}` : ""}${customer.vatNo ? ` · VAT ${escapeHtml(customer.vatNo)}` : ""}</div>
             <div class="meta">${escapeHtml(customer.email || customerEffectiveInvoiceEmail(customer) || "")}${customer.phone || customerEffectivePhone(customer) ? ` · ${escapeHtml(customer.phone || customerEffectivePhone(customer))}` : ""}</div>
+            ${addressSummary ? `<div class="meta">${escapeHtml(addressSummary)}</div>` : ""}
             <div class="meta">${escapeHtml(primaryContact?.name || "")}${primaryContact?.role ? ` · ${escapeHtml(primaryContact.role)}` : ""}${billing.city ? ` · ${escapeHtml(billing.city)}` : ""}</div>
           </div>
           <div class="row">

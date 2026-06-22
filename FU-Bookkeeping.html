@@ -5325,40 +5325,118 @@ cur = {
     const pageHeight = 842;
     const margin = 56;
     const right = pageWidth - margin;
-    const commands = [];
+    const bottom = 56;
+    const pageTop = pageHeight - margin;
+    const pages = [];
+    let commands = [];
+    let y = pageTop;
+
     const add = command => commands.push(command);
-    const text = (value, x, y, options) => add(pdfTextCommand(value, x, y, options));
-    const rightText = (value, x, y, options) => add(pdfRightTextCommand(value, x, y, options));
+    const text = (value, x, textY, options) => add(pdfTextCommand(value, x, textY, options));
+    const rightText = (value, x, textY, options) => add(pdfRightTextCommand(value, x, textY, options));
     const line = (x1, y1, x2, y2, width = 0.8, gray = 0.82) => add(`${gray} G ${width} w ${x1} ${y1} m ${x2} ${y2} l S\n0 G\n`);
-    const fillRect = (x, y, w, h, gray = 0.97) => add(`${gray} g ${x} ${y} ${w} ${h} re f\n0 g\n`);
-    const strokeRect = (x, y, w, h, gray = 0.82) => add(`${gray} G ${x} ${y} ${w} ${h} re S\n0 G\n`);
-    const muted = (value, x, y, options = {}) => text(value, x, y, { size: options.size || 10, bold: !!options.bold });
-    const kv = (label, value, x, y, width, options = {}) => {
-      text(label, x, y, { size: options.size || 9 });
-      rightText(value, x + width, y, { size: options.size || 9, bold: !!options.bold });
+    const fillRect = (x, rectY, w, h, gray = 0.97) => add(`${gray} g ${x} ${rectY} ${w} ${h} re f\n0 g\n`);
+    const strokeRect = (x, rectY, w, h, gray = 0.82) => add(`${gray} G ${x} ${rectY} ${w} ${h} re S\n0 G\n`);
+    const muted = (value, x, textY, options = {}) => text(value, x, textY, { size: options.size || 10, bold: !!options.bold });
+    const kv = (label, value, x, textY, width, options = {}) => {
+      text(label, x, textY, { size: options.size || 9 });
+      rightText(value, x + width, textY, { size: options.size || 9, bold: !!options.bold });
+    };
+    const startPage = () => {
+      commands = [];
+      pages.push(commands);
+      fillRect(0, 0, pageWidth, pageHeight, 1);
+      y = pageTop;
+    };
+    const ensureSpace = (height, options = {}) => {
+      const h = Number(height || 0);
+      if (pages.length && y - h < bottom && !options.allowOversize) startPage();
+    };
+    const drawTableHeader = (continued = false) => {
+      ensureSpace(42);
+      const col = { desc: margin, qty: 326, price: 398, vat: 452, amount: right };
+      fillRect(margin, y - 22, right - margin, 24, 0.96);
+      text(continued ? "Rad / Beskrivning (forts.)" : "Rad / Beskrivning", col.desc, y - 14, { size: 10, bold: true });
+      rightText("Antal", col.qty, y - 14, { size: 10, bold: true });
+      rightText("Á-pris", col.price, y - 14, { size: 10, bold: true });
+      rightText("Moms", col.vat, y - 14, { size: 10, bold: true });
+      rightText("Belopp", col.amount, y - 14, { size: 10, bold: true });
+      line(margin, y - 24, right, y - 24);
+      y -= 48;
+      return col;
+    };
+    const renderCard = (title, rows, x, width, options = {}) => {
+      const footerLines = options.footer ? pdfWrapLines(options.footer, Math.max(34, Math.floor(width / 5.4))) : [];
+      const rowCount = rows.length + (options.fallback ? 1 : 0) + footerLines.length;
+      const height = 36 + Math.max(1, rowCount) * 13 + (footerLines.length ? 8 : 0);
+      const top = y;
+      fillRect(x, top - height, width, height, 0.985);
+      strokeRect(x, top - height, width, height, 0.82);
+      text(title, x + 10, top - 20, { size: 11, bold: true });
+      let rowY = top - 38;
+      rows.forEach(([label, value]) => {
+        text(label, x + 10, rowY, { size: 9 });
+        rightText(value, x + width - 10, rowY, { size: 9, bold: true });
+        rowY -= 13;
+      });
+      if (options.fallback) {
+        pdfWrapLines(options.fallback, Math.max(34, Math.floor(width / 5.4))).forEach(part => { muted(part, x + 10, rowY, { size: 9 }); rowY -= 13; });
+      }
+      if (footerLines.length) {
+        rowY -= 4;
+        footerLines.forEach(part => { muted(part, x + 10, rowY, { size: 8 }); rowY -= 11; });
+      }
+      return height;
+    };
+    const renderCardFlow = (title, rows, x, width, options = {}) => {
+      const entryLines = [];
+      rows.forEach(([label, value]) => entryLines.push({ kind: "kv", label, value }));
+      if (options.fallback) pdfWrapLines(options.fallback, Math.max(34, Math.floor(width / 5.4))).forEach(value => entryLines.push({ kind: "text", value }));
+      if (options.footer) pdfWrapLines(options.footer, Math.max(34, Math.floor(width / 5.4))).forEach(value => entryLines.push({ kind: "text", value, small: true }));
+      const entries = entryLines.length ? entryLines : [{ kind: "text", value: "-" }];
+      let index = 0;
+      let continued = false;
+      while (index < entries.length) {
+        if (y - 52 < bottom) startPage();
+        const availableRows = Math.max(1, Math.floor((y - bottom - 40) / 13));
+        const chunk = entries.slice(index, index + availableRows);
+        const height = 36 + chunk.length * 13;
+        const top = y;
+        fillRect(x, top - height, width, height, 0.985);
+        strokeRect(x, top - height, width, height, 0.82);
+        text(continued ? `${title} (forts.)` : title, x + 10, top - 20, { size: 11, bold: true });
+        let rowY = top - 38;
+        chunk.forEach(entry => {
+          if (entry.kind === "kv") {
+            text(entry.label, x + 10, rowY, { size: 9 });
+            rightText(entry.value, x + width - 10, rowY, { size: 9, bold: true });
+          } else {
+            muted(entry.value, x + 10, rowY, { size: entry.small ? 8 : 9 });
+          }
+          rowY -= 13;
+        });
+        y = top - height - 18;
+        index += chunk.length;
+        continued = true;
+      }
     };
 
-    fillRect(0, 0, pageWidth, pageHeight, 1);
+    startPage();
 
-    const headerTop = 786;
-    const metaX = 336;
-    const metaW = right - metaX;
-    const metaY = 638;
-    const metaH = 148;
-
+    const headerStartY = y;
     if (logo) {
       const maxW = 76;
       const maxH = 56;
       const ratio = Math.min(maxW / logo.width, maxH / logo.height);
       const w = Math.max(1, logo.width * ratio);
       const h = Math.max(1, logo.height * ratio);
-      add(`q ${w.toFixed(2)} 0 0 ${h.toFixed(2)} ${margin} ${(headerTop - h).toFixed(2)} cm /Im1 Do Q\n`);
+      add(`q ${w.toFixed(2)} 0 0 ${h.toFixed(2)} ${margin} ${(headerStartY - h).toFixed(2)} cm /Im1 Do Q\n`);
     } else {
-      fillRect(margin, headerTop - 38, 76, 38, 0.08);
-      text(String(company.name || "FU").slice(0, 18), margin + 6, headerTop - 24, { size: 8, bold: true });
+      fillRect(margin, headerStartY - 38, 76, 38, 0.08);
+      text(String(company.name || "FU").slice(0, 18), margin + 6, headerStartY - 24, { size: 8, bold: true });
     }
 
-    let sellerY = logo ? headerTop - 72 : headerTop - 52;
+    let sellerY = logo ? headerStartY - 72 : headerStartY - 52;
     text(String(company.name || "Innovatio Brutalis").trim(), margin, sellerY, { size: 13, bold: true }); sellerY -= 15;
     if (company.orgnr) { text(`Org.nr: ${String(company.orgnr).trim()}`, margin, sellerY, { size: 9 }); sellerY -= 12; }
     if (company.vat) { text(`Momsreg.nr: ${String(company.vat).trim()}`, margin, sellerY, { size: 9 }); sellerY -= 12; }
@@ -5366,10 +5444,13 @@ cur = {
       .filter(value => value && String(value).trim())
       .forEach(value => { text(String(value).trim(), margin, sellerY, { size: 9 }); sellerY -= 12; });
 
-    fillRect(metaX, metaY, metaW, metaH, 0.985);
-    strokeRect(metaX, metaY, metaW, metaH, 0.78);
-    text("Faktura", metaX + 14, metaY + metaH - 32, { size: 26, bold: true });
-    let metaTextY = metaY + metaH - 56;
+    const metaX = 336;
+    const metaW = right - metaX;
+    const metaH = 148;
+    fillRect(metaX, headerStartY - metaH, metaW, metaH, 0.985);
+    strokeRect(metaX, headerStartY - metaH, metaW, metaH, 0.78);
+    text("Faktura", metaX + 14, headerStartY - 32, { size: 26, bold: true });
+    let metaTextY = headerStartY - 56;
     if (isDraft) {
       strokeRect(metaX + 14, metaTextY - 5, 48, 17, 0.72);
       text("UTKAST", metaX + 20, metaTextY, { size: 8, bold: true });
@@ -5380,130 +5461,109 @@ cur = {
     kv("Förfallodatum", String(inv.due || "").trim() || "-", metaX + 14, metaTextY, metaW - 28, { bold: true }); metaTextY -= 14;
     kv("Betalvillkor", invoicePaymentTermsLabel(inv), metaX + 14, metaTextY, metaW - 28, { bold: true }); metaTextY -= 14;
     kv("Valuta", currency, metaX + 14, metaTextY, metaW - 28, { bold: true });
+    y = Math.min(sellerY - 28, headerStartY - metaH - 28);
 
-    const partyTop = 594;
     const partyBoxW = (right - margin - 18) / 2;
-    const partyH = 118;
+    const recipientLines = [display.recipient.title, ...display.recipient.addressLines, display.recipient.orgnr ? `Org.nr: ${display.recipient.orgnr}` : "", [display.recipient.email, display.recipient.phone].filter(Boolean).join(" · ")].filter(Boolean);
+    const requesterLines = display.requester.name || display.requester.theirReference
+      ? [display.requester.name, display.requester.role, [display.requester.email, display.requester.phone].filter(Boolean).join(" · "), display.requester.theirReference ? `Er referens: ${display.requester.theirReference}` : ""].filter(Boolean)
+      : ["Ej angiven"];
+    const partyH = 36 + Math.max(recipientLines.length, requesterLines.length) * 13;
+    ensureSpace(partyH + 26);
+    const partyTop = y;
     fillRect(margin, partyTop - partyH, partyBoxW, partyH, 0.985);
     strokeRect(margin, partyTop - partyH, partyBoxW, partyH, 0.82);
     fillRect(margin + partyBoxW + 18, partyTop - partyH, partyBoxW, partyH, 0.985);
     strokeRect(margin + partyBoxW + 18, partyTop - partyH, partyBoxW, partyH, 0.82);
-
-    let recipientY = partyTop - 20;
-    text("Faktureras till", margin + 12, recipientY, { size: 11, bold: true }); recipientY -= 17;
-    text(display.recipient.title || "", margin + 12, recipientY, { size: 11, bold: true }); recipientY -= 13;
-    display.recipient.addressLines.slice(0, 4).forEach(value => { muted(value, margin + 12, recipientY, { size: 9 }); recipientY -= 12; });
-    if (display.recipient.orgnr) { muted(`Org.nr: ${display.recipient.orgnr}`, margin + 12, recipientY, { size: 9 }); recipientY -= 12; }
-    if (display.recipient.email || display.recipient.phone) {
-      muted([display.recipient.email, display.recipient.phone].filter(Boolean).join(" · "), margin + 12, recipientY, { size: 9 });
-    }
-
-    let requesterY = partyTop - 20;
+    text("Faktureras till", margin + 12, partyTop - 20, { size: 11, bold: true });
+    let recipientY = partyTop - 38;
+    recipientLines.forEach((value, idx) => { muted(value, margin + 12, recipientY, { size: idx === 0 ? 10 : 9, bold: idx === 0 }); recipientY -= 13; });
     const requesterX = margin + partyBoxW + 30;
-    text("Beställare / kontaktperson", requesterX, requesterY, { size: 11, bold: true }); requesterY -= 17;
-    if (display.requester.name || display.requester.theirReference) {
-      if (display.requester.name) { muted(display.requester.name, requesterX, requesterY, { size: 10, bold: true }); requesterY -= 13; }
-      if (display.requester.role) { muted(display.requester.role, requesterX, requesterY, { size: 9 }); requesterY -= 12; }
-      if (display.requester.email || display.requester.phone) { muted([display.requester.email, display.requester.phone].filter(Boolean).join(" · "), requesterX, requesterY, { size: 9 }); requesterY -= 12; }
-      if (display.requester.theirReference) { muted(`Er referens: ${display.requester.theirReference}`, requesterX, requesterY, { size: 9 }); requesterY -= 12; }
-    } else {
-      muted("Ej angiven", requesterX, requesterY, { size: 9 });
-    }
+    text("Beställare / kontaktperson", requesterX, partyTop - 20, { size: 11, bold: true });
+    let requesterY = partyTop - 38;
+    requesterLines.forEach((value, idx) => { muted(value, requesterX, requesterY, { size: idx === 0 ? 10 : 9, bold: idx === 0 && value !== "Ej angiven" }); requesterY -= 13; });
+    y = partyTop - partyH - 30;
 
-    const tableTop = 442;
-    const col = { desc: margin, qty: 326, price: 398, vat: 452, amount: right };
-    fillRect(margin, tableTop - 20, right - margin, 24, 0.96);
-    text("Rad / Beskrivning", col.desc, tableTop - 12, { size: 10, bold: true });
-    rightText("Antal", col.qty, tableTop - 12, { size: 10, bold: true });
-    rightText("Á-pris", col.price, tableTop - 12, { size: 10, bold: true });
-    rightText("Moms", col.vat, tableTop - 12, { size: 10, bold: true });
-    rightText("Belopp", col.amount, tableTop - 12, { size: 10, bold: true });
-    line(margin, tableTop - 22, right, tableTop - 22);
-
-    let rowY = tableTop - 46;
+    let col = drawTableHeader(false);
     (Array.isArray(inv.lines) ? inv.lines : []).forEach(item => {
-      if (rowY < 252) return;
-      if (String(item?.kind || "item") !== "item") {
-        const commentStartY = rowY;
-        const commentLines = pdfWrapLines(item?.desc || "", 72).slice(0, 2);
-        commentLines.forEach((part, idx) => { muted(part, col.desc, commentStartY - (idx * 13)); });
-        const separatorY = commentStartY - Math.max(28, commentLines.length * 13 + 12);
-        line(margin, separatorY, right, separatorY);
-        rowY = separatorY - 20;
-        return;
+      const isItem = String(item?.kind || "item") === "item";
+      const descMaxChars = isItem ? 42 : 72;
+      const descLines = pdfWrapLines(item?.desc || "", descMaxChars);
+      const rowHeight = Math.max(28, descLines.length * 13 + 14);
+      if (y - rowHeight < bottom) col = drawTableHeader(true);
+      const rowTop = y;
+      descLines.forEach((part, idx) => { muted(part, col.desc, rowTop - (idx * 13), { size: 9 }); });
+      if (isItem) {
+        const qty = Number(item?.qty || 0);
+        const price = Number(item?.price || 0);
+        const vat = Number(item?.vat || 0);
+        const amount = lineAmount({ kind:"item", qty, price, vat });
+        rightText(String(qty), col.qty, rowTop, { size: 10 });
+        rightText(fmtSEK(price), col.price, rowTop, { size: 10 });
+        rightText(`${vat}%`, col.vat, rowTop, { size: 10 });
+        rightText(fmtSEK(amount.gross), col.amount, rowTop, { size: 10 });
       }
-      const qty = Number(item?.qty || 0);
-      const price = Number(item?.price || 0);
-      const vat = Number(item?.vat || 0);
-      const amount = lineAmount({ kind:"item", qty, price, vat });
-      const wrappedDesc = pdfWrapLines(item?.desc || "", 42).slice(0, 3);
-      wrappedDesc.forEach((part, idx) => { muted(part, col.desc, rowY - (idx * 13)); });
-      rightText(String(qty), col.qty, rowY, { size: 10 });
-      rightText(fmtSEK(price), col.price, rowY, { size: 10 });
-      rightText(`${vat}%`, col.vat, rowY, { size: 10 });
-      rightText(fmtSEK(amount.gross), col.amount, rowY, { size: 10 });
-      const separatorY = rowY - Math.max(28, wrappedDesc.length * 13 + 12);
+      const separatorY = rowTop - rowHeight + 6;
       line(margin, separatorY, right, separatorY);
-      rowY = separatorY - 20;
+      y = separatorY - 18;
     });
 
+    ensureSpace(96);
     const sumX = 330;
-    let sumY = Math.min(rowY - 12, 230);
     const summaryRow = (label, value, options = {}) => {
-      text(label, sumX, sumY, { size: options.size || 11, bold: !!options.bold });
-      rightText(value, right, sumY, { size: options.size || 11, bold: !!options.bold });
-      sumY -= options.gap || 16;
+      text(label, sumX, y, { size: options.size || 11, bold: !!options.bold });
+      rightText(value, right, y, { size: options.size || 11, bold: !!options.bold });
+      y -= options.gap || 16;
     };
     summaryRow("Summa exkl. moms", `${fmtSEK(totals.net)} ${currency}`);
     summaryRow("Moms", `${fmtSEK(totals.vat)} ${currency}`);
-    summaryRow("Att betala", `${fmtSEK(totals.gross)} ${currency}`, { size: 14, bold: true, gap: 20 });
+    line(sumX, y + 5, right, y + 5, 1.5, 0.15);
+    summaryRow("Att betala", `${fmtSEK(totals.gross)} ${currency}`, { size: 14, bold: true, gap: 30 });
 
-    const boxY = 96;
-    const boxW = (right - margin - 18) / 2;
-    fillRect(margin, boxY, boxW, 88, 0.985);
-    strokeRect(margin, boxY, boxW, 88);
-    fillRect(margin + boxW + 18, boxY, boxW, 88, 0.985);
-    strokeRect(margin + boxW + 18, boxY, boxW, 88);
-    text("Betalningsuppgifter", margin + 10, boxY + 68, { size: 11, bold: true });
-    let payY = boxY + 50;
-    display.paymentRows.slice(0, 5).forEach(([label, value]) => {
-      text(label, margin + 10, payY, { size: 9 });
-      rightText(value, margin + boxW - 10, payY, { size: 9 });
-      payY -= 13;
-    });
-    if (display.paymentFallback) text(display.paymentFallback, margin + 10, payY, { size: 9 });
-
-    const termsX = margin + boxW + 28;
-    text("Villkor", termsX, boxY + 68, { size: 11, bold: true });
-    let termsY = boxY + 50;
-    display.termsRows.slice(0, 5).forEach(([label, value]) => {
-      text(label, termsX, termsY, { size: 9 });
-      rightText(value, right - 10, termsY, { size: 9 });
-      termsY -= 13;
-    });
-
-    if (company.invoiceFooter) {
-      pdfWrapLines(company.invoiceFooter, 100).slice(0, 3).forEach((part, idx) => text(part, margin, 52 - (idx * 12), { size: 8 }));
+    const boxGap = 18;
+    const boxW = (right - margin - boxGap) / 2;
+    const paymentHeight = 36 + Math.max(1, display.paymentRows.length + (display.paymentFallback ? 1 : 0)) * 13;
+    const termsFooterLines = String(company.invoiceFooter || "").trim() ? pdfWrapLines(company.invoiceFooter, Math.max(34, Math.floor(boxW / 5.4))) : [];
+    const termsHeight = 36 + Math.max(1, display.termsRows.length + termsFooterLines.length) * 13 + (termsFooterLines.length ? 8 : 0);
+    const sideBySideHeight = Math.max(paymentHeight, termsHeight);
+    ensureSpace(sideBySideHeight + 10);
+    if (sideBySideHeight <= y - bottom) {
+      const top = y;
+      renderCard("Betalningsuppgifter", display.paymentRows, margin, boxW, { fallback: display.paymentFallback });
+      y = top;
+      renderCard("Villkor", display.termsRows, margin + boxW + boxGap, boxW, { footer: company.invoiceFooter });
+      y = top - sideBySideHeight - 20;
+    } else {
+      const fullW = right - margin;
+      renderCardFlow("Betalningsuppgifter", display.paymentRows, margin, fullW, { fallback: display.paymentFallback });
+      renderCardFlow("Villkor", display.termsRows, margin, fullW, { footer: company.invoiceFooter });
     }
 
-    const stream = commands.join("");
+    pages.forEach((page, index) => {
+      page.push(pdfRightTextCommand(`Sida ${index + 1} av ${pages.length}`, right, 32, { size: 8 }));
+    });
+
+    const pageCount = pages.length;
+    const fontRegularObj = 3 + pageCount;
+    const fontBoldObj = fontRegularObj + 1;
+    const logoObj = logo ? fontBoldObj + 1 : null;
+    const contentStartObj = fontBoldObj + (logo ? 2 : 1);
     const resources = logo
-      ? "<< /Font << /F1 4 0 R /F2 5 0 R >> /XObject << /Im1 6 0 R >> >>"
-      : "<< /Font << /F1 4 0 R /F2 5 0 R >> >>";
+      ? `<< /Font << /F1 ${fontRegularObj} 0 R /F2 ${fontBoldObj} 0 R >> /XObject << /Im1 ${logoObj} 0 R >> >>`
+      : `<< /Font << /F1 ${fontRegularObj} 0 R /F2 ${fontBoldObj} 0 R >> >>`;
+    const pageObjects = pages.map((_, index) => `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources ${resources} /Contents ${contentStartObj + index} 0 R >>`);
     const objects = [
       "<< /Type /Catalog /Pages 2 0 R >>",
-      "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources ${resources} /Contents 6 0 R >>`,
+      `<< /Type /Pages /Kids [${pageObjects.map((_, index) => `${3 + index} 0 R`).join(" ")}] /Count ${pageCount} >>`,
+      ...pageObjects,
       "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
       "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>",
     ];
-    if (logo) {
-      objects[2] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources ${resources} /Contents 7 0 R >>`;
-      objects.push([`<< /Type /XObject /Subtype /Image /Width ${logo.width} /Height ${logo.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${logo.bytes.length} >>\nstream\n`, logo.bytes, "\nendstream"]);
+    if (logo) objects.push([`<< /Type /XObject /Subtype /Image /Width ${logo.width} /Height ${logo.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${logo.bytes.length} >>\nstream\n`, logo.bytes, "\nendstream"]);
+    pages.forEach(page => {
+      const stream = page.join("");
       objects.push(`<< /Length ${pdfByteLength(stream)} >>\nstream\n${stream}endstream`);
-    } else {
-      objects.push(`<< /Length ${pdfByteLength(stream)} >>\nstream\n${stream}endstream`);
-    }
+    });
     return buildPdfBlobFromObjects(objects);
   }
 
@@ -5513,7 +5573,7 @@ cur = {
     return buildStyledInvoicePdfBlob(inv);
   }
 
-  const INVOICE_PDF_LAYOUT_VERSION = "profile_pdf_v7";
+  const INVOICE_PDF_LAYOUT_VERSION = "profile_pdf_v8_flow_pages";
 
   function invoiceFrozenPdfNeedsProfileRefresh(doc){
     if (!doc || String(doc.kind || "") !== "invoice_frozen_pdf") return false;
@@ -15304,9 +15364,15 @@ if (!d.features) d.features = { sruEnabled: false };
     const html = `<!doctype html><html><head><meta charset="utf-8" />
       <title>Faktura ${escapeHtml(invoiceNo || "utkast")}</title>
       <style>
+        @page { size: A4; margin: 12mm; }
+        * { box-sizing: border-box; }
         body{ margin:0; background:#f1f1f1; color:#111; }
         .muted{ color:#555; }
-        .invoice-page { max-width: 210mm; margin: 0 auto; padding: 18mm; background: #fff; color: #111; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; font-size: 12px; line-height: 1.35; box-sizing:border-box; }
+        .invoice-page { max-width: 210mm; min-height: 297mm; margin: 0 auto; padding: 18mm; background: #fff; color: #111; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; font-size: 12px; line-height: 1.35; }
+        .invoice-document { display: block; }
+        .print-section { display: block; margin-top: 22px; }
+        .print-section:first-child { margin-top: 0; }
+        .avoid-break, .invoice-box, .invoice-meta-card, .invoice-payment-card, .invoice-totals, .invoice-footer-block { break-inside: avoid; page-break-inside: avoid; }
         .invoice-header { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 24px; align-items: start; margin-bottom: 24px; }
         .invoice-logo { max-width: 95px; max-height: 95px; object-fit: contain; margin-bottom: 10px; }
         .invoice-sender h2 { margin: 0 0 6px 0; font-size: 15px; }
@@ -15317,26 +15383,38 @@ if (!d.features) d.features = { sruEnabled: false };
         .invoice-meta-card dl { display: grid; grid-template-columns: auto 1fr; gap: 5px 12px; margin: 10px 0 0 0; }
         .invoice-meta-card dt { color: #555; }
         .invoice-meta-card dd { margin: 0; text-align: right; font-weight: 700; }
-        .invoice-parties { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 22px; }
+        .invoice-parties { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
         .invoice-box h3, .invoice-payment-card h3 { margin: 0 0 8px 0; font-size: 13px; }
-        .invoice-lines { width: 100%; border-collapse: collapse; margin-top: 18px; table-layout: fixed; }
+        .invoice-lines { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        .invoice-lines thead { display: table-header-group; }
+        .invoice-lines tfoot { display: table-footer-group; }
+        .invoice-lines tr { break-inside: avoid; page-break-inside: avoid; }
         .invoice-lines th, .invoice-lines td { border-bottom: 1px solid #ddd; padding: 8px 6px; vertical-align: top; }
+        .invoice-lines td { overflow-wrap: anywhere; word-break: break-word; }
         .invoice-lines th { text-align: left; color: #333; font-size: 12px; }
         .invoice-lines th:first-child { width: 47%; }
         .invoice-lines .num { text-align: right; white-space: nowrap; }
         .invoice-lines .comment-row td { color:#666; font-style:italic; }
-        .invoice-totals { width: 340px; margin-left: auto; margin-top: 18px; }
+        .invoice-totals { width: min(340px, 100%); margin-left: auto; }
         .totals-row { display: flex; justify-content: space-between; gap: 16px; padding: 4px 0; }
         .grand-total { font-size: 1.25em; font-weight: 900; border-top: 2px solid #111; margin-top: 6px; padding-top: 8px; }
-        .invoice-payment-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 22px; }
+        .invoice-footer-block { margin-top: 12px; }
+        .invoice-payment-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 18px; align-items: start; }
         .kv { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; }
         .kv span:last-child { text-align: right; font-weight: 600; }
         .invoice-footer { margin-top: 18px; font-size: 11px; color: #555; white-space: pre-wrap; }
-        @media print { body { background: #fff !important; } .invoice-page { max-width: none; margin: 0; padding: 12mm; } .invoice-header, .invoice-parties, .invoice-payment-grid, .invoice-totals { page-break-inside: avoid; break-inside: avoid; } }
+        @media print {
+          html, body { width: auto; min-height: 0; background: #fff !important; }
+          .invoice-page { max-width: none; min-height: 0; margin: 0; padding: 0; }
+          .print-section { break-inside: auto; page-break-inside: auto; }
+          .invoice-header, .invoice-parties, .invoice-payment-grid, .invoice-totals, .invoice-footer-block { page-break-inside: avoid; break-inside: avoid; }
+          .invoice-lines { break-inside: auto; page-break-inside: auto; }
+          .invoice-payment-grid { grid-template-columns: repeat(auto-fit, minmax(70mm, 1fr)); }
+        }
         @media (max-width: 700px) { .invoice-header, .invoice-parties, .invoice-payment-grid { grid-template-columns: 1fr; } .invoice-meta-card dd { text-align: left; } .invoice-totals { width: 100%; } }
       </style></head><body>
-      <main class="invoice-page">
-      <section class="invoice-header">
+      <main class="invoice-page invoice-document">
+      <section class="invoice-header print-section avoid-break">
         <div class="invoice-sender">
           ${state.company.logoDataUrl?`<img class="invoice-logo" alt="Logotyp" src="${state.company.logoDataUrl}">`:""}
           <h2>${escapeHtml(state.company.name||"Innovatio Brutalis")}</h2>
@@ -15360,7 +15438,7 @@ if (!d.features) d.features = { sruEnabled: false };
         </div>
       </section>
 
-      <section class="invoice-parties">
+      <section class="invoice-parties print-section avoid-break">
         <div class="invoice-box">
           <h3>Faktureras till</h3>
           <div style="font-weight:800;">${escapeHtml(display.recipient.title||"")}</div>
@@ -15374,18 +15452,20 @@ if (!d.features) d.features = { sruEnabled: false };
         </div>
       </section>
 
-      <table class="invoice-lines">
-        <thead><tr><th>Rad / Beskrivning</th><th class="num">Antal</th><th class="num">Á-pris</th><th class="num">Moms</th><th class="num">Belopp</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
+      <section class="print-section invoice-lines-section">
+        <table class="invoice-lines">
+          <thead><tr><th>Rad / Beskrivning</th><th class="num">Antal</th><th class="num">Á-pris</th><th class="num">Moms</th><th class="num">Belopp</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </section>
 
-      <section class="invoice-totals">
+      <section class="invoice-totals print-section avoid-break">
         <div class="totals-row"><span>Summa exkl. moms</span><span>${fmtSEK(tot.net)} ${escapeHtml(currency)}</span></div>
         <div class="totals-row"><span>Moms</span><span>${fmtSEK(tot.vat)} ${escapeHtml(currency)}</span></div>
         <div class="totals-row grand-total"><span>Att betala</span><span>${fmtSEK(tot.gross)} ${escapeHtml(currency)}</span></div>
       </section>
 
-      <section class="invoice-payment-grid">
+      <section class="invoice-payment-grid print-section invoice-footer-block avoid-break">
         <div class="invoice-payment-card">
           <h3>Betalningsuppgifter</h3>
           ${display.paymentRows.map(([label, value]) => `<div class="kv"><span>${escapeHtml(label)}</span><span>${escapeHtml(value)}</span></div>`).join("")}
@@ -15394,9 +15474,10 @@ if (!d.features) d.features = { sruEnabled: false };
         <div class="invoice-payment-card">
           <h3>Villkor</h3>
           ${display.termsRows.map(([label, value]) => `<div class="kv"><span>${escapeHtml(label)}</span><span>${escapeHtml(value)}</span></div>`).join("")}
-          ${state.company.invoiceFooter?`<div class="invoice-footer">${escapeHtml(state.company.invoiceFooter)}</div>`:""}
         </div>
       </section>
+
+      ${state.company.invoiceFooter?`<section class="print-section invoice-footer-block avoid-break"><div class="invoice-footer">${escapeHtml(state.company.invoiceFooter)}</div></section>`:""}
 
       ${autoPrint ? `<script>window.onload=()=>window.print();<\/script>` : ""}
 

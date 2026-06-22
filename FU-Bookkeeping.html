@@ -2989,7 +2989,7 @@ Tack!</div>
  
 
   const APP_VERSION = "1.4.55"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.79";  // user-facing revision
+  const APP_SEMVER = "0.3.80";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -5508,7 +5508,7 @@ cur = {
       y = separatorY - 18;
     });
 
-    ensureSpace(96);
+    ensureSpace(112);
     const sumX = 330;
     const summaryRow = (label, value, options = {}) => {
       text(label, sumX, y, { size: options.size || 11, bold: !!options.bold });
@@ -5517,7 +5517,8 @@ cur = {
     };
     summaryRow("Summa exkl. moms", `${fmtSEK(totals.net)} ${currency}`);
     summaryRow("Moms", `${fmtSEK(totals.vat)} ${currency}`);
-    line(sumX, y + 5, right, y + 5, 1.5, 0.15);
+    line(sumX, y + 8, right, y + 8, 1.5, 0.15);
+    y -= 12;
     summaryRow("Att betala", `${fmtSEK(totals.gross)} ${currency}`, { size: 14, bold: true, gap: 30 });
 
     const boxGap = 18;
@@ -5573,7 +5574,7 @@ cur = {
     return buildStyledInvoicePdfBlob(inv);
   }
 
-  const INVOICE_PDF_LAYOUT_VERSION = "profile_pdf_v8_flow_pages";
+  const INVOICE_PDF_LAYOUT_VERSION = "profile_pdf_v9_total_separator";
 
   function invoiceFrozenPdfNeedsProfileRefresh(doc){
     if (!doc || String(doc.kind || "") !== "invoice_frozen_pdf") return false;
@@ -15428,7 +15429,8 @@ if (!d.features) d.features = { sruEnabled: false };
         .invoice-lines .comment-row td { color:#666; font-style:italic; }
         .invoice-totals { width: min(340px, 100%); margin-left: auto; }
         .totals-row { display: flex; justify-content: space-between; gap: 16px; padding: 4px 0; }
-        .grand-total { font-size: 1.25em; font-weight: 900; border-top: 2px solid #111; margin-top: 6px; padding-top: 8px; }
+        .totals-separator { border-top: 2px solid #111; margin: 10px 0 8px 0; height: 0; }
+        .grand-total { position: relative; font-size: 1.25em; font-weight: 900; margin-top: 0; padding-top: 2px; }
         .invoice-footer-block { margin-top: 12px; }
         .invoice-payment-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 18px; align-items: start; }
         .kv { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; }
@@ -15493,6 +15495,7 @@ if (!d.features) d.features = { sruEnabled: false };
       <section class="invoice-totals print-section avoid-break">
         <div class="totals-row"><span>Summa exkl. moms</span><span>${fmtSEK(tot.net)} ${escapeHtml(currency)}</span></div>
         <div class="totals-row"><span>Moms</span><span>${fmtSEK(tot.vat)} ${escapeHtml(currency)}</span></div>
+        <div class="totals-separator" aria-hidden="true"></div>
         <div class="totals-row grand-total"><span>Att betala</span><span>${fmtSEK(tot.gross)} ${escapeHtml(currency)}</span></div>
       </section>
 

@@ -2989,7 +2989,7 @@ Tack!</div>
  
 
   const APP_VERSION = "1.4.55"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.81";  // user-facing revision
+  const APP_SEMVER = "0.3.82";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -3920,6 +3920,7 @@ Tack!</div>
       return si;
     });
     if (!Array.isArray(o.invoices)) o.invoices = [];
+    o.invoices = o.invoices.filter(x=>x && typeof x === "object").map(inv=> normalizeInvoiceRecord(inv));
     if (!Array.isArray(o.quotes)) o.quotes = [];
     if (!Array.isArray(o.orders)) o.orders = [];
     if (!Array.isArray(o.orderConfirmations)) o.orderConfirmations = [];
@@ -7269,7 +7270,8 @@ cur = {
 
   const CUSTOMER_STATUS_OPTIONS = ["active", "inactive"];
   const ACCOUNTING_METHOD_OPTIONS = ["cash", "accrual"];
-  const INVOICE_STATUS_OPTIONS = ["draft", "issued", "booked", "paid", "voided"];
+  const INVOICE_STATUS_OPTIONS = ["draft", "ready", "sent", "voided"];
+  const LEGACY_INVOICE_STATUS_OPTIONS = ["issued", "booked", "paid"];
 
   function splitCustomerTags(value){
     const items = Array.isArray(value)
@@ -7293,9 +7295,30 @@ cur = {
     return ACCOUNTING_METHOD_OPTIONS.includes(method) ? method : "cash";
   }
 
-  function normalizeInvoiceStatusValue(value){
+  function normalizeInvoiceStatusValue(value, invoice = null){
     const status = String(value || "").trim().toLowerCase();
     return INVOICE_STATUS_OPTIONS.includes(status) ? status : "draft";
+  }
+
+  function normalizeInvoiceBusinessStatus(invoice){
+    const inv = invoice && typeof invoice === "object" ? invoice : {};
+    const status = String(inv.status || "").trim().toLowerCase();
+    if (INVOICE_STATUS_OPTIONS.includes(status)) return status;
+    if (LEGACY_INVOICE_STATUS_OPTIONS.includes(status)) return "ready";
+    const hasSavedInvoiceShape = !!String(inv.id || inv.no || inv.date || inv.issuedAt || "").trim() || (Array.isArray(inv.lines) && inv.lines.length > 0);
+    return hasSavedInvoiceShape ? "ready" : "draft";
+  }
+
+  function normalizeInvoiceRecord(invoice){
+    const inv = invoice && typeof invoice === "object" ? invoice : {};
+    return {
+      ...inv,
+      status: normalizeInvoiceBusinessStatus(inv),
+      bookedVoucherId: String(inv.bookedVoucherId || "").trim(),
+      paymentVoucherId: String(inv.paymentVoucherId || "").trim(),
+      paidAt: String(inv.paidAt || inv.paymentRegisteredAt || "").trim(),
+      voidedAt: String(inv.voidedAt || "").trim(),
+    };
   }
 
   function getCompanyAccountingMethod(){
@@ -14477,7 +14500,7 @@ if (!d.features) d.features = { sruEnabled: false };
       date,
       due,
       accountingMethod: getCompanyAccountingMethod(),
-      status: "issued",
+      status: "ready",
       issuedAt: nowISO(),
       issuedBy: state.company?.defaultSign || "",
       bookedVoucherId: "",
@@ -14710,13 +14733,7 @@ if (!d.features) d.features = { sruEnabled: false };
       date,
       due,
       accountingMethod: existing?.accountingMethod || getCompanyAccountingMethod(),
-      status: existing?.status === "voided"
-        ? "voided"
-        : existing?.status === "paid"
-          ? "paid"
-          : existing?.status === "booked" || existing?.bookedVoucherId
-            ? "booked"
-            : "issued",
+      status: existing ? normalizeInvoiceBusinessStatus(existing) : "ready",
       issuedAt: String(existing?.issuedAt || nowISO()).trim() || nowISO(),
       issuedBy: String(existing?.issuedBy || state.company?.defaultSign || "").trim(),
       bookedVoucherId: String(existing?.bookedVoucherId || "").trim(),
@@ -14814,7 +14831,7 @@ if (!d.features) d.features = { sruEnabled: false };
 
   function invoiceShouldUseFrozenPdf(invoice){
     const lifecycle = getInvoiceLifecycle(invoice);
-    return lifecycle.status === "booked" || lifecycle.status === "paid" || lifecycle.status === "voided" || !!lifecycle.bookedVoucherId || !!lifecycle.paymentVoucherId;
+    return lifecycle.isBooked || lifecycle.isPaid || lifecycle.status === "voided";
   }
 
   function invoicePreviewPdfFileName(invoice){
@@ -15069,28 +15086,59 @@ if (!d.features) d.features = { sruEnabled: false };
     const paidAt = String(inv.paidAt || inv.paymentRegisteredAt || paymentVoucher?.date || "").trim();
     const voidedAt = String(inv.voidedAt || "").trim();
     const issuedAt = String(inv.issuedAt || inv.date || "").trim();
-    const fallbackStatus = bookedVoucher ? "booked" : (issuedAt ? "issued" : "draft");
-    const normalizedStatus = normalizeInvoiceStatusValue(inv.status || fallbackStatus);
-    const status = voidedAt || normalizedStatus === "voided"
+    const rawStatus = String(inv.status || "").trim().toLowerCase();
+    const businessStatus = normalizeInvoiceBusinessStatus(inv);
+    const bookedVoucherId = String(inv.bookedVoucherId || bookedVoucher?.id || "").trim();
+    const paymentVoucherId = String(inv.paymentVoucherId || paymentVoucher?.id || "").trim();
+    const isBooked = !!(bookedVoucherId || bookedVoucher || rawStatus === "booked" || rawStatus === "paid");
+    const isPaid = !!(paidAt || paymentVoucherId || paymentVoucher || rawStatus === "paid");
+    const status = voidedAt || businessStatus === "voided"
       ? "voided"
-      : paidAt || paymentVoucher || normalizedStatus === "paid"
+      : isPaid
         ? "paid"
-        : bookedVoucher || normalizedStatus === "booked"
-          ? "booked"
-          : normalizedStatus === "issued"
-            ? "issued"
-            : "draft";
+        : businessStatus;
     return {
       ...inv,
       accountingMethod: invoiceAccountingMethod(inv),
       bookedVoucher,
       paymentVoucher,
-      bookedVoucherId: String(inv.bookedVoucherId || bookedVoucher?.id || "").trim(),
-      paymentVoucherId: String(inv.paymentVoucherId || paymentVoucher?.id || "").trim(),
+      businessStatus,
+      bookedVoucherId,
+      paymentVoucherId,
       issuedAt,
       paidAt,
       voidedAt,
+      isBooked,
+      isPaid,
       status,
+    };
+  }
+
+  function invoiceBusinessStatusLabel(status){
+    const key = String(status || "").trim().toLowerCase();
+    if (key === "draft") return "Utkast";
+    if (key === "sent") return "Skickad";
+    if (key === "voided") return "Makulerad";
+    return "Klar / ej skickad";
+  }
+
+  function invoiceDisplayBadges(invoice){
+    const lifecycle = getInvoiceLifecycle(invoice);
+    if (lifecycle.status === "voided") {
+      return { lifecycle, mainText: "Makulerad", mainClass: "status bad", bookingText: "Ej bokförd", bookingClass: "status", metaText: "Makulerad" };
+    }
+    if (lifecycle.isPaid) {
+      return { lifecycle, mainText: "Betald", mainClass: "status ok", bookingText: lifecycle.isBooked ? "Bokförd" : "Ej bokförd", bookingClass: lifecycle.isBooked ? "status ok" : "status", metaText: "Betald" };
+    }
+    const mainText = invoiceBusinessStatusLabel(lifecycle.businessStatus);
+    const mainClass = lifecycle.businessStatus === "draft" ? "status" : lifecycle.businessStatus === "sent" ? "status ok" : "status";
+    return {
+      lifecycle,
+      mainText,
+      mainClass,
+      bookingText: lifecycle.isBooked ? "Bokförd" : "Ej bokförd",
+      bookingClass: lifecycle.isBooked ? "status ok" : "status",
+      metaText: mainText.replace(" / ", " – "),
     };
   }
 
@@ -15159,7 +15207,7 @@ if (!d.features) d.features = { sruEnabled: false };
 
   function shouldBookInvoiceOnIssue(invoice){
     const lifecycle = getInvoiceLifecycle(invoice);
-    return isAccrualMethod(lifecycle) && lifecycle.status === "issued" && !lifecycle.bookedVoucherId;
+    return isAccrualMethod(lifecycle) && lifecycle.businessStatus === "sent" && !lifecycle.isBooked;
   }
 
   function invoiceBookingState(invoice){
@@ -15176,7 +15224,7 @@ if (!d.features) d.features = { sruEnabled: false };
         lifecycle,
       };
     }
-    if (lifecycle.status === "paid") {
+    if (lifecycle.isPaid) {
       return {
         key: "paid",
         badgeClass: "status ok",
@@ -15189,12 +15237,12 @@ if (!d.features) d.features = { sruEnabled: false };
         lifecycle,
       };
     }
-    if (lifecycle.status === "booked") {
+    if (lifecycle.isBooked) {
       return {
         key: "booked",
         badgeClass: "status ok",
-        badgeText: "Bokförd",
-        listText: "Bokförd",
+        badgeText: invoiceBusinessStatusLabel(lifecycle.businessStatus),
+        listText: `${invoiceBusinessStatusLabel(lifecycle.businessStatus)} · Bokförd`,
         nextStep: isCashMethod(lifecycle)
           ? "Registrera betalningen när kunden har betalat."
           : "Nästa steg blir separat betalningsverifikation när kunden betalar.",
@@ -15204,7 +15252,7 @@ if (!d.features) d.features = { sruEnabled: false };
         lifecycle,
       };
     }
-    if (lifecycle.status === "draft") {
+    if (lifecycle.businessStatus === "draft") {
       return {
         key: "draft",
         badgeClass: "status",
@@ -15221,10 +15269,10 @@ if (!d.features) d.features = { sruEnabled: false };
     }
     if (isCashMethod(lifecycle)) {
       return {
-        key: "issued",
+        key: lifecycle.businessStatus,
         badgeClass: "status",
-        badgeText: "Sparad",
-        listText: "Sparad · ej bokförd",
+        badgeText: invoiceBusinessStatusLabel(lifecycle.businessStatus),
+        listText: `${invoiceBusinessStatusLabel(lifecycle.businessStatus)} · ej bokförd`,
         nextStep: "Kontantmetoden: bokförs normalt när betalning registreras.",
         allowVoucherAction: true,
         actionLabel: "Registrera betalning",
@@ -15233,10 +15281,10 @@ if (!d.features) d.features = { sruEnabled: false };
       };
     }
     return {
-      key: "issued",
+      key: lifecycle.businessStatus,
       badgeClass: "status bad",
-      badgeText: "Ej bokförd",
-      listText: "Ej bokförd",
+      badgeText: invoiceBusinessStatusLabel(lifecycle.businessStatus),
+      listText: `${invoiceBusinessStatusLabel(lifecycle.businessStatus)} · ej bokförd`,
       nextStep: "Faktureringsmetoden: bokför när fakturan utfärdas.",
       allowVoucherAction: true,
       actionLabel: "Skapa verifikation nu",
@@ -15294,15 +15342,16 @@ if (!d.features) d.features = { sruEnabled: false };
           const currency = getInvoiceCurrency(inv);
           const displayNo = invoiceDisplayNo(inv);
           const booking = invoiceBookingState(inv);
-          const bookedVoucher = booking.lifecycle.bookedVoucher;
-          const paymentVoucher = booking.lifecycle.paymentVoucher;
+          const badges = invoiceDisplayBadges(inv);
+          const bookedVoucher = badges.lifecycle.bookedVoucher;
+          const paymentVoucher = badges.lifecycle.paymentVoucher;
           const div = document.createElement("div");
           div.className = "item";
           div.innerHTML = `
             <div class="top">
               <div>
-                <div class="title">${escapeHtml(displayNo ? `Faktura #${displayNo}` : "Faktura")} · ${escapeHtml(inv.date)} · ${escapeHtml(c?.name || "(kund)")} <span class="${escapeAttr(booking.badgeClass)}">${escapeHtml(booking.badgeText)}</span></div>
-                <div class="meta">${escapeHtml(booking.listText)}${bookedVoucher?.series && bookedVoucher?.no ? ` · Verifikation ${escapeHtml(String(bookedVoucher.series) + String(bookedVoucher.no))}` : ""}${paymentVoucher?.series && paymentVoucher?.no ? ` · Betalning ${escapeHtml(String(paymentVoucher.series) + String(paymentVoucher.no))}` : ""} · Förfaller ${escapeHtml(inv.due)} · Totalt ${fmtSEK(tot.gross)} ${escapeHtml(currency)}</div>
+                <div class="title">${escapeHtml(displayNo ? `Faktura #${displayNo}` : "Faktura")} · ${escapeHtml(inv.date)} · ${escapeHtml(c?.name || "(kund)")} <span class="${escapeAttr(badges.mainClass)}">${escapeHtml(badges.mainText)}</span> <span class="${escapeAttr(badges.bookingClass)}">${escapeHtml(badges.bookingText)}</span></div>
+                <div class="meta">${escapeHtml(badges.metaText)} · ${escapeHtml(badges.bookingText)}${bookedVoucher?.series && bookedVoucher?.no ? ` · Verifikation ${escapeHtml(String(bookedVoucher.series) + String(bookedVoucher.no))}` : ""}${paymentVoucher?.series && paymentVoucher?.no ? ` · Betalning ${escapeHtml(String(paymentVoucher.series) + String(paymentVoucher.no))}` : ""} · Förfaller ${escapeHtml(inv.due)} · Totalt ${fmtSEK(tot.gross)} ${escapeHtml(currency)}</div>
               </div>
               <div class="row">
                 <button class="btn secondary" data-act="edit" data-id="${inv.id}">Öppna</button>
@@ -15622,7 +15671,7 @@ if (!d.features) d.features = { sruEnabled: false };
     if (invoiceIndex >= 0) {
       state.invoices[invoiceIndex] = {
         ...state.invoices[invoiceIndex],
-        status: "booked",
+        status: normalizeInvoiceBusinessStatus(state.invoices[invoiceIndex]),
         bookedVoucherId: vv.id,
         bookedAt: nowISO(),
         bookedBy: state.company.defaultSign || "",
@@ -15659,7 +15708,7 @@ if (!d.features) d.features = { sruEnabled: false };
 
       const lifecycle = getInvoiceLifecycle(linkedInvoice);
       if (lifecycle.status === "voided") return showToast("Fakturan är makulerad och kan inte betalregistreras.", 5500);
-      if (lifecycle.status === "paid" || lifecycle.paymentVoucherId) return showToast("Betalningen är redan registrerad.", 5500);
+      if (lifecycle.isPaid) return showToast("Betalningen är redan registrerad.", 5500);
       if (isAccrualMethod(lifecycle) && !lifecycle.bookedVoucherId) return showToast("Bokför fakturan först innan betalningen registreras.", 6500);
 
       const paymentDate = await promptAsync("Betalningsdatum (YYYY-MM-DD)", {
@@ -15746,13 +15795,13 @@ if (!d.features) d.features = { sruEnabled: false };
         if (!sameId && !sameNo) return item;
         return {
           ...item,
-          status: "paid",
+          status: normalizeInvoiceBusinessStatus(item),
           paidAt: paymentDateIso,
           paidBy: state.company.defaultSign || "",
           paymentVoucherId: vv.id,
         };
       });
-      linkedInvoice.status = "paid";
+      linkedInvoice.status = normalizeInvoiceBusinessStatus(linkedInvoice);
       linkedInvoice.paidAt = paymentDateIso;
       linkedInvoice.paidBy = state.company.defaultSign || "";
       linkedInvoice.paymentVoucherId = vv.id;

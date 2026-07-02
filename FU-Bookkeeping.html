@@ -2989,7 +2989,7 @@ Tack!</div>
  
 
   const APP_VERSION = "1.4.55"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.80";  // user-facing revision
+  const APP_SEMVER = "0.3.81";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -14753,13 +14753,6 @@ if (!d.features) d.features = { sruEnabled: false };
     if (idx>=0) state.invoices[idx] = inv; else state.invoices.push(inv);
     state.invoices.sort((a,b)=> (a.yearId+a.no+a.date).localeCompare(b.yearId+b.no+b.date, "sv"));
 
-    try {
-      await ensureFrozenInvoicePdfForInvoice(inv, { requestPermission: true, source: "invoice_save", createdBy: state.company?.defaultSign || "" });
-    } catch (err) {
-      console.error("Frozen invoice PDF archive failed", err);
-      showToast("Fakturan sparades, men den frysta PDF-kopian kunde inte arkiveras. Kontrollera datafil och FU-mapp.", 9000);
-    }
-
     save();
     newInvoice();
     renderInvoices();
@@ -14819,6 +14812,22 @@ if (!d.features) d.features = { sruEnabled: false };
     return (state.invoices || []).find(invoice => invoice && String(invoice.id || "").trim() === id) || null;
   }
 
+  function invoiceShouldUseFrozenPdf(invoice){
+    const lifecycle = getInvoiceLifecycle(invoice);
+    return lifecycle.status === "booked" || lifecycle.status === "paid" || lifecycle.status === "voided" || !!lifecycle.bookedVoucherId || !!lifecycle.paymentVoucherId;
+  }
+
+  function invoicePreviewPdfFileName(invoice){
+    const inv = invoice && typeof invoice === "object" ? invoice : {};
+    return safeFileName(`${normalizeDateForFileName(inv.date || "")}_invoice_${safeStemPart(inv.no || inv.id || "invoice", 48) || "invoice"}_preview.pdf`);
+  }
+
+  function invoiceFrozenPdfShouldRefreshOnBooking(invoice){
+    const doc = getFrozenInvoiceDocument(invoice);
+    const meta = doc && doc.sourceMeta && typeof doc.sourceMeta === "object" ? doc.sourceMeta : {};
+    return !!doc && meta.generatedBySystem === true && !String(meta.voucherId || meta.linkedVoucherId || "").trim();
+  }
+
   function getInvoiceForVoucher(voucher){
     const v = voucher && typeof voucher === "object" ? voucher : null;
     if (!v) return null;
@@ -14839,6 +14848,12 @@ if (!d.features) d.features = { sruEnabled: false };
   async function openInvoicePdf(invoiceId, options = {}){
     const inv = getInvoiceById(invoiceId);
     if (!inv) return showToast("Fakturan hittades inte i kundfakturaregistret.", 6500);
+
+    if (!invoiceShouldUseFrozenPdf(inv)) {
+      const blob = await generateInvoicePdfBlob(inv);
+      openBlobAs(blob, "application/pdf");
+      return;
+    }
 
     let doc = await refreshInvoicePdfDocumentIfNeeded(inv, getFrozenInvoiceDocument(inv));
 
@@ -14867,6 +14882,11 @@ if (!d.features) d.features = { sruEnabled: false };
   async function saveInvoicePdfCopy(invoiceId){
     const inv = getInvoiceById(invoiceId);
     if (!inv) return showToast("Fakturan hittades inte i kundfakturaregistret.", 6500);
+    if (!invoiceShouldUseFrozenPdf(inv)) {
+      const blob = await generateInvoicePdfBlob(inv);
+      downloadBlobFile(invoicePreviewPdfFileName(inv), blob);
+      return;
+    }
     const doc = await refreshInvoicePdfDocumentIfNeeded(inv, getFrozenInvoiceDocument(inv));
     if (!doc) return showToast("Ingen fryst faktura-PDF finns att spara som kopia ännu.", 6500);
     const blob = await getDocumentBlob(doc, { requestBackupPermission: true });
@@ -15610,7 +15630,7 @@ if (!d.features) d.features = { sruEnabled: false };
     }
     const invoiceAfterBooking = invoiceIndex >= 0 ? state.invoices[invoiceIndex] : { ...linkedInvoice, bookedVoucherId: vv.id };
     try {
-      await ensureFrozenInvoicePdfForInvoice(invoiceAfterBooking, { requestPermission: true, source: "invoice_booking", voucherId: vv.id, createdBy: vv.sign || state.company?.defaultSign || "" });
+      await ensureFrozenInvoicePdfForInvoice(invoiceAfterBooking, { requestPermission: true, source: "invoice_booking", voucherId: vv.id, createdBy: vv.sign || state.company?.defaultSign || "", force: invoiceFrozenPdfShouldRefreshOnBooking(invoiceAfterBooking) });
       updateFrozenInvoiceVoucherLink(invoiceAfterBooking, vv.id);
     } catch (err) {
       console.error("Frozen invoice PDF voucher link failed", err);
@@ -15736,6 +15756,14 @@ if (!d.features) d.features = { sruEnabled: false };
       linkedInvoice.paidAt = paymentDateIso;
       linkedInvoice.paidBy = state.company.defaultSign || "";
       linkedInvoice.paymentVoucherId = vv.id;
+
+      const invoiceAfterPayment = getInvoiceById(linkedInvoice.id) || linkedInvoice;
+      try {
+        await ensureFrozenInvoicePdfForInvoice(invoiceAfterPayment, { requestPermission: true, source: "invoice_payment_booking", voucherId: vv.id, createdBy: vv.sign || state.company?.defaultSign || "", force: invoiceFrozenPdfShouldRefreshOnBooking(invoiceAfterPayment) });
+      } catch (err) {
+        console.error("Frozen invoice PDF payment archive failed", err);
+        showToast("Betalningen bokfördes, men faktura-PDF:en kunde inte arkiveras. Kontrollera datafil och FU-mapp.", 9000);
+      }
 
       state.vouchers.sort((a,b)=> (a.yearId+b.series+a.no+a.date).localeCompare(b.yearId+b.series+b.no+b.date, "sv"));
       save();

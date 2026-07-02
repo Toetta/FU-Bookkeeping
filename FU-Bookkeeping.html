@@ -326,6 +326,7 @@
     .status{ font-size:12px; padding:6px 10px; border-radius:999px; border:1px solid var(--line); }
     .status.ok{ color:var(--ok); border-color:rgba(34,197,94,.35); background:rgba(34,197,94,.08); }
     .status.bad{ color:var(--bad); border-color:rgba(239,68,68,.35); background:rgba(239,68,68,.08); }
+    .status.warn{ color:#facc15; border-color:rgba(250,204,21,.35); background:rgba(250,204,21,.08); }
 
     /* Global banner: used to make required setup (arbetsfil) very obvious */
     .workfileBanner{
@@ -1731,7 +1732,9 @@
             <div class="row">
               <button class="btn secondary" id="btnInvToggleList" type="button">Dölj lista</button>
               <button class="btn secondary" id="btnInvNew">Ny</button>
-              <button class="btn" id="btnInvSave" disabled>Spara</button>
+              <button class="btn secondary" id="btnInvSaveDraft" disabled>Spara utkast</button>
+              <button class="btn" id="btnInvSave" disabled>Spara som klar</button>
+              <button class="btn secondary" id="btnInvMarkSent" disabled>Markera skickad</button>
             </div>
           </div>
 
@@ -1805,6 +1808,7 @@
                   <div class="muted small">Öresavrundning <span id="invRounding">0,00</span></div>
                 </div>
                 <div class="row">
+                  <button class="btn secondary" id="btnInvRepairStatus" type="button">Analysera status</button>
                   <button class="btn secondary" id="btnInvPrint" disabled>Förhandsgranska/skriv ut</button>
                   <button class="btn secondary" id="btnInvToVoucher" disabled>Skapa verifikation</button>
                 </div>
@@ -2989,7 +2993,7 @@ Tack!</div>
  
 
   const APP_VERSION = "1.4.55"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.82";  // user-facing revision
+  const APP_SEMVER = "0.3.83";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -7311,14 +7315,14 @@ cur = {
 
   function normalizeInvoiceRecord(invoice){
     const inv = invoice && typeof invoice === "object" ? invoice : {};
-    return {
-      ...inv,
-      status: normalizeInvoiceBusinessStatus(inv),
-      bookedVoucherId: String(inv.bookedVoucherId || "").trim(),
-      paymentVoucherId: String(inv.paymentVoucherId || "").trim(),
-      paidAt: String(inv.paidAt || inv.paymentRegisteredAt || "").trim(),
-      voidedAt: String(inv.voidedAt || "").trim(),
-    };
+    const next = { ...inv };
+    if (Object.prototype.hasOwnProperty.call(inv, "status")) next.status = normalizeInvoiceStatusValue(inv.status, inv);
+    if (Object.prototype.hasOwnProperty.call(inv, "bookedVoucherId")) next.bookedVoucherId = String(inv.bookedVoucherId || "").trim();
+    if (Object.prototype.hasOwnProperty.call(inv, "paymentVoucherId")) next.paymentVoucherId = String(inv.paymentVoucherId || "").trim();
+    if (Object.prototype.hasOwnProperty.call(inv, "paidAt")) next.paidAt = String(inv.paidAt || "").trim();
+    if (!next.paidAt && Object.prototype.hasOwnProperty.call(inv, "paymentRegisteredAt")) next.paidAt = String(inv.paymentRegisteredAt || "").trim();
+    if (Object.prototype.hasOwnProperty.call(inv, "voidedAt")) next.voidedAt = String(inv.voidedAt || "").trim();
+    return next;
   }
 
   function getCompanyAccountingMethod(){
@@ -13969,10 +13973,13 @@ if (!d.features) d.features = { sruEnabled: false };
   const btnInvToggleList = document.getElementById("btnInvToggleList");
   const btnInvNew = document.getElementById("btnInvNew");
   const btnInvSave = document.getElementById("btnInvSave");
+  const btnInvSaveDraft = document.getElementById("btnInvSaveDraft");
+  const btnInvMarkSent = document.getElementById("btnInvMarkSent");
   const btnInvClear = document.getElementById("btnInvClear");
   const btnInvAddItem = document.getElementById("btnInvAddItem");
   const btnInvAddComment = document.getElementById("btnInvAddComment");
   const btnInvPickCustomer = document.getElementById("btnInvPickCustomer");
+  const btnInvRepairStatus = document.getElementById("btnInvRepairStatus");
   const btnInvPrint = document.getElementById("btnInvPrint");
   const btnInvToVoucher = document.getElementById("btnInvToVoucher");
   const btnInvRefresh = document.getElementById("btnInvRefresh");
@@ -14613,6 +14620,8 @@ if (!d.features) d.features = { sruEnabled: false };
 
     const ok = !!invCustomerId && invLines.some(l=>l.kind==="item" && lineAmount(l).net>0);
     if (btnInvSave) btnInvSave.disabled = !ok;
+    if (btnInvSaveDraft) btnInvSaveDraft.disabled = !ok;
+    if (btnInvMarkSent) btnInvMarkSent.disabled = !editingInvoiceId;
     if (btnInvPrint) btnInvPrint.disabled = !ok;
     renderInvoiceWorkflowHint(ok);
   }
@@ -14706,8 +14715,10 @@ if (!d.features) d.features = { sruEnabled: false };
     return y;
   }
 
-  async function saveInvoice(){
+  async function saveInvoice(options = {}){
     const existing = editingInvoiceId ? ((state.invoices || []).find(x => x && x.id === editingInvoiceId) || null) : null;
+    const requestedStatus = normalizeInvoiceStatusValue(options.status || (existing ? invoiceBusinessState(existing) : "ready"));
+    const businessStatus = requestedStatus === "voided" ? invoiceBusinessState(existing) : requestedStatus;
     const yearId = invoiceYearId();
     const date = invDate.value || todayISO();
     const due = invDue.value || addDays(date, invoiceEditorPaymentDays() ?? (state.company.payDays||30));
@@ -14733,9 +14744,11 @@ if (!d.features) d.features = { sruEnabled: false };
       date,
       due,
       accountingMethod: existing?.accountingMethod || getCompanyAccountingMethod(),
-      status: existing ? normalizeInvoiceBusinessStatus(existing) : "ready",
+      status: businessStatus,
       issuedAt: String(existing?.issuedAt || nowISO()).trim() || nowISO(),
       issuedBy: String(existing?.issuedBy || state.company?.defaultSign || "").trim(),
+      sentAt: businessStatus === "sent" ? String(existing?.sentAt || nowISO()).trim() : String(existing?.sentAt || "").trim(),
+      sentBy: businessStatus === "sent" ? String(existing?.sentBy || state.company?.defaultSign || "").trim() : String(existing?.sentBy || "").trim(),
       bookedVoucherId: String(existing?.bookedVoucherId || "").trim(),
       bookedAt: String(existing?.bookedAt || "").trim(),
       bookedBy: String(existing?.bookedBy || "").trim(),
@@ -14781,6 +14794,21 @@ if (!d.features) d.features = { sruEnabled: false };
     }
   }
 
+  async function markInvoiceSent(invoiceId){
+    const id = String(invoiceId || editingInvoiceId || "").trim();
+    const inv = id ? getInvoiceById(id) : null;
+    if (!inv) return showToast("Spara fakturan innan den markeras som skickad.", 5500);
+    const before = JSON.parse(JSON.stringify(inv));
+    inv.status = "sent";
+    inv.sentAt = String(inv.sentAt || nowISO()).trim() || nowISO();
+    inv.sentBy = String(inv.sentBy || state.company?.defaultSign || "").trim();
+    appendAudit({ action:"invoice.mark_sent", actor: inv.sentBy || undefined, entityType:"invoice", entityId: inv.id, yearId: inv.yearId, details:{ before, after: JSON.parse(JSON.stringify(inv)) } });
+    save();
+    try { renderInvoices(); } catch (e) { console.error(e); }
+    try { loadInvoiceToEditor(inv.id); } catch (e) { console.error(e); }
+    showToast("Fakturan markerades som skickad.", 4500);
+  }
+
   function invoiceTotals(inv){
     let net=0, vat=0;
     for (const l of (inv.lines||[])){
@@ -14821,6 +14849,226 @@ if (!d.features) d.features = { sruEnabled: false };
       || (state.vouchers || []).find(voucher => voucher && String(voucher.status || "active").trim() !== "deleted" && String(voucher.invoiceEvent || "").trim() === "payment" && invoiceNo && String(voucher.invoiceNo || "").trim() === invoiceNo)
       || (state.vouchers || []).find(voucher => voucher && String(voucher.status || "active").trim() !== "deleted" && invoiceNo && String(voucher.text || "").trim() === `Betalning faktura ${invoiceNo}`)
       || null;
+  }
+
+  function activeInvoiceVouchers(){
+    return (state.vouchers || []).filter(voucher => voucher
+      && String(voucher.status || "active").trim() !== "deleted");
+  }
+
+  function activePaymentVouchers(){
+    return (state.vouchers || []).filter(voucher => voucher
+      && String(voucher.status || "active").trim() !== "deleted"
+      && String(voucher.invoiceEvent || "").trim() === "payment");
+  }
+
+  function invoiceBookingEvidence(invoice){
+    const inv = (invoice && typeof invoice === "object") ? invoice : {};
+    const invoiceId = String(inv.id || "").trim();
+    const invoiceNo = String(inv.no || "").trim();
+    const bookedVoucherId = String(inv.bookedVoucherId || "").trim();
+    const vouchers = activeInvoiceVouchers();
+    if (bookedVoucherId) {
+      const voucher = vouchers.find(v => String(v.id || "").trim() === bookedVoucherId) || null;
+      if (voucher) return { state:"booked", confidence:"strong", source:"bookedVoucherId", voucher, voucherId: voucher.id, reason:"bookedVoucherId pekar på existerande verifikation" };
+      return { state:"unclear", confidence:"broken-link", source:"bookedVoucherId", voucher:null, voucherId: bookedVoucherId, reason:"bookedVoucherId finns men verifikationen hittades inte" };
+    }
+    if (invoiceId) {
+      const voucher = vouchers.find(v => String(v.invoiceId || "").trim() === invoiceId) || null;
+      if (voucher) return { state:"booked", confidence:"strong", source:"voucher.invoiceId", voucher, voucherId: voucher.id, reason:"verifikation länkar tillbaka via invoiceId" };
+    }
+    if (invoiceNo) {
+      const voucher = vouchers.find(v => String(v.invoiceNo || "").trim() === invoiceNo) || null;
+      if (voucher) return { state:"possibly_booked", confidence:"weak", source:"voucher.invoiceNo", voucher, voucherId: voucher.id, reason:"möjlig äldre matchning via fakturanummer" };
+      const textVoucher = vouchers.find(v => String(v.text || "").trim() === `Faktura ${invoiceNo}`) || null;
+      if (textVoucher) return { state:"possibly_booked", confidence:"weak", source:"voucher.text", voucher:textVoucher, voucherId: textVoucher.id, reason:"möjlig äldre matchning via verifikationstext" };
+    }
+    return { state:"not_booked", confidence:"none", source:"none", voucher:null, voucherId:"", reason:"ingen voucherlänk hittad" };
+  }
+
+  function invoicePaymentEvidence(invoice){
+    const inv = (invoice && typeof invoice === "object") ? invoice : {};
+    const invoiceId = String(inv.id || "").trim();
+    const invoiceNo = String(inv.no || "").trim();
+    const paidAt = String(inv.paidAt || inv.paymentRegisteredAt || "").trim();
+    const paymentVoucherId = String(inv.paymentVoucherId || "").trim();
+    const vouchers = activePaymentVouchers();
+    if (paidAt) return { state:"paid", confidence:"strong", source:"paidAt", voucher:null, voucherId: paymentVoucherId, paidAt, reason:"paidAt finns" };
+    if (paymentVoucherId) {
+      const voucher = vouchers.find(v => String(v.id || "").trim() === paymentVoucherId) || null;
+      if (voucher) return { state:"paid", confidence:"strong", source:"paymentVoucherId", voucher, voucherId: voucher.id, paidAt: String(voucher.date || "").trim(), reason:"paymentVoucherId pekar på betalningsverifikation" };
+      return { state:"unpaid", confidence:"broken-link", source:"paymentVoucherId", voucher:null, voucherId: paymentVoucherId, paidAt:"", reason:"paymentVoucherId finns men betalningsverifikationen hittades inte" };
+    }
+    if (invoiceId) {
+      const voucher = vouchers.find(v => String(v.invoiceId || "").trim() === invoiceId) || null;
+      if (voucher) return { state:"paid", confidence:"strong", source:"voucher.invoiceId", voucher, voucherId: voucher.id, paidAt: String(voucher.date || "").trim(), reason:"betalningsverifikation länkar tillbaka via invoiceId" };
+    }
+    if (invoiceNo) {
+      const voucher = vouchers.find(v => String(v.invoiceNo || "").trim() === invoiceNo) || null;
+      if (voucher) return { state:"paid", confidence:"strong", source:"voucher.invoiceNo", voucher, voucherId: voucher.id, paidAt: String(voucher.date || "").trim(), reason:"betalningsverifikation länkar via fakturanummer" };
+    }
+    return { state:"unpaid", confidence:"none", source:"none", voucher:null, voucherId:"", paidAt:"", reason:"ingen betalregistrering hittad" };
+  }
+
+  function invoiceBusinessState(invoice){
+    const inv = (invoice && typeof invoice === "object") ? invoice : {};
+    const rawStatus = String(inv.status || "").trim().toLowerCase();
+    if (rawStatus === "voided" || String(inv.voidedAt || "").trim()) return "voided";
+    if (rawStatus === "sent" || String(inv.sentAt || "").trim()) return "sent";
+    if (rawStatus === "draft") return "draft";
+    if (rawStatus === "ready" || LEGACY_INVOICE_STATUS_OPTIONS.includes(rawStatus)) return "ready";
+    const hasSavedInvoiceShape = !!String(inv.id || inv.no || inv.date || inv.issuedAt || "").trim() || (Array.isArray(inv.lines) && inv.lines.length > 0);
+    return hasSavedInvoiceShape ? "ready" : "draft";
+  }
+
+  function invoiceDisplayState(invoice){
+    const businessStatus = invoiceBusinessState(invoice);
+    const bookingEvidence = invoiceBookingEvidence(invoice);
+    const paymentEvidence = invoicePaymentEvidence(invoice);
+    const isBooked = bookingEvidence.state === "booked";
+    const isBookingUnclear = bookingEvidence.state === "possibly_booked" || bookingEvidence.state === "unclear" || (paymentEvidence.state === "paid" && bookingEvidence.confidence === "none");
+    const isPaid = paymentEvidence.state === "paid";
+    const bookedVoucher = bookingEvidence.voucher || null;
+    const paymentVoucher = paymentEvidence.voucher || null;
+    return {
+      businessStatus,
+      bookingEvidence,
+      paymentEvidence,
+      bookedVoucher,
+      paymentVoucher,
+      bookedVoucherId: isBooked ? String(bookingEvidence.voucherId || "").trim() : String(invoice?.bookedVoucherId || "").trim(),
+      paymentVoucherId: String(paymentEvidence.voucherId || invoice?.paymentVoucherId || "").trim(),
+      paidAt: String(paymentEvidence.paidAt || invoice?.paidAt || invoice?.paymentRegisteredAt || "").trim(),
+      voidedAt: String(invoice?.voidedAt || "").trim(),
+      issuedAt: String(invoice?.issuedAt || invoice?.date || "").trim(),
+      isBooked,
+      isBookingUnclear,
+      isPaid,
+      status: businessStatus === "voided" ? "voided" : isPaid ? "paid" : businessStatus,
+    };
+  }
+
+  function buildInvoiceStatusRepairCandidates(){
+    return (state.invoices || []).filter(inv => inv && typeof inv === "object").map(inv => {
+      const before = JSON.parse(JSON.stringify(inv));
+      const after = { ...inv };
+      const bookingEvidence = invoiceBookingEvidence(inv);
+      const paymentEvidence = invoicePaymentEvidence(inv);
+      const reasons = [];
+      const warnings = [];
+      if (bookingEvidence.state === "booked" && bookingEvidence.confidence === "strong" && !String(inv.bookedVoucherId || "").trim()) {
+        after.bookedVoucherId = String(bookingEvidence.voucherId || "").trim();
+        after.bookedAt = String(inv.bookedAt || bookingEvidence.voucher?.date || todayISO()).trim();
+        after.bookedBy = String(inv.bookedBy || state.company?.defaultSign || "").trim();
+        reasons.push(bookingEvidence.reason);
+      } else if (bookingEvidence.state === "possibly_booked" || bookingEvidence.state === "unclear") {
+        warnings.push(bookingEvidence.reason);
+      }
+      if (paymentEvidence.state === "paid" && paymentEvidence.confidence === "strong") {
+        if (!String(inv.paymentVoucherId || "").trim() && String(paymentEvidence.voucherId || "").trim()) {
+          after.paymentVoucherId = String(paymentEvidence.voucherId || "").trim();
+          reasons.push(paymentEvidence.reason);
+        }
+        if (!String(inv.paidAt || "").trim() && String(paymentEvidence.paidAt || "").trim()) {
+          after.paidAt = String(paymentEvidence.paidAt || "").trim();
+          after.paidBy = String(inv.paidBy || state.company?.defaultSign || "").trim();
+          reasons.push("paidAt sätts från betalningsverifikationens datum");
+        }
+        if (isCashMethod(inv) && !String(after.bookedVoucherId || "").trim() && String(paymentEvidence.voucherId || "").trim()) {
+          after.bookedVoucherId = String(paymentEvidence.voucherId || "").trim();
+          after.bookedAt = String(after.bookedAt || paymentEvidence.paidAt || todayISO()).trim();
+          after.bookedBy = String(after.bookedBy || state.company?.defaultSign || "").trim();
+          reasons.push("kontantmetod: betalningsverifikation används som bokföringslänk");
+        }
+      } else if (paymentEvidence.confidence === "broken-link") {
+        warnings.push(paymentEvidence.reason);
+      }
+      const beforeJson = JSON.stringify(before);
+      const afterJson = JSON.stringify(after);
+      return {
+        invoiceId: String(inv.id || "").trim(),
+        invoiceNo: String(inv.no || "").trim(),
+        oldState: invoiceDisplayState(inv),
+        proposedState: invoiceDisplayState(after),
+        before,
+        after,
+        reasons,
+        warnings,
+        willChange: beforeJson !== afterJson && reasons.length > 0,
+      };
+    }).filter(candidate => candidate.willChange || candidate.warnings.length > 0);
+  }
+
+  function formatInvoiceStatusRepairPreview(candidates){
+    if (!candidates.length) return "Inga reparationskandidater hittades.";
+    const lines = candidates.slice(0, 30).map(candidate => {
+      const id = candidate.invoiceNo ? `#${candidate.invoiceNo}` : candidate.invoiceId || "(utan id)";
+      const action = candidate.willChange ? "KAN REPARERAS" : "ÄNDRAS INTE";
+      const why = candidate.reasons.concat(candidate.warnings).join("; ") || "ingen ändring";
+      return `${id}: ${action} - ${why}`;
+    });
+    if (candidates.length > lines.length) lines.push(`... ${candidates.length - lines.length} fler kandidater.`);
+    return lines.join("\n");
+  }
+
+  function previewInvoiceStatusRepair(){
+    const candidates = buildInvoiceStatusRepairCandidates();
+    window.alert(formatInvoiceStatusRepairPreview(candidates));
+    return candidates;
+  }
+
+  async function applyInvoiceStatusRepair(){
+    const candidates = buildInvoiceStatusRepairCandidates();
+    const changes = candidates.filter(candidate => candidate.willChange);
+    if (!changes.length) {
+      window.alert(formatInvoiceStatusRepairPreview(candidates));
+      return { changed: 0, candidates };
+    }
+    const preview = formatInvoiceStatusRepairPreview(candidates);
+    const ok = await confirmAsync(`Reparera ${changes.length} faktura/fakturor med stark evidens?\n\n${preview}`, { okText:"Ta backup och reparera", cancelText:"Avbryt" });
+    if (!ok) return { changed: 0, candidates };
+    const batchId = crypto.randomUUID();
+    const backup = {
+      kind: "invoice-status-repair-backup",
+      createdAt: nowISO(),
+      batchId,
+      appSemver: APP_SEMVER,
+      invoices: changes.map(candidate => candidate.before),
+      candidates,
+    };
+    downloadText(`invoice-status-repair-backup-${batchId}.json`, JSON.stringify(backup, null, 2) + "\n", "application/json");
+    state.invoiceStatusRepairBatches = Array.isArray(state.invoiceStatusRepairBatches) ? state.invoiceStatusRepairBatches : [];
+    state.invoiceStatusRepairBatches.push({ batchId, createdAt: backup.createdAt, changes: changes.map(candidate => ({ invoiceId: candidate.invoiceId, before: candidate.before, after: candidate.after, reasons: candidate.reasons })) });
+    changes.forEach(candidate => {
+      const index = (state.invoices || []).findIndex(inv => inv && String(inv.id || "").trim() === candidate.invoiceId);
+      if (index < 0) return;
+      state.invoices[index] = candidate.after;
+      appendAudit({ action:"invoice.status_repair", actor: state.company?.defaultSign || undefined, entityType:"invoice", entityId: candidate.invoiceId, yearId: candidate.after.yearId, details:{ batchId, before: candidate.before, after: candidate.after, reasons: candidate.reasons } });
+    });
+    save();
+    try { renderInvoices(); } catch (e) { console.error(e); }
+    if (editingInvoiceId) {
+      try { loadInvoiceToEditor(editingInvoiceId); } catch (e) { console.error(e); }
+    }
+    showToast(`Statusrepair klar: ${changes.length} faktura/fakturor uppdaterades. Backup laddades ner.`, 7500);
+    return { changed: changes.length, candidates, batchId };
+  }
+
+  async function undoInvoiceStatusRepair(batchId){
+    const id = String(batchId || "").trim();
+    const batch = (state.invoiceStatusRepairBatches || []).find(item => item && String(item.batchId || "").trim() === id);
+    if (!batch) return showToast("Repair-batchen hittades inte.", 5500);
+    if (!(await confirmAsync("Ångra denna invoice statusrepair från sparad före/efter-logg?", { okText:"Ångra repair", cancelText:"Avbryt" }))) return;
+    (batch.changes || []).forEach(change => {
+      const index = (state.invoices || []).findIndex(inv => inv && String(inv.id || "").trim() === String(change.invoiceId || "").trim());
+      if (index < 0) return;
+      const current = JSON.parse(JSON.stringify(state.invoices[index]));
+      state.invoices[index] = change.before;
+      appendAudit({ action:"invoice.status_repair_undo", actor: state.company?.defaultSign || undefined, entityType:"invoice", entityId: change.invoiceId, yearId: change.before?.yearId || current.yearId, details:{ batchId: id, before: current, after: change.before } });
+    });
+    save();
+    try { renderInvoices(); } catch (e) { console.error(e); }
+    showToast("Statusrepair ångrades från sparad batchlogg.", 5500);
   }
 
   function getInvoiceById(invoiceId){
@@ -15081,36 +15329,11 @@ if (!d.features) d.features = { sruEnabled: false };
 
   function getInvoiceLifecycle(invoice){
     const inv = (invoice && typeof invoice === "object") ? invoice : {};
-    const bookedVoucher = getVoucherForInvoice(inv);
-    const paymentVoucher = getPaymentVoucherForInvoice(inv);
-    const paidAt = String(inv.paidAt || inv.paymentRegisteredAt || paymentVoucher?.date || "").trim();
-    const voidedAt = String(inv.voidedAt || "").trim();
-    const issuedAt = String(inv.issuedAt || inv.date || "").trim();
-    const rawStatus = String(inv.status || "").trim().toLowerCase();
-    const businessStatus = normalizeInvoiceBusinessStatus(inv);
-    const bookedVoucherId = String(inv.bookedVoucherId || bookedVoucher?.id || "").trim();
-    const paymentVoucherId = String(inv.paymentVoucherId || paymentVoucher?.id || "").trim();
-    const isBooked = !!(bookedVoucherId || bookedVoucher || rawStatus === "booked" || rawStatus === "paid");
-    const isPaid = !!(paidAt || paymentVoucherId || paymentVoucher || rawStatus === "paid");
-    const status = voidedAt || businessStatus === "voided"
-      ? "voided"
-      : isPaid
-        ? "paid"
-        : businessStatus;
+    const displayState = invoiceDisplayState(inv);
     return {
       ...inv,
       accountingMethod: invoiceAccountingMethod(inv),
-      bookedVoucher,
-      paymentVoucher,
-      businessStatus,
-      bookedVoucherId,
-      paymentVoucherId,
-      issuedAt,
-      paidAt,
-      voidedAt,
-      isBooked,
-      isPaid,
-      status,
+      ...displayState,
     };
   }
 
@@ -15125,19 +15348,23 @@ if (!d.features) d.features = { sruEnabled: false };
   function invoiceDisplayBadges(invoice){
     const lifecycle = getInvoiceLifecycle(invoice);
     if (lifecycle.status === "voided") {
-      return { lifecycle, mainText: "Makulerad", mainClass: "status bad", bookingText: "Ej bokförd", bookingClass: "status", metaText: "Makulerad" };
+      return { lifecycle, mainText: "Makulerad", mainClass: "status bad", bookingText: "Bokföring oklar", bookingClass: "status", metaText: "Makulerad" };
     }
     if (lifecycle.isPaid) {
-      return { lifecycle, mainText: "Betald", mainClass: "status ok", bookingText: lifecycle.isBooked ? "Bokförd" : "Ej bokförd", bookingClass: lifecycle.isBooked ? "status ok" : "status", metaText: "Betald" };
+      const bookingText = lifecycle.isBooked ? "Bokförd" : lifecycle.isBookingUnclear ? "Bokföring oklar" : "Ej bokförd";
+      const bookingClass = lifecycle.isBooked ? "status ok" : lifecycle.isBookingUnclear ? "status warn" : "status";
+      return { lifecycle, mainText: "Betald", mainClass: "status ok", bookingText, bookingClass, metaText: "Betald" };
     }
     const mainText = invoiceBusinessStatusLabel(lifecycle.businessStatus);
     const mainClass = lifecycle.businessStatus === "draft" ? "status" : lifecycle.businessStatus === "sent" ? "status ok" : "status";
+    const bookingText = lifecycle.isBooked ? "Bokförd" : lifecycle.isBookingUnclear ? "Bokföring oklar" : "Ej bokförd";
+    const bookingClass = lifecycle.isBooked ? "status ok" : lifecycle.isBookingUnclear ? "status warn" : "status";
     return {
       lifecycle,
       mainText,
       mainClass,
-      bookingText: lifecycle.isBooked ? "Bokförd" : "Ej bokförd",
-      bookingClass: lifecycle.isBooked ? "status ok" : "status",
+      bookingText,
+      bookingClass,
       metaText: mainText.replace(" / ", " – "),
     };
   }
@@ -15268,11 +15495,12 @@ if (!d.features) d.features = { sruEnabled: false };
       };
     }
     if (isCashMethod(lifecycle)) {
+      const bookingText = lifecycle.isBookingUnclear ? "Bokföring oklar" : "ej bokförd";
       return {
         key: lifecycle.businessStatus,
         badgeClass: "status",
         badgeText: invoiceBusinessStatusLabel(lifecycle.businessStatus),
-        listText: `${invoiceBusinessStatusLabel(lifecycle.businessStatus)} · ej bokförd`,
+        listText: `${invoiceBusinessStatusLabel(lifecycle.businessStatus)} · ${bookingText}`,
         nextStep: "Kontantmetoden: bokförs normalt när betalning registreras.",
         allowVoucherAction: true,
         actionLabel: "Registrera betalning",
@@ -15280,11 +15508,12 @@ if (!d.features) d.features = { sruEnabled: false };
         lifecycle,
       };
     }
+    const bookingText = lifecycle.isBookingUnclear ? "Bokföring oklar" : "ej bokförd";
     return {
       key: lifecycle.businessStatus,
       badgeClass: "status bad",
       badgeText: invoiceBusinessStatusLabel(lifecycle.businessStatus),
-      listText: `${invoiceBusinessStatusLabel(lifecycle.businessStatus)} · ej bokförd`,
+      listText: `${invoiceBusinessStatusLabel(lifecycle.businessStatus)} · ${bookingText}`,
       nextStep: "Faktureringsmetoden: bokför när fakturan utfärdas.",
       allowVoucherAction: true,
       actionLabel: "Skapa verifikation nu",
@@ -15306,7 +15535,15 @@ if (!d.features) d.features = { sruEnabled: false };
     const booking = invoiceBookingState(draftInvoice);
     if (invWorkflowHint) {
       const methodLabel = isCashMethod(booking.lifecycle) ? "Kontantmetoden" : "Faktureringsmetoden";
-      invWorkflowHint.innerHTML = `<b>${escapeHtml(methodLabel)}</b> · ${escapeHtml(booking.nextStep)}`;
+      const businessText = invoiceBusinessStatusLabel(booking.lifecycle.businessStatus);
+      const bookingText = booking.lifecycle.isBooked ? "Bokförd" : booking.lifecycle.isBookingUnclear ? "Bokföring oklar" : "Ej bokförd";
+      const paymentText = booking.lifecycle.isPaid ? "Betald" : "Ej betald";
+      const voucherText = booking.lifecycle.bookedVoucher?.series && booking.lifecycle.bookedVoucher?.no
+        ? ` · Verifikation ${String(booking.lifecycle.bookedVoucher.series)}${String(booking.lifecycle.bookedVoucher.no)}`
+        : booking.lifecycle.bookedVoucherId
+          ? ` · Verifikationslänk ${booking.lifecycle.bookedVoucherId}`
+          : "";
+      invWorkflowHint.innerHTML = `<b>${escapeHtml(methodLabel)}</b> · ${escapeHtml(booking.nextStep)}<br><span class="muted small">Affärsstatus: ${escapeHtml(businessText)} · Bokföring: ${escapeHtml(bookingText)} · Betalning: ${escapeHtml(paymentText)}${escapeHtml(voucherText)}</span>`;
     }
     if (btnInvToVoucher) {
       btnInvToVoucher.textContent = booking.actionLabel;
@@ -15669,6 +15906,7 @@ if (!d.features) d.features = { sruEnabled: false };
 
     const invoiceIndex = (state.invoices || []).findIndex(item => item && String(item.id || "").trim() === String(linkedInvoice.id || "").trim());
     if (invoiceIndex >= 0) {
+      const beforeInvoice = JSON.parse(JSON.stringify(state.invoices[invoiceIndex]));
       state.invoices[invoiceIndex] = {
         ...state.invoices[invoiceIndex],
         status: normalizeInvoiceBusinessStatus(state.invoices[invoiceIndex]),
@@ -15676,6 +15914,7 @@ if (!d.features) d.features = { sruEnabled: false };
         bookedAt: nowISO(),
         bookedBy: state.company.defaultSign || "",
       };
+      appendAudit({ action:"invoice.link_voucher", actor: state.company.defaultSign || undefined, entityType:"invoice", entityId: state.invoices[invoiceIndex].id, yearId, details:{ before: beforeInvoice, after: JSON.parse(JSON.stringify(state.invoices[invoiceIndex])), voucherId: vv.id, source:"invoice_issue" } });
     }
     const invoiceAfterBooking = invoiceIndex >= 0 ? state.invoices[invoiceIndex] : { ...linkedInvoice, bookedVoucherId: vv.id };
     try {
@@ -15793,15 +16032,26 @@ if (!d.features) d.features = { sruEnabled: false };
         const sameId = targetInvoiceId && String(item.id || "").trim() === targetInvoiceId;
         const sameNo = targetInvoiceNo && String(item.no || "").trim() === targetInvoiceNo;
         if (!sameId && !sameNo) return item;
-        return {
+        const beforeInvoice = JSON.parse(JSON.stringify(item));
+        const afterInvoice = {
           ...item,
           status: normalizeInvoiceBusinessStatus(item),
+          bookedVoucherId: isCashMethod(lifecycle) ? vv.id : String(item.bookedVoucherId || "").trim(),
+          bookedAt: isCashMethod(lifecycle) ? paymentDateIso : String(item.bookedAt || "").trim(),
+          bookedBy: isCashMethod(lifecycle) ? (state.company.defaultSign || "") : String(item.bookedBy || "").trim(),
           paidAt: paymentDateIso,
           paidBy: state.company.defaultSign || "",
           paymentVoucherId: vv.id,
         };
+        appendAudit({ action:"invoice.register_payment", actor: state.company.defaultSign || undefined, entityType:"invoice", entityId: afterInvoice.id, yearId: afterInvoice.yearId, details:{ before: beforeInvoice, after: JSON.parse(JSON.stringify(afterInvoice)), voucherId: vv.id, source: isCashMethod(lifecycle) ? "cash_method_payment" : "invoice_payment" } });
+        return afterInvoice;
       });
       linkedInvoice.status = normalizeInvoiceBusinessStatus(linkedInvoice);
+      if (isCashMethod(lifecycle)) {
+        linkedInvoice.bookedVoucherId = vv.id;
+        linkedInvoice.bookedAt = paymentDateIso;
+        linkedInvoice.bookedBy = state.company.defaultSign || "";
+      }
       linkedInvoice.paidAt = paymentDateIso;
       linkedInvoice.paidBy = state.company.defaultSign || "";
       linkedInvoice.paymentVoucherId = vv.id;
@@ -17582,7 +17832,20 @@ if (!d.features) d.features = { sruEnabled: false };
     if (btnInvAddComment) btnInvAddComment.addEventListener("click", ()=>{ invLines.push({kind:"comment", desc:""}); renderInvoiceLines(); updateInvoiceTotals(); });
     if (btnInvPickCustomer) btnInvPickCustomer.addEventListener("click", ()=> openCustomerDialog("invoice"));
     if (invContactSelect) invContactSelect.addEventListener("change", ()=>{ applyInvoiceContactSelection(); updateInvoiceTotals(); });
-    if (btnInvSave) btnInvSave.addEventListener("click", saveInvoice);
+    if (btnInvSaveDraft) btnInvSaveDraft.addEventListener("click", (e)=>{ e.preventDefault(); saveInvoice({ status:"draft" }); });
+    if (btnInvSave) btnInvSave.addEventListener("click", (e)=>{ e.preventDefault(); saveInvoice({ status:"ready" }); });
+    if (btnInvMarkSent) btnInvMarkSent.addEventListener("click", async (e)=>{
+      e.preventDefault();
+      if (!(await confirmAsync("Markera fakturan som skickad?", { okText:"Markera skickad", cancelText:"Avbryt", okKind:"secondary" }))) return;
+      await markInvoiceSent(editingInvoiceId);
+    });
+    if (btnInvRepairStatus) btnInvRepairStatus.addEventListener("click", async (e)=>{
+      e.preventDefault();
+      const candidates = previewInvoiceStatusRepair();
+      if (!candidates.some(candidate => candidate.willChange)) return;
+      if (!(await confirmAsync("Vill du köra statusrepair för kandidater med stark evidens? En JSON-backup laddas ner först.", { okText:"Reparera", cancelText:"Endast preview" }))) return;
+      await applyInvoiceStatusRepair();
+    });
     if (btnInvPrint) btnInvPrint.addEventListener("click", async ()=>{
       if (editingInvoiceId){
         await openInvoicePdf(editingInvoiceId);

@@ -2993,7 +2993,7 @@ Tack!</div>
  
 
   const APP_VERSION = "1.4.55"; // bump when adding new data fields
-  const APP_SEMVER = "0.3.83";  // user-facing revision
+  const APP_SEMVER = "0.3.84";  // user-facing revision
   const APP_GIT_REV = "";      // injected by tools/stamp-fu-version.mjs (optional)
   const STORAGE_KEY = "FU_BOOKKEEPING_STATE"; // legacy single-company key (kept for migration)
   const STORAGE_KEY_PREFIX = "FU_BOOKKEEPING_STATE_V2:"; // per-company state key prefix
@@ -15591,26 +15591,41 @@ if (!d.features) d.features = { sruEnabled: false };
                 <div class="meta">${escapeHtml(badges.metaText)} · ${escapeHtml(badges.bookingText)}${bookedVoucher?.series && bookedVoucher?.no ? ` · Verifikation ${escapeHtml(String(bookedVoucher.series) + String(bookedVoucher.no))}` : ""}${paymentVoucher?.series && paymentVoucher?.no ? ` · Betalning ${escapeHtml(String(paymentVoucher.series) + String(paymentVoucher.no))}` : ""} · Förfaller ${escapeHtml(inv.due)} · Totalt ${fmtSEK(tot.gross)} ${escapeHtml(currency)}</div>
               </div>
               <div class="row">
-                <button class="btn secondary" data-act="edit" data-id="${inv.id}">Öppna</button>
-                <button class="btn secondary" data-act="pdf" data-id="${inv.id}">Visa faktura</button>
-                <button class="btn secondary" data-act="save-copy" data-id="${inv.id}">Spara kopia</button>
-                <button class="btn secondary" data-act="attach-pdf" data-id="${inv.id}">Ersätt PDF</button>
-                <button class="btn secondary" data-act="print" data-id="${inv.id}">Skriv ut</button>
-                <button class="btn danger" data-act="del" data-id="${inv.id}">Ta bort</button>
+                <button class="btn secondary" data-act="edit" data-id="${escapeAttr(inv.id)}">Öppna</button>
+                <button class="btn secondary" data-act="pdf" data-id="${escapeAttr(inv.id)}">Visa faktura</button>
+                <button class="btn secondary" data-act="save-copy" data-id="${escapeAttr(inv.id)}">Spara kopia</button>
+                <button class="btn secondary" data-act="attach-pdf" data-id="${escapeAttr(inv.id)}">Ersätt PDF</button>
+                <button class="btn secondary" data-act="print" data-id="${escapeAttr(inv.id)}">Skriv ut</button>
+                <button class="btn danger" data-act="del" data-id="${escapeAttr(inv.id)}">Ta bort</button>
               </div>
             </div>
           `;
-          div.addEventListener("click", async (e)=>{
-            const b = e.target.closest("button");
+          div.addEventListener("click", async (e) => {
+            const b = e.target && e.target.closest ? e.target.closest("button[data-act]") : null;
             if (!b) return;
-            const id = b.dataset.id;
-            const act = b.dataset.act;
-            if (act==="edit") loadInvoiceToEditor(id);
-            if (act==="pdf") await openInvoicePdf(id);
-            if (act==="save-copy") await saveInvoicePdfCopy(id);
-            if (act==="attach-pdf") await attachFrozenInvoicePdf(id);
-            if (act==="print") await openInvoicePdf(id);
-            if (act==="del") await deleteInvoice(id);
+            const id = String(b.dataset.id || "").trim();
+            const act = String(b.dataset.act || "").trim();
+            if (!id) {
+              console.warn("Invoice action missing invoice id", { act, button: b });
+              showToast("Kunde inte öppna fakturan: faktura-id saknas.", 5500);
+              return;
+            }
+            try {
+              if (act === "edit") {
+                const clickedInvoice = getInvoiceById(id);
+                console.info("Open invoice clicked", { invoiceId: id, status: clickedInvoice ? invoiceDisplayState(clickedInvoice).status : "missing" });
+                openInvoiceById(id, { source: "invoice-list" });
+                return;
+              }
+              if (act === "pdf") await openInvoicePdf(id);
+              if (act === "save-copy") await saveInvoicePdfCopy(id);
+              if (act === "attach-pdf") await attachFrozenInvoicePdf(id);
+              if (act === "print") await openInvoicePdf(id);
+              if (act === "del") await deleteInvoice(id);
+            } catch (err) {
+              console.error("Invoice action failed", { act, invoiceId: id, err });
+              showToast("Kunde inte utföra åtgärden för fakturan. Se konsolen för detaljer.", 6500);
+            }
           });
           invoiceList.appendChild(div);
         });
@@ -15620,9 +15635,15 @@ if (!d.features) d.features = { sruEnabled: false };
     updateInvoiceTotals();
   }
 
-  function loadInvoiceToEditor(id){
-    const inv = (state.invoices||[]).find(x=>x.id===id);
-    if (!inv) return;
+  function loadInvoiceToEditor(id) {
+    const invoiceId = String(id || "").trim();
+    const inv = getInvoiceById(invoiceId);
+    if (!invoiceId || !inv) {
+      console.warn("loadInvoiceToEditor failed", { invoiceId, invoiceCount: (state.invoices || []).length });
+      showToast(`Kunde inte öppna fakturan${invoiceId ? ` (${invoiceId})` : ""}. Posten hittades inte.`, 6500);
+      return null;
+    }
+    console.info("Loading invoice into editor", { invoiceId, status: invoiceDisplayState(inv).status });
     editingInvoiceId = inv.id;
     if (invYearSelect) invYearSelect.value = inv.yearId;
     invDate.value = inv.date;
@@ -15645,17 +15666,45 @@ if (!d.features) d.features = { sruEnabled: false };
     renderInvoiceCustomer();
     renderInvoiceLines();
     updateInvoiceTotals();
+    if (invGrid && typeof invGrid.scrollIntoView === "function") invGrid.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (invDate && typeof invDate.focus === "function") invDate.focus({ preventScroll: true });
+    return inv;
+  }
+
+  function openInvoiceById(id, options = {}) {
+    const invoiceId = String(id || "").trim();
+    if (!invoiceId) {
+      const err = new Error("Saknar invoiceId för editoröppning.");
+      console.warn("openInvoiceById failed", { invoiceId, source: options.source || "unknown" });
+      showToast("Kunde inte öppna fakturan: faktura-id saknas.", 5500);
+      if (options.throwOnError) throw err;
+      return null;
+    }
+    const invoice = getInvoiceById(invoiceId);
+    if (!invoice) {
+      const err = new Error(`Fakturan hittades inte: ${invoiceId}`);
+      console.warn("openInvoiceById failed", { invoiceId, source: options.source || "unknown", invoiceCount: (state.invoices || []).length });
+      showToast(`Kunde inte öppna fakturan (${invoiceId}). Posten hittades inte.`, 6500);
+      if (options.throwOnError) throw err;
+      return null;
+    }
+    try { activateTab("invoices"); } catch (e) { console.error(e); }
+    const loaded = loadInvoiceToEditor(invoiceId);
+    if (!loaded) {
+      const err = new Error(`Fakturan kunde inte laddas: ${invoiceId}`);
+      if (options.throwOnError) throw err;
+      return null;
+    }
+    const status = invoiceDisplayState(invoice).status;
+    if (status === "sent") showToast("Skickad faktura öppnad i editorn.", 3500);
+    else if (status === "paid") showToast("Betald faktura öppnad i editorn.", 3500);
+    else if (status === "voided") showToast("Makulerad faktura öppnad i editorn.", 3500);
+    return invoice;
   }
 
   function openInvoiceInEditor(invoiceId){
-    const id = String(invoiceId || "").trim();
-    if (!id) throw new Error("Saknar invoiceId för editoröppning.");
-    const invoice = (state.invoices || []).find(x => x && String(x.id || "").trim() === id);
-    if (!invoice) throw new Error("Fakturan hittades inte.");
     try { renderInvoices(); } catch (e) { console.error(e); }
-    try { activateTab("invoices"); } catch (e) { console.error(e); }
-    loadInvoiceToEditor(id);
-    return invoice;
+    return openInvoiceById(invoiceId, { source: "openInvoiceInEditor", throwOnError: true });
   }
 
   async function deleteInvoice(id){

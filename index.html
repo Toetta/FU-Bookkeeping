@@ -4,21 +4,37 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>FU-Bookkeeping</title>
-  <meta http-equiv="refresh" content="0; url=FU-Bookkeeping.html" />
   <link rel="canonical" href="FU-Bookkeeping.html" />
-  <script>
-    // Preserve query/hash and redirect fast.
-    (function(){
-      try {
-        var target = "FU-Bookkeeping.html" + (location.search || "") + (location.hash || "");
-        location.replace(target);
-      } catch (e) {
-        // Fallback: meta refresh will handle.
-      }
-    })();
-  </script>
+  <style>
+    html,body{height:100%;margin:0;background:#191717;overflow:hidden}
+    #fuApp{width:100%;height:100%;border:0;display:block;background:#191717}
+    #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:#e5e7eb;font:15px system-ui;background:#191717;z-index:2}
+  </style>
 </head>
 <body>
-  <p>Öppnar FU-Bookkeeping… Om inget händer, <a href="FU-Bookkeeping.html">klicka här</a>.</p>
+  <div id="boot">Öppnar FU-Bookkeeping…</div>
+  <iframe id="fuApp" title="FU-Bookkeeping" src="FU-Bookkeeping.html"></iframe>
+  <script>
+    (function(){
+      var frame=document.getElementById('fuApp');
+      var boot=document.getElementById('boot');
+      frame.addEventListener('load',function(){
+        try{
+          var doc=frame.contentDocument;
+          if(!doc||doc.getElementById('fuAuditAiAddonLoader')){boot.hidden=true;return;}
+          var script=doc.createElement('script');
+          script.id='fuAuditAiAddonLoader';
+          script.src='auditai-addon.js';
+          script.defer=true;
+          doc.body.appendChild(script);
+          boot.hidden=true;
+        }catch(err){
+          console.error('AuditAI add-on could not be loaded',err);
+          boot.hidden=true;
+        }
+      });
+    })();
+  </script>
+  <noscript><p><a href="FU-Bookkeeping.html">Öppna FU-Bookkeeping</a></p></noscript>
 </body>
 </html>

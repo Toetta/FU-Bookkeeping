@@ -21,12 +21,21 @@
       frame.addEventListener('load',function(){
         try{
           var doc=frame.contentDocument;
-          if(!doc||doc.getElementById('fuAuditAiAddonLoader')){boot.hidden=true;return;}
-          var script=doc.createElement('script');
-          script.id='fuAuditAiAddonLoader';
-          script.src='auditai-addon.js';
-          script.defer=true;
-          doc.body.appendChild(script);
+          if(!doc){boot.hidden=true;return;}
+          if(!doc.getElementById('fuAuditAiAddonLoader')){
+            var script=doc.createElement('script');
+            script.id='fuAuditAiAddonLoader';
+            script.src='auditai-addon.js';
+            script.defer=true;
+            doc.body.appendChild(script);
+          }
+          if(!doc.getElementById('fuAuditAiMailboxLoader')){
+            var mailboxScript=doc.createElement('script');
+            mailboxScript.id='fuAuditAiMailboxLoader';
+            mailboxScript.src='auditai-mailboxes.js';
+            mailboxScript.defer=true;
+            doc.body.appendChild(mailboxScript);
+          }
           boot.hidden=true;
         }catch(err){
           console.error('AuditAI add-on could not be loaded',err);

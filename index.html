@@ -8,20 +8,35 @@
   <style>
     html,body{height:100%;margin:0;background:#191717;overflow:hidden}
     #fuApp{width:100%;height:100%;border:0;display:block;background:#191717}
-    #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:#e5e7eb;font:15px system-ui;background:#191717;z-index:2}
+    #boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:#e5e7eb;font:15px system-ui;background:#191717;z-index:2;transition:opacity .2s ease}
+    #boot.done{opacity:0;pointer-events:none}
+    #bootFallback{display:none;position:fixed;left:50%;bottom:32px;transform:translateX(-50%);z-index:3;color:#94a3b8;font:13px system-ui;text-align:center}
+    #bootFallback a{color:#e5e7eb}
   </style>
 </head>
 <body>
   <div id="boot">Öppnar FU-Bookkeeping…</div>
+  <div id="bootFallback">Tar uppstarten lång tid? <a href="FU-Bookkeeping.html">Öppna programmet direkt</a></div>
   <iframe id="fuApp" title="FU-Bookkeeping" src="FU-Bookkeeping.html"></iframe>
   <script>
     (function(){
       var frame=document.getElementById('fuApp');
       var boot=document.getElementById('boot');
-      frame.addEventListener('load',function(){
+      var fallback=document.getElementById('bootFallback');
+      var finished=false;
+
+      function finishBoot(){
+        if(finished)return;
+        finished=true;
+        try{boot.classList.add('done');}catch(e){}
+        setTimeout(function(){try{boot.hidden=true;}catch(e){}},250);
+        try{fallback.hidden=true;}catch(e){}
+      }
+
+      function installAddons(){
         try{
           var doc=frame.contentDocument;
-          if(!doc){boot.hidden=true;return;}
+          if(!doc)return;
           if(!doc.getElementById('fuAuditAiAddonLoader')){
             var script=doc.createElement('script');
             script.id='fuAuditAiAddonLoader';
@@ -36,12 +51,22 @@
             mailboxScript.defer=true;
             doc.body.appendChild(mailboxScript);
           }
-          boot.hidden=true;
         }catch(err){
           console.error('AuditAI add-on could not be loaded',err);
-          boot.hidden=true;
         }
+      }
+
+      frame.addEventListener('load',function(){
+        installAddons();
+        finishBoot();
       });
+
+      // Do not let slow analytics/CDN resources keep the full-screen startup
+      // overlay above an otherwise usable same-origin application.
+      setTimeout(finishBoot,1800);
+      setTimeout(function(){
+        if(!finished && fallback)fallback.style.display='block';
+      },5000);
     })();
   </script>
   <noscript><p><a href="FU-Bookkeeping.html">Öppna FU-Bookkeeping</a></p></noscript>
